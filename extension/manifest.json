@@ -1,0 +1,53 @@
+{
+  "manifest_version": 3,
+  "name": "Tumblr Tag Helper",
+  "version": "0.7.0",
+  "description": "A full-page manager for your Tumblr posts and tags: bulk tags, visibility, community labels, tag cleanup and a shared tag library.",
+  "permissions": [
+    "storage",
+    "unlimitedStorage",
+    "declarativeNetRequest",
+    "alarms"
+  ],
+  "host_permissions": [
+    "https://www.tumblr.com/*"
+  ],
+  "action": {
+    "default_title": "Tumblr Tag Helper",
+    "default_icon": {
+      "16": "icons/icon16.png",
+      "32": "icons/icon32.png",
+      "48": "icons/icon48.png"
+    }
+  },
+  "icons": {
+    "16": "icons/icon16.png",
+    "32": "icons/icon32.png",
+    "48": "icons/icon48.png",
+    "128": "icons/icon128.png"
+  },
+  "background": {
+    "service_worker": "background.js"
+  },
+  "content_scripts": [
+    {
+      "matches": [
+        "https://www.tumblr.com/*"
+      ],
+      "js": [
+        "core.js",
+        "noads.js"
+      ],
+      "run_at": "document_start"
+    }
+  ],
+  "declarative_net_request": {
+    "rule_resources": [
+      {
+        "id": "ads",
+        "enabled": true,
+        "path": "rules_ads.json"
+      }
+    ]
+  }
+}

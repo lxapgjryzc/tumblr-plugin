@@ -1,0 +1,19 @@
+[
+  {
+    "id": 1,
+    "priority": 1,
+    "action": { "type": "block" },
+    "condition": {
+      "initiatorDomains": ["tumblr.com"],
+      "requestDomains": [
+        "aditude.io", "aditude.cloud",
+        "doubleclick.net", "googlesyndication.com", "googletagservices.com", "googleadservices.com", "adservice.google.com",
+        "amazon-adsystem.com", "kueezrtb.com", "optable.co", "criteo.com", "criteo.net", "rlcdn.com",
+        "adnxs.com", "rubiconproject.com", "pubmatic.com", "openx.net", "casalemedia.com", "33across.com",
+        "sharethrough.com", "yieldmo.com", "triplelift.com", "teads.tv", "media.net", "smartadserver.com",
+        "scorecardresearch.com"
+      ],
+      "excludedResourceTypes": ["main_frame"]
+    }
+  }
+]

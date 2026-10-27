@@ -1,0 +1,234 @@
+<!doctype html>
+<html>
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Tumblr Tag Helper</title>
+  <link rel="icon" href="icons/icon32.png">
+  <link rel="stylesheet" href="manager.css">
+</head>
+<body>
+  <header class="top">
+    <div class="brand"><img src="icons/icon32.png" alt=""><span data-i18n="appTitle"></span></div>
+    <select id="blog" class="blog"></select>
+    <nav class="nav">
+      <button class="tab on" data-tab="posts" data-i18n="navPosts"></button>
+      <button class="tab" data-tab="clean" data-i18n="navClean"></button>
+      <button class="tab" data-tab="lib" data-i18n="navLib"></button>
+      <button class="tab" data-tab="packs" data-i18n="navPacks"></button>
+      <button class="tab" data-tab="reblogs" data-i18n="navReblogs"></button>
+      <button class="tab" data-tab="settings" data-i18n="navSettings"></button>
+    </nav>
+  </header>
+
+  <div id="login" class="login" hidden>
+    <p data-i18n="notLoggedIn"></p>
+    <a href="https://www.tumblr.com/login" target="_blank" rel="noopener" data-i18n="openTumblr"></a>
+  </div>
+
+  <main>
+    <section class="view posts" data-view="posts">
+      <div class="left">
+        <div class="row">
+          <div class="seg" id="box">
+            <button data-box="" class="on" data-i18n="boxPublished"></button>
+            <button data-box="draft" data-i18n="boxDraft"></button>
+            <button data-box="queue" data-i18n="boxQueue"></button>
+          </div>
+          <input type="text" id="tagFilter" class="grow" data-i18n-ph="phTagFilter">
+          <button class="pri" data-act="load" data-i18n="load"></button>
+          <button data-act="more" data-i18n="more"></button>
+          <button data-act="all" data-i18n="all"></button>
+          <button data-act="stopLoad" hidden data-i18n="stop"></button>
+          <span id="loadInfo" class="muted"></span>
+        </div>
+        <div class="row">
+          <input type="text" id="search" class="grow" data-i18n-ph="phSearch">
+          <select id="stateFilter">
+            <option value="" data-i18n="allStates"></option>
+            <option value="published" data-i18n="st_published"></option>
+            <option value="private" data-i18n="st_private"></option>
+            <option value="label" data-i18n="hasLabel"></option>
+            <option value="nolabel" data-i18n="noLabel"></option>
+          </select>
+          <button data-act="selAll" data-i18n="selAll"></button>
+          <button data-act="selInvert" data-i18n="selInvert"></button>
+          <button data-act="selNone" data-i18n="selNone"></button>
+          <label class="muted size"><span data-i18n="cardSize"></span><input type="range" id="cardSize" min="120" max="320" step="20"></label>
+        </div>
+        <div class="muted hint" data-i18n="selHint"></div>
+        <div id="list" class="grid" tabindex="0"></div>
+      </div>
+
+      <aside class="right actions">
+        <div id="selInfo" class="selinfo"></div>
+        <section class="card">
+          <h3 data-i18n="tags"></h3>
+          <div class="muted hint" data-i18n="selTagsHint"></div>
+          <div id="selTags" class="seltags"></div>
+          <button id="removeMarkedBtn" class="dan" data-act="removeMarked" hidden></button>
+          <div class="chips" id="batchTags"><input type="text" data-i18n-ph="phBatchTags"></div>
+          <div class="row">
+            <button data-act="tagsAdd" data-i18n="tagsAdd"></button>
+            <button data-act="sortHeat" data-i18n="sortHeat"></button>
+          </div>
+        </section>
+        <section class="card" id="tplCard">
+          <h3 data-i18n="tplCard"></h3>
+          <select id="tplPack"></select>
+          <div id="tplItems" class="seltags"></div>
+          <input type="text" id="tplAdd" data-i18n-ph="tplAddPh">
+          <div id="tplFound" class="seltags"></div>
+          <div id="tplPlan" class="muted"></div>
+          <div class="row"><button class="pri" id="tplApplyBtn" data-act="tplApply"></button></div>
+        </section>
+        <section class="card">
+          <h3 data-i18n="visibility"></h3>
+          <div class="row">
+            <button data-act="setPublic" data-i18n="setPublic"></button>
+            <button data-act="setPrivate" data-i18n="setPrivate"></button>
+          </div>
+        </section>
+        <section class="card">
+          <h3 data-i18n="communityLabel"></h3>
+          <div class="row" id="cats"></div>
+          <div class="row">
+            <button data-act="labelOn" data-i18n="labelOn"></button>
+            <button data-act="labelOff" data-i18n="remove"></button>
+          </div>
+        </section>
+        <section class="card">
+          <div class="prog" id="prog" hidden><i></i></div>
+          <div class="row" id="runRow" hidden><span id="runInfo" class="muted grow"></span><button class="dan stop" data-act="stopRun" data-i18n="stop"></button></div>
+          <div id="log" class="log"></div>
+        </section>
+      </aside>
+    </section>
+
+    <section class="view clean" data-view="clean" hidden>
+      <p class="muted" data-i18n="cleanIntro"></p>
+      <p id="cleanRules" class="muted"></p>
+      <div class="row"><label><input type="checkbox" id="ruleNotesOn"><span data-i18n="ruleNotes"></span></label>
+        <input type="number" id="ruleNotes" min="0" step="0.5"></div>
+      <div class="row">
+        <button class="pri" data-act="cleanScan" data-i18n="scan"></button>
+        <button data-act="cleanStop" hidden data-i18n="stop"></button>
+        <span id="cleanStatus" class="muted"></span>
+      </div>
+      <p id="cleanWarn" class="warn" hidden data-i18n="noNotesData"></p>
+      <div class="row">
+        <button data-act="cleanAll" data-i18n="selAll"></button>
+        <button data-act="cleanNone" data-i18n="selNone"></button>
+        <span id="cleanSelInfo" class="muted"></span>
+      </div>
+      <div id="cleanList" class="table"></div>
+      <div class="actions">
+        <div class="row"><button class="dan" data-act="cleanRemove" data-i18n="cleanRemove"></button></div>
+        <div class="prog" id="cleanProg" hidden><i></i></div>
+        <div class="row" id="cleanRunRow" hidden><span id="cleanRunInfo" class="muted grow"></span><button class="dan stop" data-act="stopRun" data-i18n="stop"></button></div>
+        <div id="cleanLog" class="log"></div>
+      </div>
+    </section>
+
+    <section class="view lib" data-view="lib" hidden>
+      <div class="row">
+        <button class="pri" data-act="syncInc" data-i18n="syncInc"></button>
+        <button data-act="syncFull" data-i18n="syncFull"></button>
+        <button data-act="syncStop" hidden data-i18n="stop"></button>
+        <span id="syncStatus" class="muted"></span>
+      </div>
+      <p id="blogStats" class="muted"></p>
+      <div class="row">
+        <input type="text" id="libSearch" class="grow" data-i18n-ph="phLibSearch">
+        <label class="muted"><input type="checkbox" id="showHidden"><span data-i18n="showHidden"></span></label>
+      </div>
+      <div class="row">
+        <input type="text" id="customTag" class="grow" data-i18n-ph="phCustom">
+        <button data-act="addCustom" data-i18n="addCustom"></button>
+      </div>
+      <div id="lib" class="table"></div>
+    </section>
+
+    <section class="view packs" data-view="packs" hidden>
+      <p class="muted" data-i18n="packsIntro"></p>
+      <div class="row">
+        <input type="text" id="packUrl" class="grow" data-i18n-ph="tplPhUrl">
+        <button data-act="packInstallUrl" data-i18n="tplInstallUrl"></button>
+        <button data-act="packFile" data-i18n="tplInstallFile"></button>
+        <input type="file" id="packFile" accept=".json,application/json" hidden>
+      </div>
+      <div class="row">
+        <textarea id="packPaste" rows="2" class="grow" data-i18n-ph="tplInstallPaste"></textarea>
+        <button data-act="packInstallPaste" data-i18n="tplInstall"></button>
+      </div>
+      <div id="packList" class="table packlist"></div>
+
+      <h3 data-i18n="upkTitle"></h3>
+      <p class="muted" data-i18n="upkIntro"></p>
+      <div class="row">
+        <button class="pri" data-act="upkScan" data-i18n="upkScan"></button>
+        <span id="upkStatus" class="muted"></span>
+      </div>
+      <div class="row">
+        <button data-act="upkAll" data-i18n="selAll"></button>
+        <button data-act="upkNone" data-i18n="selNone"></button>
+        <span id="upkSelInfo" class="muted"></span>
+      </div>
+      <div id="upkList" class="table"></div>
+      <div class="actions">
+        <div class="row"><button class="pri" data-act="upkApply" data-i18n="upkApply"></button></div>
+        <div class="prog" id="upkProg" hidden><i></i></div>
+        <div class="row" id="upkRunRow" hidden><span id="upkRunInfo" class="muted grow"></span><button class="dan stop" data-act="stopRun" data-i18n="stop"></button></div>
+        <div id="upkLog" class="log"></div>
+      </div>
+    </section>
+
+    <section class="view reblogs" data-view="reblogs" hidden>
+      <div class="row"><label><input type="checkbox" id="syncReblogs"><span data-i18n="syncReblogs"></span></label></div>
+      <p class="muted" data-i18n="rbIntro"></p>
+      <div class="row">
+        <button class="pri" data-act="rbScan" data-i18n="rbScan"></button>
+        <span id="rbStatus" class="muted"></span>
+      </div>
+      <div id="rbList" class="table rblist"></div>
+      <div class="actions">
+        <div class="row">
+          <button data-act="rbFix" data-i18n="rbFix"></button>
+          <button data-act="rbReblog" data-i18n="rbReblog"></button>
+          <select id="rbWhen"><option value="queue" data-i18n="rbQueue"></option><option value="published" data-i18n="rbNow"></option></select>
+        </div>
+        <div class="prog" id="rbProg" hidden><i></i></div>
+        <div id="rbLog" class="log"></div>
+      </div>
+      <h3 data-i18n="autoTitle"></h3>
+      <div id="rbAuto" class="log"></div>
+    </section>
+
+    <section class="view settings" data-view="settings" hidden>
+      <div class="row"><label for="lang" data-i18n="langTitle"></label><select id="lang"></select></div>
+      <div class="row"><label for="delay" data-i18n="delay"></label><input type="number" id="delay" min="200" step="100"></div>
+      <div class="row"><label><input type="checkbox" id="autoSync"><span data-i18n="autoSync"></span></label></div>
+      <div class="row"><label><input type="checkbox" id="hideAds"><span data-i18n="hideAds"></span></label></div>
+      <div class="row"><label><input type="checkbox" id="hideRecs"><span data-i18n="hideRecs"></span></label></div>
+
+      <h3 data-i18n="rulesTitle"></h3>
+      <p class="muted" data-i18n="rulesIntro"></p>
+      <div class="row"><label><input type="checkbox" id="ruleColdOn"><span data-i18n="tplRuleCold"></span></label>
+        <input type="number" id="ruleCold" min="1" max="100" step="5"><span class="muted" data-i18n="tplRuleColdB"></span></div>
+      <div class="row"><label><input type="checkbox" id="ruleMatchOn"><span data-i18n="tplRuleMatch"></span></label>
+        <input type="number" id="ruleMatch" min="0" max="100" step="5"><span class="muted" data-i18n="tplRuleMatchB"></span></div>
+
+      <h3 data-i18n="tplOptionsTitle"></h3>
+      <div class="row"><label><input type="checkbox" id="useBase"><span data-i18n="tplUseBase"></span></label></div>
+      <div class="row"><span data-i18n="tplManyA"></span><input type="number" id="manyAt" min="1" max="99">
+        <span data-i18n="tplManyB"></span><input type="number" id="spellings" min="1" max="20"><span data-i18n="tplManyC"></span></div>
+
+    </section>
+  </main>
+
+  <div class="dd" hidden></div>
+  <div class="toast" hidden></div>
+  <script src="core.js"></script>
+  <script src="manager.js"></script>
+</body>
+</html>
