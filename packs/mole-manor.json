@@ -1,0 +1,763 @@
+{
+ "format": "tth-template-pack",
+ "formatVersion": 2,
+ "id": "mole-manor",
+ "name": "摩尔庄园 Mole Manor",
+ "version": "2026.10.26.1",
+ "description": "摩尔庄园（页游、动画、手游）角色、关系与作品形式。中文角色名单独用几乎都撞上别的东西（库拉＝拳皇，拉姆＝Re:0，西索＝全职猎人……），所以角色标签都带作品名。用得最多的英文标签 mole's world 带撇号，按规则不用，改用 moles world。名单来自中文维基百科，2026-10-26。",
+ "base": [
+  "摩尔庄园",
+  "摩爾莊園",
+  "moles world"
+ ],
+ "types": {
+  "romance": "爱情",
+  "friendship": "友情",
+  "family": "亲情"
+ },
+ "characters": [
+  {
+   "id": "molele",
+   "name": "摩乐乐",
+   "group": "主角们",
+   "kw": [
+    "molele",
+    "摩樂樂",
+    "鼹鼠超人"
+   ],
+   "tags": [
+    "摩乐乐 摩尔庄园",
+    "molele moles world"
+   ]
+  },
+  {
+   "id": "lazai",
+   "name": "拉仔",
+   "group": "主角们",
+   "kw": [
+    "lazai"
+   ],
+   "tags": [
+    "拉仔 摩尔庄园",
+    "lazai moles world"
+   ]
+  },
+  {
+   "id": "duoduo",
+   "name": "布多多",
+   "group": "主角们",
+   "kw": [
+    "duoduo"
+   ],
+   "tags": [
+    "布多多 摩尔庄园",
+    "duoduo moles world"
+   ]
+  },
+  {
+   "id": "shaoshao",
+   "name": "布少少",
+   "group": "主角们",
+   "kw": [
+    "shaoshao"
+   ],
+   "tags": [
+    "布少少 摩尔庄园",
+    "shaoshao moles world"
+   ]
+  },
+  {
+   "id": "yali",
+   "name": "丫丽",
+   "group": "主角们",
+   "kw": [
+    "yali",
+    "丫麗",
+    "ㄚ丽"
+   ],
+   "tags": [
+    "丫丽 摩尔庄园",
+    "yali moles world"
+   ]
+  },
+  {
+   "id": "momo",
+   "name": "么么公主",
+   "group": "主角们",
+   "kw": [
+    "momo",
+    "么么",
+    "麼麼",
+    "麼麼公主"
+   ],
+   "tags": [
+    "么么公主 摩尔庄园",
+    "momo moles world"
+   ]
+  },
+  {
+   "id": "bodhi",
+   "name": "菩提大伯",
+   "group": "庄园居民",
+   "kw": [
+    "bodhi",
+    "菩提"
+   ],
+   "tags": [
+    "菩提大伯 摩尔庄园",
+    "bodhi moles world"
+   ]
+  },
+  {
+   "id": "ricky",
+   "name": "瑞琪",
+   "group": "庄园居民",
+   "kw": [
+    "ricky"
+   ],
+   "tags": [
+    "瑞琪 摩尔庄园",
+    "ricky moles world"
+   ]
+  },
+  {
+   "id": "rk",
+   "name": "RK",
+   "group": "庄园居民",
+   "kw": [
+    "rk",
+    "罗伯特基德",
+    "robert kidder",
+    "怪盗rk"
+   ],
+   "tags": [
+    "RK 摩尔庄园",
+    "rk moles world"
+   ]
+  },
+  {
+   "id": "silt",
+   "name": "丝尔特",
+   "group": "庄园居民",
+   "kw": [
+    "絲爾特"
+   ],
+   "tags": [
+    "丝尔特 摩尔庄园"
+   ]
+  },
+  {
+   "id": "rainbow",
+   "name": "彩虹姐姐",
+   "group": "庄园居民",
+   "kw": [
+    "彩虹"
+   ],
+   "tags": [
+    "彩虹姐姐 摩尔庄园"
+   ]
+  },
+  {
+   "id": "youyou",
+   "name": "尤尤",
+   "group": "庄园居民",
+   "kw": [],
+   "tags": [
+    "尤尤 摩尔庄园"
+   ]
+  },
+  {
+   "id": "mason",
+   "name": "梅森",
+   "group": "庄园居民",
+   "kw": [],
+   "tags": [
+    "梅森 摩尔庄园"
+   ]
+  },
+  {
+   "id": "david",
+   "name": "大卫",
+   "group": "庄园居民",
+   "kw": [
+    "大衛"
+   ],
+   "tags": [
+    "大卫 摩尔庄园"
+   ]
+  },
+  {
+   "id": "tommy",
+   "name": "汤米",
+   "group": "庄园居民",
+   "kw": [
+    "湯米"
+   ],
+   "tags": [
+    "汤米 摩尔庄园"
+   ]
+  },
+  {
+   "id": "al",
+   "name": "艾尔警官",
+   "group": "庄园居民",
+   "kw": [
+    "艾爾警官",
+    "艾尔"
+   ],
+   "tags": [
+    "艾尔警官 摩尔庄园"
+   ]
+  },
+  {
+   "id": "tutu",
+   "name": "兔兔",
+   "group": "庄园居民",
+   "kw": [],
+   "tags": [
+    "兔兔 摩尔庄园"
+   ]
+  },
+  {
+   "id": "locke",
+   "name": "洛克行政官",
+   "group": "庄园居民",
+   "kw": [
+    "洛克"
+   ],
+   "tags": [
+    "洛克行政官 摩尔庄园"
+   ]
+  },
+  {
+   "id": "kevin",
+   "name": "凯文",
+   "group": "庄园居民",
+   "kw": [
+    "凱文"
+   ],
+   "tags": [
+    "凯文 摩尔庄园"
+   ]
+  },
+  {
+   "id": "nick",
+   "name": "尼克",
+   "group": "庄园居民",
+   "kw": [],
+   "tags": [
+    "尼克 摩尔庄园"
+   ]
+  },
+  {
+   "id": "kuluo",
+   "name": "库洛",
+   "group": "庄园居民",
+   "kw": [
+    "庫洛"
+   ],
+   "tags": [
+    "库洛 摩尔庄园"
+   ]
+  },
+  {
+   "id": "beta",
+   "name": "贝塔",
+   "group": "庄园居民",
+   "kw": [
+    "貝塔"
+   ],
+   "tags": [
+    "贝塔 摩尔庄园"
+   ]
+  },
+  {
+   "id": "lili",
+   "name": "粒粒",
+   "group": "庄园居民",
+   "kw": [],
+   "tags": [
+    "粒粒 摩尔庄园"
+   ]
+  },
+  {
+   "id": "qiqi",
+   "name": "琦琦",
+   "group": "庄园居民",
+   "kw": [],
+   "tags": [
+    "琦琦 摩尔庄园"
+   ]
+  },
+  {
+   "id": "meimei",
+   "name": "渼渼",
+   "group": "庄园居民",
+   "kw": [],
+   "tags": [
+    "渼渼 摩尔庄园"
+   ]
+  },
+  {
+   "id": "xisuo",
+   "name": "西索",
+   "group": "庄园居民",
+   "kw": [],
+   "tags": [
+    "西索 摩尔庄园"
+   ]
+  },
+  {
+   "id": "hanqing",
+   "name": "汉青",
+   "group": "庄园居民",
+   "kw": [
+    "漢青"
+   ],
+   "tags": [
+    "汉青 摩尔庄园"
+   ]
+  },
+  {
+   "id": "huashen",
+   "name": "花婶",
+   "group": "庄园居民",
+   "kw": [
+    "花嬸"
+   ],
+   "tags": [
+    "花婶 摩尔庄园"
+   ]
+  },
+  {
+   "id": "yilian",
+   "name": "伊莲",
+   "group": "庄园居民",
+   "kw": [],
+   "tags": [
+    "伊莲 摩尔庄园"
+   ]
+  },
+  {
+   "id": "baturu",
+   "name": "巴图鲁",
+   "group": "庄园居民",
+   "kw": [],
+   "tags": [
+    "巴图鲁 摩尔庄园"
+   ]
+  },
+  {
+   "id": "tulin",
+   "name": "土林长老",
+   "group": "庄园居民",
+   "kw": [],
+   "tags": [
+    "土林长老 摩尔庄园"
+   ]
+  },
+  {
+   "id": "mofenqi",
+   "name": "摩芬奇",
+   "group": "庄园居民",
+   "kw": [],
+   "tags": [
+    "摩芬奇 摩尔庄园"
+   ]
+  },
+  {
+   "id": "sera",
+   "name": "塞拉",
+   "group": "王室与魔法",
+   "kw": [
+    "杰拉德"
+   ],
+   "tags": [
+    "塞拉 摩尔庄园"
+   ]
+  },
+  {
+   "id": "jieke",
+   "name": "捷克",
+   "group": "王室与魔法",
+   "kw": [],
+   "tags": [
+    "捷克 摩尔庄园"
+   ]
+  },
+  {
+   "id": "heiyan",
+   "name": "黑焱",
+   "group": "王室与魔法",
+   "kw": [],
+   "tags": [
+    "黑焱 摩尔庄园"
+   ]
+  },
+  {
+   "id": "kula",
+   "name": "库拉",
+   "group": "王室与魔法",
+   "kw": [
+    "kula",
+    "庫拉",
+    "kura"
+   ],
+   "tags": [
+    "库拉 摩尔庄园",
+    "kula moles world"
+   ]
+  },
+  {
+   "id": "dice",
+   "name": "骰子",
+   "group": "王室与魔法",
+   "kw": [
+    "库拉的拉姆"
+   ],
+   "tags": [
+    "骰子 摩尔庄园"
+   ]
+  },
+  {
+   "id": "nierla",
+   "name": "尼尔拉法师",
+   "group": "王室与魔法",
+   "kw": [
+    "亚撒"
+   ],
+   "tags": [
+    "尼尔拉法师 摩尔庄园"
+   ]
+  },
+  {
+   "id": "mike",
+   "name": "米克",
+   "group": "摩乐乐的家人",
+   "kw": [],
+   "tags": [
+    "米克 摩尔庄园"
+   ]
+  },
+  {
+   "id": "shirley",
+   "name": "雪莉",
+   "group": "摩乐乐的家人",
+   "kw": [],
+   "tags": [
+    "雪莉 摩尔庄园"
+   ]
+  },
+  {
+   "id": "xixi",
+   "name": "茜茜",
+   "group": "手游角色",
+   "kw": [],
+   "tags": [
+    "茜茜 摩尔庄园"
+   ]
+  },
+  {
+   "id": "beiqi",
+   "name": "贝琪",
+   "group": "手游角色",
+   "kw": [],
+   "tags": [
+    "贝琪 摩尔庄园"
+   ]
+  },
+  {
+   "id": "dali",
+   "name": "大力",
+   "group": "手游角色",
+   "kw": [],
+   "tags": [
+    "大力 摩尔庄园"
+   ]
+  },
+  {
+   "id": "eric",
+   "name": "埃里克斯",
+   "group": "手游角色",
+   "kw": [],
+   "tags": [
+    "埃里克斯 摩尔庄园"
+   ]
+  },
+  {
+   "id": "wudong",
+   "name": "雾冬",
+   "group": "手游角色",
+   "kw": [],
+   "tags": [
+    "雾冬 摩尔庄园"
+   ]
+  }
+ ],
+ "relations": [
+  {
+   "id": "mike-shirley",
+   "type": "romance",
+   "members": [
+    "mike",
+    "shirley"
+   ],
+   "tags": [
+    "米克 x 雪莉 摩尔庄园"
+   ]
+  },
+  {
+   "id": "bodhi-molele",
+   "type": "family",
+   "members": [
+    "bodhi",
+    "molele"
+   ],
+   "tags": [
+    "菩提大伯和摩乐乐 摩尔庄园"
+   ]
+  },
+  {
+   "id": "parents-molele",
+   "type": "family",
+   "members": [
+    "mike",
+    "shirley",
+    "molele"
+   ],
+   "tags": [
+    "米克和雪莉和摩乐乐 摩尔庄园"
+   ]
+  },
+  {
+   "id": "bu-twins",
+   "type": "family",
+   "members": [
+    "duoduo",
+    "shaoshao"
+   ],
+   "tags": [
+    "布多多和布少少 摩尔庄园"
+   ],
+   "name": "布多多 × 布少少（双胞胎）"
+  },
+  {
+   "id": "hanqing-yali",
+   "type": "family",
+   "members": [
+    "hanqing",
+    "yali"
+   ],
+   "tags": [
+    "汉青和丫丽 摩尔庄园"
+   ]
+  },
+  {
+   "id": "royal-siblings",
+   "type": "family",
+   "members": [
+    "momo",
+    "sera",
+    "jieke"
+   ],
+   "tags": [
+    "么么塞拉和捷克 摩尔庄园"
+   ],
+   "name": "么么、塞拉、捷克（兄妹）"
+  },
+  {
+   "id": "lili-qiqi",
+   "type": "family",
+   "members": [
+    "lili",
+    "qiqi"
+   ],
+   "tags": [
+    "粒粒和琦琦 摩尔庄园"
+   ]
+  },
+  {
+   "id": "sera-heiyan",
+   "type": "family",
+   "members": [
+    "sera",
+    "heiyan"
+   ],
+   "tags": [
+    "塞拉和黑焱 摩尔庄园"
+   ]
+  },
+  {
+   "id": "molele-lazai",
+   "type": "friendship",
+   "members": [
+    "molele",
+    "lazai"
+   ],
+   "tags": [
+    "摩乐乐和拉仔 摩尔庄园"
+   ]
+  },
+  {
+   "id": "kula-dice",
+   "type": "friendship",
+   "members": [
+    "kula",
+    "dice"
+   ],
+   "tags": [
+    "库拉和骰子 摩尔庄园"
+   ]
+  },
+  {
+   "id": "molele-bu",
+   "type": "friendship",
+   "members": [
+    "molele",
+    "duoduo",
+    "shaoshao"
+   ],
+   "tags": [
+    "摩乐乐和布多多和布少少 摩尔庄园"
+   ]
+  },
+  {
+   "id": "molele-momo",
+   "type": "friendship",
+   "members": [
+    "molele",
+    "momo"
+   ],
+   "tags": [
+    "摩乐乐和么么公主 摩尔庄园"
+   ]
+  },
+  {
+   "id": "bodhi-ricky",
+   "type": "friendship",
+   "members": [
+    "bodhi",
+    "ricky"
+   ],
+   "tags": [
+    "菩提大伯和瑞琪 摩尔庄园"
+   ]
+  },
+  {
+   "id": "silt-xisuo",
+   "type": "friendship",
+   "members": [
+    "silt",
+    "xisuo"
+   ],
+   "tags": [
+    "丝尔特和西索 摩尔庄园"
+   ]
+  }
+ ],
+ "presets": [
+  {
+   "id": "p-kids",
+   "name": "摩乐乐和小伙伴",
+   "members": [
+    "molele",
+    "lazai",
+    "duoduo",
+    "shaoshao",
+    "yali",
+    "momo"
+   ],
+   "relations": []
+  }
+ ],
+ "sections": [
+  {
+   "id": "works",
+   "name": "作品／版本",
+   "kind": "work",
+   "items": [
+    {
+     "id": "game",
+     "name": "页游",
+     "tags": [
+      "摩尔庄园页游"
+     ]
+    },
+    {
+     "id": "anime",
+     "name": "动画",
+     "tags": [
+      "摩尔庄园动画"
+     ]
+    },
+    {
+     "id": "mobile",
+     "name": "手游",
+     "tags": [
+      "摩尔庄园手游"
+     ]
+    },
+    {
+     "id": "mole-manor-2",
+     "name": "摩尔庄园2",
+     "tags": [
+      "摩尔庄园2"
+     ]
+    }
+   ]
+  },
+  {
+   "id": "formats",
+   "name": "作品形式",
+   "kind": "format",
+   "items": [
+    {
+     "id": "fanart",
+     "name": "同人图",
+     "tags": [
+      "fanart",
+      "my art",
+      "artists on tumblr"
+     ],
+     "base": false
+    },
+    {
+     "id": "fanfic",
+     "name": "同人文",
+     "tags": [
+      "fanfiction",
+      "fanfic",
+      "my writing"
+     ],
+     "base": false
+    },
+    {
+     "id": "comic",
+     "name": "漫画",
+     "tags": [
+      "fancomic",
+      "comic"
+     ],
+     "base": false
+    },
+    {
+     "id": "headcanon",
+     "name": "个人设定",
+     "tags": [
+      "headcanon"
+     ],
+     "base": false
+    },
+    {
+     "id": "gif",
+     "name": "动图",
+     "tags": [
+      "gifset",
+      "my gifs"
+     ],
+     "base": false
+    }
+   ]
+  }
+ ]
+}

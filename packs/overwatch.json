@@ -1,0 +1,1242 @@
+{
+ "format": "tth-template-pack",
+ "formatVersion": 2,
+ "id": "overwatch",
+ "name": "守望先锋 Overwatch",
+ "version": "2026.10.26.1",
+ "description": "守望先锋全部英雄（截至 2026 第 5 赛季的 Doctrine）、主要 CP、家人和组织。英雄按当前职业分组，黑影按第 5 赛季改为支援。2026 年的新英雄还没有确定的中文名，先用英文名。标签按 2026-10-26 的 /v2/tagged 抽样选出：mercy、sigma、cassidy、ashe、winston、juno、freja、hanzo、brigitte、wrecking ball、hazard、ow 单独用时多半是别的东西，这些角色只用带 overwatch 的标签或全名。d.va、d.mon 带标点，换成 dva、dmon。",
+ "base": [
+  "overwatch",
+  "overwatch 2",
+  "ow2",
+  "守望先锋",
+  "オーバーウォッチ"
+ ],
+ "types": {
+  "romance": "爱情",
+  "friendship": "友情／组织",
+  "family": "亲情"
+ },
+ "characters": [
+  {
+   "id": "dva",
+   "name": "D.Va",
+   "group": "重装",
+   "kw": [
+    "宋哈娜",
+    "hana",
+    "d.va"
+   ],
+   "tags": [
+    "dva",
+    "hana song",
+    "dva overwatch"
+   ]
+  },
+  {
+   "id": "doomfist",
+   "name": "末日铁拳",
+   "group": "重装",
+   "kw": [
+    "doomfist",
+    "阿坎德"
+   ],
+   "tags": [
+    "doomfist",
+    "akande ogundimu"
+   ]
+  },
+  {
+   "id": "junkerqueen",
+   "name": "渣客女王",
+   "group": "重装",
+   "kw": [
+    "junker queen",
+    "奥德莎"
+   ],
+   "tags": [
+    "junker queen",
+    "odessa stone"
+   ]
+  },
+  {
+   "id": "mauga",
+   "name": "毛加",
+   "group": "重装",
+   "kw": [
+    "mauga"
+   ],
+   "tags": [
+    "mauga",
+    "mauga overwatch"
+   ]
+  },
+  {
+   "id": "orisa",
+   "name": "奥丽莎",
+   "group": "重装",
+   "kw": [
+    "orisa"
+   ],
+   "tags": [
+    "orisa overwatch",
+    "orisa"
+   ]
+  },
+  {
+   "id": "ramattra",
+   "name": "拉玛刹",
+   "group": "重装",
+   "kw": [
+    "ramattra"
+   ],
+   "tags": [
+    "ramattra",
+    "ramattra overwatch"
+   ]
+  },
+  {
+   "id": "reinhardt",
+   "name": "莱因哈特",
+   "group": "重装",
+   "kw": [
+    "reinhardt",
+    "大锤"
+   ],
+   "tags": [
+    "reinhardt",
+    "reinhardt wilhelm",
+    "reinhardt overwatch"
+   ]
+  },
+  {
+   "id": "roadhog",
+   "name": "路霸",
+   "group": "重装",
+   "kw": [
+    "roadhog",
+    "马克"
+   ],
+   "tags": [
+    "roadhog",
+    "mako rutledge"
+   ]
+  },
+  {
+   "id": "sigma",
+   "name": "西格玛",
+   "group": "重装",
+   "kw": [
+    "sigma",
+    "希伯伦"
+   ],
+   "tags": [
+    "sigma overwatch",
+    "siebren de kuiper"
+   ]
+  },
+  {
+   "id": "winston",
+   "name": "温斯顿",
+   "group": "重装",
+   "kw": [
+    "winston",
+    "猩猩"
+   ],
+   "tags": [
+    "winston overwatch"
+   ]
+  },
+  {
+   "id": "hammond",
+   "name": "破坏球",
+   "group": "重装",
+   "kw": [
+    "wrecking ball",
+    "hammond",
+    "哈蒙德",
+    "仓鼠"
+   ],
+   "tags": [
+    "wrecking ball overwatch",
+    "hammond overwatch"
+   ]
+  },
+  {
+   "id": "zarya",
+   "name": "查莉娅",
+   "group": "重装",
+   "kw": [
+    "zarya",
+    "毛妹"
+   ],
+   "tags": [
+    "zarya",
+    "aleksandra zaryanova",
+    "zarya overwatch"
+   ]
+  },
+  {
+   "id": "hazard",
+   "name": "Hazard",
+   "group": "重装",
+   "kw": [
+    "hazard",
+    "骇灾"
+   ],
+   "tags": [
+    "hazard overwatch"
+   ]
+  },
+  {
+   "id": "domina",
+   "name": "Domina",
+   "group": "重装",
+   "kw": [
+    "domina"
+   ],
+   "tags": [
+    "domina overwatch"
+   ]
+  },
+  {
+   "id": "dmon",
+   "name": "D.Mon",
+   "group": "重装",
+   "kw": [
+    "dmon",
+    "d.mon"
+   ],
+   "tags": [
+    "dmon",
+    "dmon overwatch"
+   ]
+  },
+  {
+   "id": "ashe",
+   "name": "艾什",
+   "group": "输出",
+   "kw": [
+    "ashe"
+   ],
+   "tags": [
+    "ashe overwatch",
+    "elizabeth caledonia ashe"
+   ]
+  },
+  {
+   "id": "bastion",
+   "name": "堡垒",
+   "group": "输出",
+   "kw": [
+    "bastion"
+   ],
+   "tags": [
+    "bastion overwatch"
+   ]
+  },
+  {
+   "id": "cassidy",
+   "name": "卡西迪",
+   "group": "输出",
+   "kw": [
+    "cassidy",
+    "mccree",
+    "麦克雷",
+    "牛仔"
+   ],
+   "tags": [
+    "cassidy overwatch",
+    "cole cassidy",
+    "jesse mccree",
+    "mccree"
+   ]
+  },
+  {
+   "id": "echo",
+   "name": "回声",
+   "group": "输出",
+   "kw": [
+    "echo"
+   ],
+   "tags": [
+    "echo overwatch"
+   ]
+  },
+  {
+   "id": "genji",
+   "name": "源氏",
+   "group": "输出",
+   "kw": [
+    "genji",
+    "岛田源氏"
+   ],
+   "tags": [
+    "genji",
+    "genji shimada",
+    "genji overwatch"
+   ]
+  },
+  {
+   "id": "hanzo",
+   "name": "半藏",
+   "group": "输出",
+   "kw": [
+    "hanzo",
+    "岛田半藏"
+   ],
+   "tags": [
+    "hanzo shimada",
+    "hanzo overwatch"
+   ]
+  },
+  {
+   "id": "junkrat",
+   "name": "狂鼠",
+   "group": "输出",
+   "kw": [
+    "junkrat",
+    "詹米森"
+   ],
+   "tags": [
+    "junkrat",
+    "jamison fawkes"
+   ]
+  },
+  {
+   "id": "mei",
+   "name": "美",
+   "group": "输出",
+   "kw": [
+    "mei",
+    "小美",
+    "周美灵"
+   ],
+   "tags": [
+    "mei overwatch",
+    "mei ling zhou"
+   ]
+  },
+  {
+   "id": "pharah",
+   "name": "法老之鹰",
+   "group": "输出",
+   "kw": [
+    "pharah",
+    "法拉"
+   ],
+   "tags": [
+    "pharah",
+    "fareeha amari"
+   ]
+  },
+  {
+   "id": "reaper",
+   "name": "死神",
+   "group": "输出",
+   "kw": [
+    "reaper",
+    "加布里尔",
+    "莱耶斯"
+   ],
+   "tags": [
+    "reaper overwatch",
+    "gabriel reyes"
+   ]
+  },
+  {
+   "id": "sojourn",
+   "name": "索杰恩",
+   "group": "输出",
+   "kw": [
+    "sojourn"
+   ],
+   "tags": [
+    "sojourn overwatch",
+    "sojourn",
+    "vivian chase"
+   ]
+  },
+  {
+   "id": "soldier76",
+   "name": "士兵：76",
+   "group": "输出",
+   "kw": [
+    "soldier 76",
+    "76",
+    "莫里森"
+   ],
+   "tags": [
+    "soldier 76",
+    "soldier76",
+    "jack morrison"
+   ]
+  },
+  {
+   "id": "symmetra",
+   "name": "秩序之光",
+   "group": "输出",
+   "kw": [
+    "symmetra",
+    "塞特娅"
+   ],
+   "tags": [
+    "symmetra",
+    "satya vaswani",
+    "symmetra overwatch"
+   ]
+  },
+  {
+   "id": "torbjorn",
+   "name": "托比昂",
+   "group": "输出",
+   "kw": [
+    "torbjorn",
+    "torbjörn"
+   ],
+   "tags": [
+    "torbjorn",
+    "torbjorn lindholm"
+   ]
+  },
+  {
+   "id": "tracer",
+   "name": "猎空",
+   "group": "输出",
+   "kw": [
+    "tracer",
+    "莉娜"
+   ],
+   "tags": [
+    "tracer",
+    "lena oxton",
+    "tracer overwatch"
+   ]
+  },
+  {
+   "id": "venture",
+   "name": "探奇",
+   "group": "输出",
+   "kw": [
+    "venture"
+   ],
+   "tags": [
+    "venture overwatch"
+   ]
+  },
+  {
+   "id": "widowmaker",
+   "name": "黑百合",
+   "group": "输出",
+   "kw": [
+    "widowmaker",
+    "amelie"
+   ],
+   "tags": [
+    "widowmaker",
+    "amelie lacroix"
+   ]
+  },
+  {
+   "id": "freja",
+   "name": "弗蕾娅",
+   "group": "输出",
+   "kw": [
+    "freja"
+   ],
+   "tags": [
+    "freja overwatch"
+   ]
+  },
+  {
+   "id": "vendetta",
+   "name": "Vendetta",
+   "group": "输出",
+   "kw": [
+    "vendetta"
+   ],
+   "tags": [
+    "vendetta overwatch"
+   ]
+  },
+  {
+   "id": "anran",
+   "name": "Anran",
+   "group": "输出",
+   "kw": [
+    "anran"
+   ],
+   "tags": [
+    "anran",
+    "anran overwatch"
+   ]
+  },
+  {
+   "id": "emre",
+   "name": "Emre",
+   "group": "输出",
+   "kw": [
+    "emre"
+   ],
+   "tags": [
+    "emre overwatch",
+    "emre",
+    "emre sarioglu"
+   ]
+  },
+  {
+   "id": "sierra",
+   "name": "Sierra",
+   "group": "输出",
+   "kw": [
+    "sierra"
+   ],
+   "tags": [
+    "sierra overwatch"
+   ]
+  },
+  {
+   "id": "shion",
+   "name": "Shion",
+   "group": "输出",
+   "kw": [
+    "shion"
+   ],
+   "tags": [
+    "shion overwatch"
+   ]
+  },
+  {
+   "id": "ana",
+   "name": "安娜",
+   "group": "支援",
+   "kw": [
+    "ana"
+   ],
+   "tags": [
+    "ana amari",
+    "ana overwatch"
+   ]
+  },
+  {
+   "id": "baptiste",
+   "name": "巴蒂斯特",
+   "group": "支援",
+   "kw": [
+    "baptiste",
+    "巴蒂"
+   ],
+   "tags": [
+    "baptiste overwatch",
+    "baptiste",
+    "jean baptiste augustin"
+   ]
+  },
+  {
+   "id": "brigitte",
+   "name": "布丽吉塔",
+   "group": "支援",
+   "kw": [
+    "brigitte",
+    "布丽"
+   ],
+   "tags": [
+    "brigitte lindholm",
+    "brigitte overwatch"
+   ]
+  },
+  {
+   "id": "illari",
+   "name": "伊拉锐",
+   "group": "支援",
+   "kw": [
+    "illari"
+   ],
+   "tags": [
+    "illari",
+    "illari overwatch"
+   ]
+  },
+  {
+   "id": "juno",
+   "name": "朱诺",
+   "group": "支援",
+   "kw": [
+    "juno"
+   ],
+   "tags": [
+    "juno overwatch"
+   ]
+  },
+  {
+   "id": "kiriko",
+   "name": "雾子",
+   "group": "支援",
+   "kw": [
+    "kiriko"
+   ],
+   "tags": [
+    "kiriko",
+    "kiriko kamori",
+    "kiriko overwatch"
+   ]
+  },
+  {
+   "id": "lifeweaver",
+   "name": "生命之梭",
+   "group": "支援",
+   "kw": [
+    "lifeweaver",
+    "尼兰"
+   ],
+   "tags": [
+    "lifeweaver",
+    "niran pruksamanee"
+   ]
+  },
+  {
+   "id": "lucio",
+   "name": "卢西奥",
+   "group": "支援",
+   "kw": [
+    "lucio",
+    "lúcio",
+    "dj"
+   ],
+   "tags": [
+    "lucio overwatch",
+    "lucio",
+    "lucio correia dos santos"
+   ]
+  },
+  {
+   "id": "mercy",
+   "name": "天使",
+   "group": "支援",
+   "kw": [
+    "mercy",
+    "齐格勒",
+    "安吉拉"
+   ],
+   "tags": [
+    "mercy overwatch",
+    "angela ziegler"
+   ]
+  },
+  {
+   "id": "moira",
+   "name": "莫伊拉",
+   "group": "支援",
+   "kw": [
+    "moira"
+   ],
+   "tags": [
+    "moira overwatch",
+    "moira"
+   ]
+  },
+  {
+   "id": "sombra",
+   "name": "黑影",
+   "group": "支援",
+   "kw": [
+    "sombra",
+    "奥莉维亚"
+   ],
+   "tags": [
+    "sombra overwatch",
+    "sombra",
+    "olivia colomar"
+   ]
+  },
+  {
+   "id": "zenyatta",
+   "name": "禅雅塔",
+   "group": "支援",
+   "kw": [
+    "zenyatta",
+    "禅师"
+   ],
+   "tags": [
+    "zenyatta",
+    "zenyatta overwatch"
+   ]
+  },
+  {
+   "id": "wuyang",
+   "name": "无漾",
+   "group": "支援",
+   "kw": [
+    "wuyang"
+   ],
+   "tags": [
+    "wuyang",
+    "wuyang overwatch"
+   ]
+  },
+  {
+   "id": "mizuki",
+   "name": "Mizuki",
+   "group": "支援",
+   "kw": [
+    "mizuki"
+   ],
+   "tags": [
+    "mizuki overwatch"
+   ]
+  },
+  {
+   "id": "jetpackcat",
+   "name": "Jetpack Cat",
+   "group": "支援",
+   "kw": [
+    "jetpack cat",
+    "喷气猫",
+    "猫"
+   ],
+   "tags": [
+    "jetpack cat"
+   ]
+  },
+  {
+   "id": "doctrine",
+   "name": "Doctrine",
+   "group": "支援",
+   "kw": [
+    "doctrine"
+   ],
+   "tags": [
+    "doctrine overwatch"
+   ]
+  },
+  {
+   "id": "bob",
+   "name": "B.O.B.",
+   "group": "配角",
+   "kw": [
+    "bob",
+    "鲍勃"
+   ],
+   "tags": [
+    "bob overwatch"
+   ]
+  },
+  {
+   "id": "emily",
+   "name": "艾米丽（猎空女友）",
+   "group": "配角",
+   "kw": [
+    "emily"
+   ],
+   "tags": [
+    "emily overwatch"
+   ]
+  }
+ ],
+ "relations": [
+  {
+   "id": "mchanzo",
+   "name": "半藏 × 卡西迪",
+   "type": "romance",
+   "members": [
+    "hanzo",
+    "cassidy"
+   ],
+   "kw": [
+    "mchanzo"
+   ],
+   "tags": [
+    "mchanzo",
+    "hanzo x cassidy"
+   ]
+  },
+  {
+   "id": "mcgenji",
+   "name": "卡西迪 × 源氏",
+   "type": "romance",
+   "members": [
+    "cassidy",
+    "genji"
+   ],
+   "kw": [
+    "mcgenji"
+   ],
+   "tags": [
+    "mcgenji"
+   ]
+  },
+  {
+   "id": "genyatta",
+   "name": "源氏 × 禅雅塔",
+   "type": "romance",
+   "members": [
+    "genji",
+    "zenyatta"
+   ],
+   "kw": [
+    "genyatta",
+    "源禅"
+   ],
+   "tags": [
+    "genyatta",
+    "genji x zenyatta"
+   ]
+  },
+  {
+   "id": "gency",
+   "name": "源氏 × 天使",
+   "type": "romance",
+   "members": [
+    "genji",
+    "mercy"
+   ],
+   "kw": [
+    "gency",
+    "源天"
+   ],
+   "tags": [
+    "gency"
+   ]
+  },
+  {
+   "id": "reaper76",
+   "name": "死神 × 士兵：76",
+   "type": "romance",
+   "members": [
+    "reaper",
+    "soldier76"
+   ],
+   "kw": [
+    "reaper76",
+    "r76"
+   ],
+   "tags": [
+    "reaper76",
+    "r76",
+    "reaper x soldier 76"
+   ]
+  },
+  {
+   "id": "widowtracer",
+   "name": "黑百合 × 猎空",
+   "type": "romance",
+   "members": [
+    "widowmaker",
+    "tracer"
+   ],
+   "kw": [
+    "widowtracer"
+   ],
+   "tags": [
+    "widowtracer"
+   ]
+  },
+  {
+   "id": "pharmercy",
+   "name": "法老之鹰 × 天使",
+   "type": "romance",
+   "members": [
+    "pharah",
+    "mercy"
+   ],
+   "kw": [
+    "pharmercy",
+    "法天"
+   ],
+   "tags": [
+    "pharmercy"
+   ]
+  },
+  {
+   "id": "moircy",
+   "name": "天使 × 莫伊拉",
+   "type": "romance",
+   "members": [
+    "mercy",
+    "moira"
+   ],
+   "kw": [
+    "moircy"
+   ],
+   "tags": [
+    "moircy",
+    "mercy x moira"
+   ]
+  },
+  {
+   "id": "roadrat",
+   "name": "狂鼠 × 路霸",
+   "type": "romance",
+   "members": [
+    "junkrat",
+    "roadhog"
+   ],
+   "kw": [
+    "roadrat"
+   ],
+   "tags": [
+    "roadrat",
+    "junkrat x roadhog"
+   ]
+  },
+  {
+   "id": "widowsombra",
+   "name": "黑影 × 黑百合",
+   "type": "romance",
+   "members": [
+    "sombra",
+    "widowmaker"
+   ],
+   "kw": [],
+   "tags": [
+    "sombra x widowmaker"
+   ]
+  },
+  {
+   "id": "tracer-emily",
+   "name": "猎空 × 艾米丽（猎空女友）",
+   "type": "romance",
+   "members": [
+    "tracer",
+    "emily"
+   ],
+   "kw": [],
+   "tags": [
+    "tracer x emily",
+    "lena x emily"
+   ]
+  },
+  {
+   "id": "lifebap",
+   "name": "巴蒂斯特 × 生命之梭",
+   "type": "romance",
+   "members": [
+    "baptiste",
+    "lifeweaver"
+   ],
+   "kw": [],
+   "tags": [
+    "baptiste x lifeweaver"
+   ]
+  },
+  {
+   "id": "ramattra-zenyatta",
+   "name": "拉玛刹 × 禅雅塔",
+   "type": "romance",
+   "members": [
+    "ramattra",
+    "zenyatta"
+   ],
+   "kw": [],
+   "tags": [
+    "ramattra x zenyatta"
+   ]
+  },
+  {
+   "id": "shimada",
+   "name": "源氏 & 半藏",
+   "type": "family",
+   "members": [
+    "genji",
+    "hanzo"
+   ],
+   "kw": [
+    "岛田兄弟",
+    "shimada"
+   ],
+   "tags": [
+    "shimada brothers",
+    "shimada bros"
+   ]
+  },
+  {
+   "id": "amari",
+   "name": "安娜 & 法老之鹰",
+   "type": "family",
+   "members": [
+    "ana",
+    "pharah"
+   ],
+   "kw": [
+    "amari"
+   ],
+   "tags": [
+    "amari family"
+   ]
+  },
+  {
+   "id": "lindholm",
+   "name": "托比昂 & 布丽吉塔",
+   "type": "family",
+   "members": [
+    "torbjorn",
+    "brigitte"
+   ],
+   "kw": [
+    "lindholm"
+   ],
+   "tags": []
+  },
+  {
+   "id": "blackwatch",
+   "name": "暗影守望 Blackwatch",
+   "type": "friendship",
+   "members": [
+    "reaper",
+    "genji",
+    "cassidy",
+    "moira"
+   ],
+   "kw": [
+    "blackwatch",
+    "暗影守望"
+   ],
+   "tags": [
+    "blackwatch"
+   ]
+  },
+  {
+   "id": "talon",
+   "name": "黑爪 Talon",
+   "type": "friendship",
+   "members": [
+    "reaper",
+    "widowmaker",
+    "sombra",
+    "moira",
+    "doomfist"
+   ],
+   "kw": [
+    "talon",
+    "黑爪"
+   ],
+   "tags": [
+    "talon overwatch"
+   ]
+  },
+  {
+   "id": "deadlock",
+   "name": "死锁帮 Deadlock",
+   "type": "friendship",
+   "members": [
+    "ashe",
+    "bob",
+    "cassidy"
+   ],
+   "kw": [
+    "deadlock",
+    "死锁"
+   ],
+   "tags": [
+    "deadlock gang"
+   ]
+  },
+  {
+   "id": "junkers",
+   "name": "渣客 Junkers",
+   "type": "friendship",
+   "members": [
+    "junkrat",
+    "roadhog",
+    "junkerqueen"
+   ],
+   "kw": [
+    "junkers",
+    "渣客"
+   ],
+   "tags": [
+    "junkers overwatch"
+   ]
+  }
+ ],
+ "presets": [
+  {
+   "id": "p-blackwatch",
+   "name": "暗影守望",
+   "kw": [
+    "blackwatch"
+   ],
+   "members": [
+    "reaper",
+    "genji",
+    "cassidy",
+    "moira"
+   ],
+   "relations": [
+    "blackwatch"
+   ]
+  },
+  {
+   "id": "p-talon",
+   "name": "黑爪",
+   "kw": [
+    "talon"
+   ],
+   "members": [
+    "reaper",
+    "widowmaker",
+    "sombra",
+    "moira",
+    "doomfist"
+   ],
+   "relations": [
+    "talon"
+   ]
+  },
+  {
+   "id": "p-shimada",
+   "name": "岛田兄弟",
+   "kw": [
+    "shimada"
+   ],
+   "members": [
+    "genji",
+    "hanzo"
+   ],
+   "relations": [
+    "shimada"
+   ]
+  },
+  {
+   "id": "p-junkers",
+   "name": "渣客三人",
+   "kw": [
+    "junkers"
+   ],
+   "members": [
+    "junkrat",
+    "roadhog",
+    "junkerqueen"
+   ],
+   "relations": [
+    "junkers"
+   ]
+  }
+ ],
+ "sections": [
+  {
+   "id": "works",
+   "name": "作品／其他",
+   "kind": "work",
+   "items": [
+    {
+     "id": "lore",
+     "name": "剧情／设定",
+     "kw": [
+      "lore",
+      "剧情"
+     ],
+     "tags": [
+      "overwatch lore"
+     ]
+    },
+    {
+     "id": "comics",
+     "name": "官方漫画",
+     "kw": [
+      "comic",
+      "漫画"
+     ],
+     "tags": [
+      "overwatch comics"
+     ]
+    },
+    {
+     "id": "shorts",
+     "name": "动画短片",
+     "kw": [
+      "animated short",
+      "短片"
+     ],
+     "tags": [
+      "overwatch animated short"
+     ]
+    }
+   ]
+  },
+  {
+   "id": "formats",
+   "name": "作品形式",
+   "kind": "format",
+   "items": [
+    {
+     "id": "fanart",
+     "name": "自己画的图",
+     "kw": [
+      "fanart",
+      "画"
+     ],
+     "tags": [
+      "overwatch fanart",
+      "ow fanart",
+      "ow2 fanart",
+      "overwatch art",
+      "my art",
+      "artists on tumblr"
+     ]
+    },
+    {
+     "id": "fanfic",
+     "name": "自己写的文",
+     "kw": [
+      "fanfic",
+      "文"
+     ],
+     "tags": [
+      "overwatch fanfiction",
+      "overwatch fanfic",
+      "my writing"
+     ]
+    },
+    {
+     "id": "comic",
+     "name": "自己画的漫画",
+     "kw": [
+      "comic",
+      "条漫"
+     ],
+     "tags": [
+      "overwatch comic",
+      "fancomic",
+      "my art"
+     ]
+    },
+    {
+     "id": "cosplay",
+     "name": "Cosplay",
+     "kw": [
+      "cos"
+     ],
+     "tags": [
+      "overwatch cosplay",
+      "cosplay"
+     ]
+    },
+    {
+     "id": "au",
+     "name": "设定／脑洞／AU",
+     "kw": [
+      "au",
+      "headcanon"
+     ],
+     "tags": [
+      "headcanon"
+     ],
+     "base": false
+    },
+    {
+     "id": "gif",
+     "name": "自己做的 GIF",
+     "kw": [
+      "gif"
+     ],
+     "tags": [
+      "gifset",
+      "my gifs"
+     ],
+     "base": false
+    }
+   ]
+  }
+ ]
+}

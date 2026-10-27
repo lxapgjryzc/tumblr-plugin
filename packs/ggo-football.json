@@ -1,0 +1,2271 @@
+{
+ "format": "tth-template-pack",
+ "formatVersion": 2,
+ "id": "ggo-football",
+ "name": "超智能足球 AI Football GGO",
+ "version": "2026.10.26.1",
+ "description": "超智能足球（AI Football GGO）角色、关系与作品形式。Tumblr 上这个圈子很小：角色的裸名（myth、shadow、猫猫、流星……）都属于别的东西，所以角色标签都带作品名；单独的 ggo 是《刀剑神域》Gun Gale Online，不用。名单来自中英文维基百科，2026-10-26。",
+ "base": [
+  "ai football ggo",
+  "ggo football",
+  "超智能足球"
+ ],
+ "types": {
+  "romance": "爱情",
+  "friendship": "友情",
+  "family": "亲情"
+ },
+ "characters": [
+  {
+   "id": "isaac",
+   "name": "高迅（Isaac）",
+   "group": "赤足队 · 领队",
+   "kw": [
+    "高迅",
+    "isaac"
+   ],
+   "tags": [
+    "isaac ggo football",
+    "高迅 超智能足球"
+   ]
+  },
+  {
+   "id": "shawn",
+   "name": "简奥尼（Shawn）",
+   "group": "赤足队 · 领队",
+   "kw": [
+    "简奥尼",
+    "shawn",
+    "简·奥尼"
+   ],
+   "tags": [
+    "shawn ggo football",
+    "简奥尼 超智能足球"
+   ]
+  },
+  {
+   "id": "karl",
+   "name": "花王（Karl）",
+   "group": "赤足队 · 领队",
+   "kw": [
+    "花王",
+    "karl"
+   ],
+   "tags": [
+    "karl ggo football",
+    "花王 超智能足球"
+   ]
+  },
+  {
+   "id": "timmy",
+   "name": "肥宝（Timmy）",
+   "group": "赤足队 · 领队",
+   "kw": [
+    "肥宝",
+    "timmy"
+   ],
+   "tags": [
+    "timmy ggo football",
+    "肥宝 超智能足球"
+   ]
+  },
+  {
+   "id": "cat",
+   "name": "猫猫（Cat）",
+   "group": "赤足队 · 领队",
+   "kw": [
+    "猫猫",
+    "cat",
+    "kat"
+   ],
+   "tags": [
+    "cat ggo football",
+    "猫猫 超智能足球"
+   ]
+  },
+  {
+   "id": "oscar",
+   "name": "杨聪（Oscar）",
+   "group": "赤足队 · 领队",
+   "kw": [
+    "杨聪",
+    "oscar"
+   ],
+   "tags": [
+    "oscar ggo football",
+    "杨聪 超智能足球"
+   ]
+  },
+  {
+   "id": "myth",
+   "name": "潜龙（Myth）",
+   "group": "赤足队 · 球员",
+   "kw": [
+    "潜龙",
+    "myth"
+   ],
+   "tags": [
+    "myth ggo football",
+    "潜龙 超智能足球"
+   ]
+  },
+  {
+   "id": "satellite",
+   "name": "流星（Satellite）",
+   "group": "赤足队 · 球员",
+   "kw": [
+    "流星",
+    "satellite"
+   ],
+   "tags": [
+    "satellite ggo football",
+    "流星 超智能足球"
+   ]
+  },
+  {
+   "id": "swift",
+   "name": "疾电（Swift）",
+   "group": "赤足队 · 球员",
+   "kw": [
+    "疾电",
+    "swift"
+   ],
+   "tags": [
+    "swift ggo football",
+    "疾电 超智能足球"
+   ]
+  },
+  {
+   "id": "nucleus",
+   "name": "核能（Nucleus）",
+   "group": "赤足队 · 球员",
+   "kw": [
+    "核能",
+    "nucleus"
+   ],
+   "tags": [
+    "nucleus ggo football",
+    "核能 超智能足球"
+   ]
+  },
+  {
+   "id": "titan",
+   "name": "铁甲（Titan）",
+   "group": "赤足队 · 球员",
+   "kw": [
+    "铁甲",
+    "titan"
+   ],
+   "tags": [
+    "titan ggo football",
+    "铁甲 超智能足球"
+   ]
+  },
+  {
+   "id": "shadow",
+   "name": "影眼（Shadow）",
+   "group": "赤足队 · 球员",
+   "kw": [
+    "影眼",
+    "shadow"
+   ],
+   "tags": [
+    "shadow ggo football",
+    "影眼 超智能足球"
+   ]
+  },
+  {
+   "id": "shield",
+   "name": "战盾（Shield）",
+   "group": "赤足队 · 球员",
+   "kw": [
+    "战盾",
+    "shield"
+   ],
+   "tags": [
+    "shield ggo football",
+    "战盾 超智能足球"
+   ]
+  },
+  {
+   "id": "freeze",
+   "name": "冰封",
+   "group": "赤足队 · 球员",
+   "kw": [
+    "冰封"
+   ],
+   "tags": [
+    "冰封 超智能足球"
+   ]
+  },
+  {
+   "id": "rock-barefoot",
+   "name": "岩石",
+   "group": "赤足队 · 球员",
+   "kw": [
+    "岩石"
+   ],
+   "tags": [
+    "岩石 超智能足球"
+   ]
+  },
+  {
+   "id": "emmett",
+   "name": "艾姆（Emmett）",
+   "group": "柏亚斯队",
+   "kw": [
+    "艾姆",
+    "emmett"
+   ],
+   "tags": [
+    "emmett ggo football",
+    "艾姆 超智能足球"
+   ]
+  },
+  {
+   "id": "cobra",
+   "name": "眼镜蛇（Cobra）",
+   "group": "柏亚斯队",
+   "kw": [
+    "眼镜蛇",
+    "cobra"
+   ],
+   "tags": [
+    "cobra ggo football",
+    "眼镜蛇 超智能足球"
+   ]
+  },
+  {
+   "id": "mustang",
+   "name": "野马（Mustang）",
+   "group": "柏亚斯队",
+   "kw": [
+    "野马",
+    "mustang"
+   ],
+   "tags": [
+    "mustang ggo football",
+    "野马 超智能足球"
+   ]
+  },
+  {
+   "id": "glide",
+   "name": "滑翔（Glide）",
+   "group": "柏亚斯队",
+   "kw": [
+    "滑翔",
+    "glide"
+   ],
+   "tags": [
+    "glide ggo football",
+    "滑翔 超智能足球"
+   ]
+  },
+  {
+   "id": "mike",
+   "name": "连城（Mike）",
+   "group": "一清队",
+   "kw": [
+    "连城",
+    "mike"
+   ],
+   "tags": [
+    "mike ggo football",
+    "连城 超智能足球"
+   ]
+  },
+  {
+   "id": "leader",
+   "name": "雷霆（Leader）",
+   "group": "一清队",
+   "kw": [
+    "雷霆",
+    "leader"
+   ],
+   "tags": [
+    "leader ggo football",
+    "雷霆 超智能足球"
+   ]
+  },
+  {
+   "id": "skynet",
+   "name": "天网（Skynet）",
+   "group": "一清队",
+   "kw": [
+    "天网",
+    "skynet"
+   ],
+   "tags": [
+    "skynet ggo football",
+    "天网 超智能足球"
+   ]
+  },
+  {
+   "id": "spin",
+   "name": "旋风（Spin）",
+   "group": "一清队",
+   "kw": [
+    "旋风",
+    "spin"
+   ],
+   "tags": [
+    "spin ggo football",
+    "旋风 超智能足球"
+   ]
+  },
+  {
+   "id": "blast",
+   "name": "迅雷（Blast）",
+   "group": "一清队",
+   "kw": [
+    "迅雷",
+    "blast"
+   ],
+   "tags": [
+    "blast ggo football",
+    "迅雷 超智能足球"
+   ]
+  },
+  {
+   "id": "reflex",
+   "name": "反射（Reflex）",
+   "group": "一清队",
+   "kw": [
+    "反射",
+    "reflex"
+   ],
+   "tags": [
+    "reflex ggo football",
+    "反射 超智能足球"
+   ]
+  },
+  {
+   "id": "philip",
+   "name": "聂天高（Philip）",
+   "group": "大黄蜂队",
+   "kw": [
+    "聂天高",
+    "philip"
+   ],
+   "tags": [
+    "philip ggo football",
+    "聂天高 超智能足球"
+   ]
+  },
+  {
+   "id": "van",
+   "name": "聂小华（Van）",
+   "group": "大黄蜂队",
+   "kw": [
+    "聂小华",
+    "van"
+   ],
+   "tags": [
+    "van ggo football",
+    "聂小华 超智能足球"
+   ]
+  },
+  {
+   "id": "sprint",
+   "name": "冲锋（Sprint）",
+   "group": "大黄蜂队",
+   "kw": [
+    "冲锋",
+    "sprint"
+   ],
+   "tags": [
+    "sprint ggo football",
+    "冲锋 超智能足球"
+   ]
+  },
+  {
+   "id": "blade",
+   "name": "冷锋（Blade）",
+   "group": "大黄蜂队",
+   "kw": [
+    "冷锋",
+    "blade"
+   ],
+   "tags": [
+    "blade ggo football",
+    "冷锋 超智能足球"
+   ]
+  },
+  {
+   "id": "jet",
+   "name": "破锋（Jet）",
+   "group": "大黄蜂队",
+   "kw": [
+    "破锋",
+    "jet"
+   ],
+   "tags": [
+    "jet ggo football",
+    "破锋 超智能足球"
+   ]
+  },
+  {
+   "id": "needle",
+   "name": "刺针（Needle）",
+   "group": "大黄蜂队",
+   "kw": [
+    "刺针",
+    "needle"
+   ],
+   "tags": [
+    "needle ggo football",
+    "刺针 超智能足球"
+   ]
+  },
+  {
+   "id": "hive",
+   "name": "蜂巢（Hive）",
+   "group": "大黄蜂队",
+   "kw": [
+    "蜂巢",
+    "hive"
+   ],
+   "tags": [
+    "hive ggo football",
+    "蜂巢 超智能足球"
+   ]
+  },
+  {
+   "id": "marcus",
+   "name": "杨文（Marcus）",
+   "group": "神盾队",
+   "kw": [
+    "杨文",
+    "marcus"
+   ],
+   "tags": [
+    "marcus ggo football",
+    "杨文 超智能足球"
+   ]
+  },
+  {
+   "id": "justus",
+   "name": "杨武（Justus）",
+   "group": "神盾队",
+   "kw": [
+    "杨武",
+    "justus"
+   ],
+   "tags": [
+    "justus ggo football",
+    "杨武 超智能足球"
+   ]
+  },
+  {
+   "id": "rufus",
+   "name": "杨英（Rufus）",
+   "group": "神盾队",
+   "kw": [
+    "杨英",
+    "rufus"
+   ],
+   "tags": [
+    "rufus ggo football",
+    "杨英 超智能足球"
+   ]
+  },
+  {
+   "id": "cyrus",
+   "name": "杨杰（Cyrus）",
+   "group": "神盾队",
+   "kw": [
+    "杨杰",
+    "cyrus"
+   ],
+   "tags": [
+    "cyrus ggo football",
+    "杨杰 超智能足球"
+   ]
+  },
+  {
+   "id": "highlander",
+   "name": "空中霸王（Highlander）",
+   "group": "神盾队",
+   "kw": [
+    "空中霸王",
+    "highlander"
+   ],
+   "tags": [
+    "highlander ggo football",
+    "空中霸王 超智能足球"
+   ]
+  },
+  {
+   "id": "invincible",
+   "name": "御军（Invincible）",
+   "group": "神盾队",
+   "kw": [
+    "御军",
+    "invincible"
+   ],
+   "tags": [
+    "invincible ggo football",
+    "御军 超智能足球"
+   ]
+  },
+  {
+   "id": "damage",
+   "name": "破裂（Damage）",
+   "group": "神盾队",
+   "kw": [
+    "破裂",
+    "damage"
+   ],
+   "tags": [
+    "damage ggo football",
+    "破裂 超智能足球"
+   ]
+  },
+  {
+   "id": "stopper",
+   "name": "截击（Stopper）",
+   "group": "神盾队",
+   "kw": [
+    "截击",
+    "stopper"
+   ],
+   "tags": [
+    "stopper ggo football",
+    "截击 超智能足球"
+   ]
+  },
+  {
+   "id": "blocker",
+   "name": "封阻（Blocker）",
+   "group": "神盾队",
+   "kw": [
+    "封阻",
+    "blocker"
+   ],
+   "tags": [
+    "blocker ggo football",
+    "封阻 超智能足球"
+   ]
+  },
+  {
+   "id": "william",
+   "name": "威廉（William）",
+   "group": "魔法幻影闪闪队",
+   "kw": [
+    "威廉",
+    "william"
+   ],
+   "tags": [
+    "william ggo football",
+    "威廉 超智能足球"
+   ]
+  },
+  {
+   "id": "willy",
+   "name": "威利（Willy）",
+   "group": "魔法幻影闪闪队",
+   "kw": [
+    "威利",
+    "willy"
+   ],
+   "tags": [
+    "willy ggo football",
+    "威利 超智能足球"
+   ]
+  },
+  {
+   "id": "flint",
+   "name": "火石（Flint）",
+   "group": "魔法幻影闪闪队",
+   "kw": [
+    "火石",
+    "flint"
+   ],
+   "tags": [
+    "flint ggo football",
+    "火石 超智能足球"
+   ]
+  },
+  {
+   "id": "sparks",
+   "name": "火花（Sparks）",
+   "group": "魔法幻影闪闪队",
+   "kw": [
+    "火花",
+    "sparks"
+   ],
+   "tags": [
+    "sparks ggo football",
+    "火花 超智能足球"
+   ]
+  },
+  {
+   "id": "bomber",
+   "name": "轰炸（Bomber）",
+   "group": "魔法幻影闪闪队",
+   "kw": [
+    "轰炸",
+    "bomber"
+   ],
+   "tags": [
+    "bomber ggo football",
+    "轰炸 超智能足球"
+   ]
+  },
+  {
+   "id": "mess",
+   "name": "毁坏（Mess）",
+   "group": "魔法幻影闪闪队",
+   "kw": [
+    "毁坏",
+    "mess"
+   ],
+   "tags": [
+    "mess ggo football",
+    "毁坏 超智能足球"
+   ]
+  },
+  {
+   "id": "wizard",
+   "name": "巫师（Wizard）",
+   "group": "魔法幻影闪闪队",
+   "kw": [
+    "巫师",
+    "wizard"
+   ],
+   "tags": [
+    "wizard ggo football",
+    "巫师 超智能足球"
+   ]
+  },
+  {
+   "id": "carmen",
+   "name": "卓凤（Carmen）",
+   "group": "飞轮队",
+   "kw": [
+    "卓凤",
+    "carmen"
+   ],
+   "tags": [
+    "carmen ggo football",
+    "卓凤 超智能足球"
+   ]
+  },
+  {
+   "id": "nicholas",
+   "name": "卓龙（Nicholas）",
+   "group": "飞轮队",
+   "kw": [
+    "卓龙",
+    "nicholas",
+    "alpha hart",
+    "阿力步化哈慈"
+   ],
+   "tags": [
+    "nicholas ggo football",
+    "卓龙 超智能足球"
+   ]
+  },
+  {
+   "id": "clone",
+   "name": "复刻（Clone）",
+   "group": "飞轮队",
+   "kw": [
+    "复刻",
+    "clone"
+   ],
+   "tags": [
+    "clone ggo football",
+    "复刻 超智能足球"
+   ]
+  },
+  {
+   "id": "seep",
+   "name": "渗透（Seep）",
+   "group": "飞轮队",
+   "kw": [
+    "渗透",
+    "seep"
+   ],
+   "tags": [
+    "seep ggo football",
+    "渗透 超智能足球"
+   ]
+  },
+  {
+   "id": "hawk",
+   "name": "猎鹰（Hawk）",
+   "group": "飞轮队",
+   "kw": [
+    "猎鹰",
+    "hawk"
+   ],
+   "tags": [
+    "hawk ggo football",
+    "猎鹰 超智能足球"
+   ]
+  },
+  {
+   "id": "axe",
+   "name": "战斧（Axe）",
+   "group": "飞轮队",
+   "kw": [
+    "战斧",
+    "axe"
+   ],
+   "tags": [
+    "axe ggo football",
+    "战斧 超智能足球"
+   ]
+  },
+  {
+   "id": "mask",
+   "name": "铁面（Mask）",
+   "group": "飞轮队",
+   "kw": [
+    "铁面",
+    "mask"
+   ],
+   "tags": [
+    "mask ggo football",
+    "铁面 超智能足球"
+   ]
+  },
+  {
+   "id": "clark",
+   "name": "古勒上将（General Clark）",
+   "group": "军狼队",
+   "kw": [
+    "古勒上将",
+    "general clark"
+   ],
+   "tags": [
+    "general clark ggo football",
+    "古勒上将 超智能足球"
+   ]
+  },
+  {
+   "id": "paul",
+   "name": "保罗少将（Paul）",
+   "group": "军狼队",
+   "kw": [
+    "保罗少将",
+    "paul",
+    "保罗少校"
+   ],
+   "tags": [
+    "paul ggo football",
+    "保罗少将 超智能足球"
+   ]
+  },
+  {
+   "id": "given",
+   "name": "基荣少校（Given）",
+   "group": "军狼队",
+   "kw": [
+    "基荣少校",
+    "given"
+   ],
+   "tags": [
+    "given ggo football",
+    "基荣少校 超智能足球"
+   ]
+  },
+  {
+   "id": "cannon",
+   "name": "重炮（Cannon）",
+   "group": "军狼队",
+   "kw": [
+    "重炮",
+    "cannon"
+   ],
+   "tags": [
+    "cannon ggo football",
+    "重炮 超智能足球"
+   ]
+  },
+  {
+   "id": "missile",
+   "name": "导弹（Missile）",
+   "group": "军狼队",
+   "kw": [
+    "导弹",
+    "missile"
+   ],
+   "tags": [
+    "missile ggo football",
+    "导弹 超智能足球"
+   ]
+  },
+  {
+   "id": "torpedo",
+   "name": "鱼雷（Torpedo）",
+   "group": "军狼队",
+   "kw": [
+    "鱼雷",
+    "torpedo"
+   ],
+   "tags": [
+    "torpedo ggo football",
+    "鱼雷 超智能足球"
+   ]
+  },
+  {
+   "id": "trinity",
+   "name": "司令（Trinity）",
+   "group": "军狼队",
+   "kw": [
+    "司令",
+    "trinity"
+   ],
+   "tags": [
+    "trinity ggo football",
+    "司令 超智能足球"
+   ]
+  },
+  {
+   "id": "radar",
+   "name": "雷达（Radar）",
+   "group": "军狼队",
+   "kw": [
+    "雷达",
+    "radar"
+   ],
+   "tags": [
+    "radar ggo football",
+    "雷达 超智能足球"
+   ]
+  },
+  {
+   "id": "tyrant",
+   "name": "烈巴男爵（Tyrant）",
+   "group": "恶魔之名队",
+   "kw": [
+    "烈巴男爵",
+    "tyrant"
+   ],
+   "tags": [
+    "tyrant ggo football",
+    "烈巴男爵 超智能足球"
+   ]
+  },
+  {
+   "id": "laurie",
+   "name": "霍雷特（Laurie）",
+   "group": "恶魔之名队",
+   "kw": [
+    "霍雷特",
+    "laurie",
+    "010"
+   ],
+   "tags": [
+    "laurie ggo football",
+    "霍雷特 超智能足球"
+   ]
+  },
+  {
+   "id": "darkness",
+   "name": "黑帝（Darkness）",
+   "group": "恶魔之名队",
+   "kw": [
+    "黑帝",
+    "darkness"
+   ],
+   "tags": [
+    "darkness ggo football",
+    "黑帝 超智能足球"
+   ]
+  },
+  {
+   "id": "cracker",
+   "name": "爆破（Cracker）",
+   "group": "恶魔之名队",
+   "kw": [
+    "爆破",
+    "cracker"
+   ],
+   "tags": [
+    "cracker ggo football",
+    "爆破 超智能足球"
+   ]
+  },
+  {
+   "id": "exterminate",
+   "name": "歼灭（Exterminate）",
+   "group": "恶魔之名队",
+   "kw": [
+    "歼灭",
+    "exterminate"
+   ],
+   "tags": [
+    "exterminate ggo football",
+    "歼灭 超智能足球"
+   ]
+  },
+  {
+   "id": "destroyer",
+   "name": "破坏（Destroyer）",
+   "group": "恶魔之名队",
+   "kw": [
+    "破坏",
+    "destroyer"
+   ],
+   "tags": [
+    "destroyer ggo football",
+    "破坏 超智能足球"
+   ]
+  },
+  {
+   "id": "prosecutor",
+   "name": "圣太保（Prosecutor）",
+   "group": "恶魔之名队",
+   "kw": [
+    "圣太保",
+    "prosecutor",
+    "盖世太保"
+   ],
+   "tags": [
+    "prosecutor ggo football",
+    "圣太保 超智能足球"
+   ]
+  },
+  {
+   "id": "dimero",
+   "name": "迪美奥（Dimero）",
+   "group": "森巴队",
+   "kw": [
+    "迪美奥",
+    "dimero"
+   ],
+   "tags": [
+    "dimero ggo football",
+    "迪美奥 超智能足球"
+   ]
+  },
+  {
+   "id": "gardo",
+   "name": "加度（Gardo）",
+   "group": "森巴队",
+   "kw": [
+    "加度",
+    "gardo"
+   ],
+   "tags": [
+    "gardo ggo football",
+    "加度 超智能足球"
+   ]
+  },
+  {
+   "id": "neo",
+   "name": "里奥（Neo）",
+   "group": "森巴队",
+   "kw": [
+    "里奥",
+    "neo"
+   ],
+   "tags": [
+    "neo ggo football",
+    "里奥 超智能足球"
+   ]
+  },
+  {
+   "id": "extreme",
+   "name": "无极（Extreme）",
+   "group": "森巴队",
+   "kw": [
+    "无极",
+    "extreme"
+   ],
+   "tags": [
+    "extreme ggo football",
+    "无极 超智能足球"
+   ]
+  },
+  {
+   "id": "synchronizer",
+   "name": "圣极龙（Synchronizer）",
+   "group": "森巴队",
+   "kw": [
+    "圣极龙",
+    "synchronizer"
+   ],
+   "tags": [
+    "synchronizer ggo football",
+    "圣极龙 超智能足球"
+   ]
+  },
+  {
+   "id": "freezer",
+   "name": "飞沙（Freezer）",
+   "group": "森巴队",
+   "kw": [
+    "飞沙",
+    "freezer"
+   ],
+   "tags": [
+    "freezer ggo football",
+    "飞沙 超智能足球"
+   ]
+  },
+  {
+   "id": "steel",
+   "name": "钢铁（Steel）",
+   "group": "森巴队",
+   "kw": [
+    "钢铁",
+    "steel"
+   ],
+   "tags": [
+    "steel ggo football",
+    "钢铁 超智能足球"
+   ]
+  },
+  {
+   "id": "twister",
+   "name": "龙卷（Twister）",
+   "group": "森巴队",
+   "kw": [
+    "龙卷",
+    "twister"
+   ],
+   "tags": [
+    "twister ggo football",
+    "龙卷 超智能足球"
+   ]
+  },
+  {
+   "id": "nelson",
+   "name": "尼尔逊（Nelson）",
+   "group": "三狮队",
+   "kw": [
+    "尼尔逊",
+    "nelson"
+   ],
+   "tags": [
+    "nelson ggo football",
+    "尼尔逊 超智能足球"
+   ]
+  },
+  {
+   "id": "barth",
+   "name": "巴菲斯（Barth）",
+   "group": "三狮队",
+   "kw": [
+    "巴菲斯",
+    "barth"
+   ],
+   "tags": [
+    "barth ggo football",
+    "巴菲斯 超智能足球"
+   ]
+  },
+  {
+   "id": "roar",
+   "name": "狮吼（Roar）",
+   "group": "三狮队",
+   "kw": [
+    "狮吼",
+    "roar"
+   ],
+   "tags": [
+    "roar ggo football",
+    "狮吼 超智能足球"
+   ]
+  },
+  {
+   "id": "meniscus",
+   "name": "新月（Meniscus）",
+   "group": "三狮队",
+   "kw": [
+    "新月",
+    "meniscus"
+   ],
+   "tags": [
+    "meniscus ggo football",
+    "新月 超智能足球"
+   ]
+  },
+  {
+   "id": "arrow",
+   "name": "穿云箭（Arrow）",
+   "group": "三狮队",
+   "kw": [
+    "穿云箭",
+    "arrow"
+   ],
+   "tags": [
+    "arrow ggo football",
+    "穿云箭 超智能足球"
+   ]
+  },
+  {
+   "id": "fort",
+   "name": "城堡（Fort）",
+   "group": "三狮队",
+   "kw": [
+    "城堡",
+    "fort"
+   ],
+   "tags": [
+    "fort ggo football",
+    "城堡 超智能足球"
+   ]
+  },
+  {
+   "id": "rock",
+   "name": "金汤（Rock）",
+   "group": "三狮队",
+   "kw": [
+    "金汤",
+    "rock"
+   ],
+   "tags": [
+    "rock ggo football",
+    "金汤 超智能足球"
+   ]
+  },
+  {
+   "id": "consalis",
+   "name": "干沙利斯（Consalis）",
+   "group": "探戈队",
+   "kw": [
+    "干沙利斯",
+    "consalis"
+   ],
+   "tags": [
+    "consalis ggo football",
+    "干沙利斯 超智能足球"
+   ]
+  },
+  {
+   "id": "centron",
+   "name": "核心（Centron）",
+   "group": "探戈队",
+   "kw": [
+    "核心",
+    "centron"
+   ],
+   "tags": [
+    "centron ggo football",
+    "核心 超智能足球"
+   ]
+  },
+  {
+   "id": "dagger",
+   "name": "尖刀（Dagger）",
+   "group": "探戈队",
+   "kw": [
+    "尖刀",
+    "dagger"
+   ],
+   "tags": [
+    "dagger ggo football",
+    "尖刀 超智能足球"
+   ]
+  },
+  {
+   "id": "red-sword",
+   "name": "恕剑（Red Sword）",
+   "group": "探戈队",
+   "kw": [
+    "恕剑",
+    "red sword"
+   ],
+   "tags": [
+    "red sword ggo football",
+    "恕剑 超智能足球"
+   ]
+  },
+  {
+   "id": "vine",
+   "name": "蔓藤（Vine）",
+   "group": "探戈队",
+   "kw": [
+    "蔓藤",
+    "vine",
+    "藤蔓"
+   ],
+   "tags": [
+    "vine ggo football",
+    "蔓藤 超智能足球"
+   ]
+  },
+  {
+   "id": "thorn",
+   "name": "荆棘（Thorn）",
+   "group": "探戈队",
+   "kw": [
+    "荆棘",
+    "thorn"
+   ],
+   "tags": [
+    "thorn ggo football",
+    "荆棘 超智能足球"
+   ]
+  },
+  {
+   "id": "hatori",
+   "name": "火野雄一（Hatori）",
+   "group": "飞鸟队",
+   "kw": [
+    "火野雄一",
+    "hatori"
+   ],
+   "tags": [
+    "hatori ggo football",
+    "火野雄一 超智能足球"
+   ]
+  },
+  {
+   "id": "hasegawa",
+   "name": "渡三郎（Hasegawa）",
+   "group": "飞鸟队",
+   "kw": [
+    "渡三郎",
+    "hasegawa"
+   ],
+   "tags": [
+    "hasegawa ggo football",
+    "渡三郎 超智能足球"
+   ]
+  },
+  {
+   "id": "claw",
+   "name": "鹰爪（Claw）",
+   "group": "飞鸟队",
+   "kw": [
+    "鹰爪",
+    "claw"
+   ],
+   "tags": [
+    "claw ggo football",
+    "鹰爪 超智能足球"
+   ]
+  },
+  {
+   "id": "phoenix",
+   "name": "凤凰（Phoenix）",
+   "group": "飞鸟队",
+   "kw": [
+    "凤凰",
+    "phoenix"
+   ],
+   "tags": [
+    "phoenix ggo football",
+    "凤凰 超智能足球"
+   ]
+  },
+  {
+   "id": "jetfire",
+   "name": "天火（Jetfire）",
+   "group": "飞鸟队",
+   "kw": [
+    "天火",
+    "jetfire"
+   ],
+   "tags": [
+    "jetfire ggo football",
+    "天火 超智能足球"
+   ]
+  },
+  {
+   "id": "falcon",
+   "name": "隼（Falcon）",
+   "group": "飞鸟队",
+   "kw": [
+    "隼",
+    "falcon"
+   ],
+   "tags": [
+    "falcon ggo football",
+    "隼 超智能足球"
+   ]
+  },
+  {
+   "id": "iron-wing",
+   "name": "铁羽（Iron Wing）",
+   "group": "飞鸟队",
+   "kw": [
+    "铁羽",
+    "iron wing"
+   ],
+   "tags": [
+    "iron wing ggo football",
+    "铁羽 超智能足球"
+   ]
+  },
+  {
+   "id": "louis",
+   "name": "范帅（Louis）",
+   "group": "多哈哥队",
+   "kw": [
+    "范帅",
+    "louis"
+   ],
+   "tags": [
+    "louis ggo football",
+    "范帅 超智能足球"
+   ]
+  },
+  {
+   "id": "erosion",
+   "name": "侵蚀（Erosion）",
+   "group": "多哈哥队",
+   "kw": [
+    "侵蚀",
+    "erosion"
+   ],
+   "tags": [
+    "erosion ggo football",
+    "侵蚀 超智能足球"
+   ]
+  },
+  {
+   "id": "thunder",
+   "name": "悍雷（Thunder）",
+   "group": "多哈哥队",
+   "kw": [
+    "悍雷",
+    "thunder",
+    "汉雷"
+   ],
+   "tags": [
+    "thunder ggo football",
+    "悍雷 超智能足球"
+   ]
+  },
+  {
+   "id": "electrolyte",
+   "name": "电极（Electrolyte）",
+   "group": "多哈哥队",
+   "kw": [
+    "电极",
+    "electrolyte"
+   ],
+   "tags": [
+    "electrolyte ggo football",
+    "电极 超智能足球"
+   ]
+  },
+  {
+   "id": "flame",
+   "name": "火焰（Flame）",
+   "group": "多哈哥队",
+   "kw": [
+    "火焰",
+    "flame"
+   ],
+   "tags": [
+    "flame ggo football",
+    "火焰 超智能足球"
+   ]
+  },
+  {
+   "id": "sealer",
+   "name": "冻结（Sealer）",
+   "group": "多哈哥队",
+   "kw": [
+    "冻结",
+    "sealer"
+   ],
+   "tags": [
+    "sealer ggo football",
+    "冻结 超智能足球"
+   ]
+  },
+  {
+   "id": "dark-satellite",
+   "name": "克隆流星（Dark Satellite）",
+   "group": "修罗门队",
+   "kw": [
+    "克隆流星",
+    "dark satellite"
+   ],
+   "tags": [
+    "dark satellite ggo football",
+    "克隆流星 超智能足球"
+   ]
+  },
+  {
+   "id": "dark-swift",
+   "name": "克隆疾电（Dark Swift）",
+   "group": "修罗门队",
+   "kw": [
+    "克隆疾电",
+    "dark swift"
+   ],
+   "tags": [
+    "dark swift ggo football",
+    "克隆疾电 超智能足球"
+   ]
+  },
+  {
+   "id": "dark-titan",
+   "name": "克隆铁甲（Dark Titan）",
+   "group": "修罗门队",
+   "kw": [
+    "克隆铁甲",
+    "dark titan"
+   ],
+   "tags": [
+    "dark titan ggo football",
+    "克隆铁甲 超智能足球"
+   ]
+  },
+  {
+   "id": "dark-nucleus",
+   "name": "克隆核能（Dark Nucleus）",
+   "group": "修罗门队",
+   "kw": [
+    "克隆核能",
+    "dark nucleus"
+   ],
+   "tags": [
+    "dark nucleus ggo football",
+    "克隆核能 超智能足球"
+   ]
+  },
+  {
+   "id": "dark-shield",
+   "name": "克隆战盾（Dark Shield）",
+   "group": "修罗门队",
+   "kw": [
+    "克隆战盾",
+    "dark shield"
+   ],
+   "tags": [
+    "dark shield ggo football",
+    "克隆战盾 超智能足球"
+   ]
+  },
+  {
+   "id": "dark-shadow",
+   "name": "克隆影眼（Dark Shadow）",
+   "group": "修罗门队",
+   "kw": [
+    "克隆影眼",
+    "dark shadow"
+   ],
+   "tags": [
+    "dark shadow ggo football",
+    "克隆影眼 超智能足球"
+   ]
+  },
+  {
+   "id": "脉搏",
+   "name": "脉搏",
+   "group": "心跳队",
+   "kw": [
+    "脉搏"
+   ],
+   "tags": [
+    "脉搏 超智能足球"
+   ]
+  },
+  {
+   "id": "脉冲",
+   "name": "脉冲",
+   "group": "心跳队",
+   "kw": [
+    "脉冲"
+   ],
+   "tags": [
+    "脉冲 超智能足球"
+   ]
+  },
+  {
+   "id": "赫兹",
+   "name": "赫兹",
+   "group": "心跳队",
+   "kw": [
+    "赫兹"
+   ],
+   "tags": [
+    "赫兹 超智能足球"
+   ]
+  },
+  {
+   "id": "速率",
+   "name": "速率",
+   "group": "心跳队",
+   "kw": [
+    "速率"
+   ],
+   "tags": [
+    "速率 超智能足球"
+   ]
+  },
+  {
+   "id": "心率",
+   "name": "心率",
+   "group": "心跳队",
+   "kw": [
+    "心率"
+   ],
+   "tags": [
+    "心率 超智能足球"
+   ]
+  },
+  {
+   "id": "频率",
+   "name": "频率",
+   "group": "心跳队",
+   "kw": [
+    "频率"
+   ],
+   "tags": [
+    "频率 超智能足球"
+   ]
+  },
+  {
+   "id": "舵手",
+   "name": "舵手",
+   "group": "威尼斯队",
+   "kw": [
+    "舵手"
+   ],
+   "tags": [
+    "舵手 超智能足球"
+   ]
+  },
+  {
+   "id": "转向",
+   "name": "转向",
+   "group": "威尼斯队",
+   "kw": [
+    "转向"
+   ],
+   "tags": [
+    "转向 超智能足球"
+   ]
+  },
+  {
+   "id": "漂移",
+   "name": "漂移",
+   "group": "威尼斯队",
+   "kw": [
+    "漂移"
+   ],
+   "tags": [
+    "漂移 超智能足球"
+   ]
+  },
+  {
+   "id": "摇动",
+   "name": "摇动",
+   "group": "威尼斯队",
+   "kw": [
+    "摇动"
+   ],
+   "tags": [
+    "摇动 超智能足球"
+   ]
+  },
+  {
+   "id": "划桨",
+   "name": "划桨",
+   "group": "威尼斯队",
+   "kw": [
+    "划桨"
+   ],
+   "tags": [
+    "划桨 超智能足球"
+   ]
+  },
+  {
+   "id": "扩音",
+   "name": "扩音",
+   "group": "斗牛队",
+   "kw": [
+    "扩音"
+   ],
+   "tags": [
+    "扩音 超智能足球"
+   ]
+  },
+  {
+   "id": "贝斯",
+   "name": "贝斯",
+   "group": "斗牛队",
+   "kw": [
+    "贝斯"
+   ],
+   "tags": [
+    "贝斯 超智能足球"
+   ]
+  },
+  {
+   "id": "混合",
+   "name": "混合",
+   "group": "斗牛队",
+   "kw": [
+    "混合"
+   ],
+   "tags": [
+    "混合 超智能足球"
+   ]
+  },
+  {
+   "id": "咆哮",
+   "name": "咆哮",
+   "group": "斗牛队",
+   "kw": [
+    "咆哮"
+   ],
+   "tags": [
+    "咆哮 超智能足球"
+   ]
+  },
+  {
+   "id": "鼓动",
+   "name": "鼓动",
+   "group": "斗牛队",
+   "kw": [
+    "鼓动"
+   ],
+   "tags": [
+    "鼓动 超智能足球"
+   ]
+  },
+  {
+   "id": "毒刺",
+   "name": "毒刺",
+   "group": "蛇蝎队",
+   "kw": [
+    "毒刺"
+   ],
+   "tags": [
+    "毒刺 超智能足球"
+   ]
+  },
+  {
+   "id": "毒牙",
+   "name": "毒牙",
+   "group": "蛇蝎队",
+   "kw": [
+    "毒牙"
+   ],
+   "tags": [
+    "毒牙 超智能足球"
+   ]
+  },
+  {
+   "id": "巨蟒",
+   "name": "巨蟒",
+   "group": "蛇蝎队",
+   "kw": [
+    "巨蟒"
+   ],
+   "tags": [
+    "巨蟒 超智能足球"
+   ]
+  },
+  {
+   "id": "响尾蛇",
+   "name": "响尾蛇",
+   "group": "蛇蝎队",
+   "kw": [
+    "响尾蛇"
+   ],
+   "tags": [
+    "响尾蛇 超智能足球"
+   ]
+  },
+  {
+   "id": "黑寡妇",
+   "name": "黑寡妇",
+   "group": "蛇蝎队",
+   "kw": [
+    "黑寡妇"
+   ],
+   "tags": [
+    "黑寡妇 超智能足球"
+   ]
+  },
+  {
+   "id": "宇宙",
+   "name": "宇宙",
+   "group": "银河队",
+   "kw": [
+    "宇宙"
+   ],
+   "tags": [
+    "宇宙 超智能足球"
+   ]
+  },
+  {
+   "id": "黑洞",
+   "name": "黑洞",
+   "group": "银河队",
+   "kw": [
+    "黑洞"
+   ],
+   "tags": [
+    "黑洞 超智能足球"
+   ]
+  },
+  {
+   "id": "粒子",
+   "name": "粒子",
+   "group": "银河队",
+   "kw": [
+    "粒子"
+   ],
+   "tags": [
+    "粒子 超智能足球"
+   ]
+  },
+  {
+   "id": "太阳系",
+   "name": "太阳系",
+   "group": "银河队",
+   "kw": [
+    "太阳系"
+   ],
+   "tags": [
+    "太阳系 超智能足球"
+   ]
+  },
+  {
+   "id": "星尘",
+   "name": "星尘",
+   "group": "银河队",
+   "kw": [
+    "星尘"
+   ],
+   "tags": [
+    "星尘 超智能足球"
+   ]
+  },
+  {
+   "id": "coleman",
+   "name": "高文（Coleman）",
+   "group": "反派与其他人物",
+   "kw": [
+    "高文",
+    "coleman",
+    "dr coleman",
+    "高文博士"
+   ],
+   "tags": [
+    "coleman ggo football",
+    "高文 超智能足球"
+   ]
+  },
+  {
+   "id": "betty",
+   "name": "高铃（Aunt Betty）",
+   "group": "反派与其他人物",
+   "kw": [
+    "高铃",
+    "aunt betty",
+    "姑姑"
+   ],
+   "tags": [
+    "aunt betty ggo football",
+    "高铃 超智能足球"
+   ]
+  },
+  {
+   "id": "professor-ggo",
+   "name": "GGO教授（Professor GGO）",
+   "group": "反派与其他人物",
+   "kw": [
+    "GGO教授",
+    "professor ggo"
+   ],
+   "tags": [
+    "professor ggo ggo football",
+    "GGO教授 超智能足球"
+   ]
+  },
+  {
+   "id": "ball",
+   "name": "波叔（Ball）",
+   "group": "反派与其他人物",
+   "kw": [
+    "波叔",
+    "ball"
+   ],
+   "tags": [
+    "ball ggo football",
+    "波叔 超智能足球"
+   ]
+  },
+  {
+   "id": "stan",
+   "name": "史坦尼亚（Dr Stan）",
+   "group": "反派与其他人物",
+   "kw": [
+    "史坦尼亚",
+    "dr stan"
+   ],
+   "tags": [
+    "dr stan ggo football",
+    "史坦尼亚 超智能足球"
+   ]
+  },
+  {
+   "id": "ka",
+   "name": "卡先生（Agent KA）",
+   "group": "反派与其他人物",
+   "kw": [
+    "卡先生",
+    "agent ka"
+   ],
+   "tags": [
+    "agent ka ggo football",
+    "卡先生 超智能足球"
+   ]
+  },
+  {
+   "id": "bio-myth",
+   "name": "生化潜龙（Bio Myth）",
+   "group": "反派与其他人物",
+   "kw": [
+    "生化潜龙",
+    "bio myth"
+   ],
+   "tags": [
+    "bio myth ggo football",
+    "生化潜龙 超智能足球"
+   ]
+  },
+  {
+   "id": "sophie",
+   "name": "苏菲",
+   "group": "反派与其他人物",
+   "kw": [
+    "苏菲"
+   ],
+   "tags": [
+    "苏菲 超智能足球"
+   ]
+  },
+  {
+   "id": "grange",
+   "name": "格兰治",
+   "group": "反派与其他人物",
+   "kw": [
+    "格兰治"
+   ],
+   "tags": [
+    "格兰治 超智能足球"
+   ]
+  }
+ ],
+ "relations": [
+  {
+   "id": "karl-cat",
+   "type": "romance",
+   "members": [
+    "karl",
+    "cat"
+   ],
+   "tags": [
+    "karl x cat"
+   ],
+   "kw": []
+  },
+  {
+   "id": "shadow-shield",
+   "type": "romance",
+   "members": [
+    "shadow",
+    "shield"
+   ],
+   "tags": [
+    "shadow x shield"
+   ],
+   "kw": []
+  },
+  {
+   "id": "swift-satellite",
+   "type": "romance",
+   "members": [
+    "swift",
+    "satellite"
+   ],
+   "tags": [
+    "swift x satellite"
+   ],
+   "kw": []
+  },
+  {
+   "id": "shawn-cat",
+   "type": "romance",
+   "members": [
+    "shawn",
+    "cat"
+   ],
+   "tags": [
+    "shawn x cat ggo football"
+   ],
+   "kw": []
+  },
+  {
+   "id": "isaac-karl-timmy",
+   "type": "friendship",
+   "members": [
+    "isaac",
+    "karl",
+    "timmy"
+   ],
+   "tags": [
+    "isaac karl and timmy ggo football"
+   ],
+   "kw": []
+  },
+  {
+   "id": "isaac-karl",
+   "type": "friendship",
+   "members": [
+    "isaac",
+    "karl"
+   ],
+   "tags": [
+    "isaac and karl ggo football"
+   ],
+   "kw": []
+  },
+  {
+   "id": "isaac-timmy",
+   "type": "friendship",
+   "members": [
+    "isaac",
+    "timmy"
+   ],
+   "tags": [
+    "isaac and timmy ggo football"
+   ],
+   "kw": []
+  },
+  {
+   "id": "karl-timmy",
+   "type": "friendship",
+   "members": [
+    "karl",
+    "timmy"
+   ],
+   "tags": [
+    "karl and timmy ggo football"
+   ],
+   "kw": []
+  },
+  {
+   "id": "karl-cat-f",
+   "type": "friendship",
+   "members": [
+    "karl",
+    "cat"
+   ],
+   "tags": [
+    "karl and cat ggo football"
+   ],
+   "kw": []
+  },
+  {
+   "id": "shawn-emmett",
+   "type": "friendship",
+   "members": [
+    "shawn",
+    "emmett"
+   ],
+   "tags": [
+    "shawn and emmett ggo football"
+   ],
+   "kw": []
+  },
+  {
+   "id": "isaac-myth",
+   "type": "friendship",
+   "members": [
+    "isaac",
+    "myth"
+   ],
+   "tags": [
+    "isaac and myth ggo football"
+   ],
+   "kw": []
+  },
+  {
+   "id": "karl-satellite",
+   "type": "friendship",
+   "members": [
+    "karl",
+    "satellite"
+   ],
+   "tags": [
+    "karl and satellite ggo football"
+   ],
+   "kw": []
+  },
+  {
+   "id": "timmy-titan",
+   "type": "friendship",
+   "members": [
+    "timmy",
+    "titan"
+   ],
+   "tags": [
+    "timmy and titan ggo football"
+   ],
+   "kw": []
+  },
+  {
+   "id": "cat-swift",
+   "type": "friendship",
+   "members": [
+    "cat",
+    "swift"
+   ],
+   "tags": [
+    "cat and swift ggo football"
+   ],
+   "kw": []
+  },
+  {
+   "id": "shawn-nucleus",
+   "type": "friendship",
+   "members": [
+    "shawn",
+    "nucleus"
+   ],
+   "tags": [
+    "shawn and nucleus ggo football"
+   ],
+   "kw": []
+  },
+  {
+   "id": "shawn-shadow",
+   "type": "friendship",
+   "members": [
+    "shawn",
+    "shadow"
+   ],
+   "tags": [
+    "shawn and shadow ggo football"
+   ],
+   "kw": []
+  },
+  {
+   "id": "oscar-shield",
+   "type": "friendship",
+   "members": [
+    "oscar",
+    "shield"
+   ],
+   "tags": [
+    "oscar and shield ggo football"
+   ],
+   "kw": []
+  },
+  {
+   "id": "shadow-shield-f",
+   "type": "friendship",
+   "members": [
+    "shadow",
+    "shield"
+   ],
+   "tags": [
+    "shadow and shield ggo football"
+   ],
+   "kw": []
+  },
+  {
+   "id": "swift-satellite-f",
+   "type": "friendship",
+   "members": [
+    "swift",
+    "satellite"
+   ],
+   "tags": [
+    "swift and satellite ggo football"
+   ],
+   "kw": []
+  },
+  {
+   "id": "coleman-isaac",
+   "type": "family",
+   "members": [
+    "coleman",
+    "isaac"
+   ],
+   "tags": [
+    "coleman and isaac ggo football"
+   ],
+   "kw": []
+  },
+  {
+   "id": "betty-isaac",
+   "type": "family",
+   "members": [
+    "betty",
+    "isaac"
+   ],
+   "tags": [
+    "aunt betty and isaac ggo football"
+   ],
+   "kw": []
+  },
+  {
+   "id": "philip-van",
+   "type": "family",
+   "members": [
+    "philip",
+    "van"
+   ],
+   "tags": [
+    "philip and van ggo football"
+   ],
+   "kw": []
+  },
+  {
+   "id": "yang-brothers",
+   "type": "family",
+   "members": [
+    "oscar",
+    "marcus",
+    "justus",
+    "rufus",
+    "cyrus"
+   ],
+   "tags": [
+    "yang brothers ggo football"
+   ],
+   "kw": [
+    "杨家五兄弟"
+   ],
+   "name": "杨家兄弟"
+  },
+  {
+   "id": "nelson-tyrant",
+   "type": "family",
+   "members": [
+    "nelson",
+    "tyrant"
+   ],
+   "tags": [
+    "nelson and tyrant ggo football"
+   ],
+   "kw": []
+  }
+ ],
+ "presets": [
+  {
+   "id": "p-barefoot-humans",
+   "name": "赤足队领队",
+   "members": [
+    "isaac",
+    "shawn",
+    "karl",
+    "timmy",
+    "cat"
+   ],
+   "relations": []
+  },
+  {
+   "id": "p-barefoot-robots",
+   "name": "赤足队球员",
+   "members": [
+    "myth",
+    "satellite",
+    "swift",
+    "nucleus",
+    "titan",
+    "shadow",
+    "shield"
+   ],
+   "relations": []
+  },
+  {
+   "id": "p-trio",
+   "name": "高迅、花王、肥宝",
+   "members": [
+    "isaac",
+    "karl",
+    "timmy"
+   ],
+   "relations": [
+    "isaac-karl-timmy"
+   ]
+  }
+ ],
+ "sections": [
+  {
+   "id": "works",
+   "name": "作品／版本",
+   "kind": "work",
+   "items": [
+    {
+     "id": "season2",
+     "name": "第二季 世界大赛篇",
+     "tags": [
+      "ggo football 2",
+      "超智能足球2"
+     ]
+    },
+    {
+     "id": "human-au",
+     "name": "人类化 AU",
+     "tags": [
+      "ggo football human au"
+     ]
+    }
+   ]
+  },
+  {
+   "id": "formats",
+   "name": "作品形式",
+   "kind": "format",
+   "items": [
+    {
+     "id": "fanart",
+     "name": "同人图",
+     "tags": [
+      "fanart",
+      "my art",
+      "artists on tumblr"
+     ],
+     "base": false
+    },
+    {
+     "id": "fanfic",
+     "name": "同人文",
+     "tags": [
+      "fanfiction",
+      "fanfic",
+      "my writing"
+     ],
+     "base": false
+    },
+    {
+     "id": "comic",
+     "name": "漫画",
+     "tags": [
+      "fancomic",
+      "comic"
+     ],
+     "base": false
+    },
+    {
+     "id": "headcanon",
+     "name": "个人设定",
+     "tags": [
+      "headcanon"
+     ],
+     "base": false
+    },
+    {
+     "id": "gif",
+     "name": "动图",
+     "tags": [
+      "gifset",
+      "my gifs"
+     ],
+     "base": false
+    }
+   ]
+  }
+ ]
+}

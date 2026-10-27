@@ -1,0 +1,1140 @@
+{
+ "format": "tth-template-pack",
+ "formatVersion": 2,
+ "id": "ygo-arcv",
+ "name": "游戏王 ARC-V",
+ "version": "2026.10.26.8",
+ "description": "ARC-V 角色、关系与附加包。来源：ARC-V_Tumblr标签复制手册.md；去掉了会引来其他圈子的单词标签。 2026-10-26：按 /v2/tagged 抽样和标签页关注数，去掉了多为别的圈子使用的标签，以及主角组里几乎没人关注、多年没新帖的拼法；配角的标签全部保留；每个角色和关系至少留一个标签。 不用带括号、连字符、撇号等标点的标签，换成对应的普通拼法。 去掉的旧拼法记在各项的 retired 里，只用来认出旧帖子，不会再被打上。 搜索按词匹配，yuri 和 yuuri 是不同的词，所以带独有名字词的拼法（如 yuuri arc v、rei akaba）保留，只删同词换序或带标点的拼法。",
+ "base": [
+  "yugioh arc v",
+  "arc v",
+  "ygo arc v",
+  "yugioh",
+  "ygo"
+ ],
+ "types": {
+  "romance": "爱情",
+  "friendship": "友情",
+  "family": "亲情"
+ },
+ "characters": [
+  {
+   "id": "yuya",
+   "name": "榊游矢",
+   "group": "男主",
+   "kw": [
+    "游矢",
+    "遊矢",
+    "yuya"
+   ],
+   "tags": [
+    "yuya sakaki",
+    "sakaki yuya",
+    "yuuya sakaki"
+   ],
+   "retired": [
+    "sakaki yuuya"
+   ]
+  },
+  {
+   "id": "yuto",
+   "name": "游斗",
+   "group": "男主",
+   "kw": [
+    "遊斗",
+    "yuto"
+   ],
+   "tags": [
+    "yuto arc v",
+    "yuuto arc v"
+   ],
+   "retired": [
+    "yuto (arc v)",
+    "yuuto (arc v)"
+   ]
+  },
+  {
+   "id": "yugo",
+   "name": "游吾",
+   "group": "男主",
+   "kw": [
+    "遊吾",
+    "yugo"
+   ],
+   "tags": [
+    "yugo arc v",
+    "yuugo arc v"
+   ],
+   "retired": [
+    "yugo (arc v)"
+   ]
+  },
+  {
+   "id": "yuri",
+   "name": "游里",
+   "group": "男主",
+   "kw": [
+    "遊里",
+    "yuri"
+   ],
+   "tags": [
+    "yuri arc v",
+    "yuuri arc v"
+   ],
+   "retired": [
+    "yuri (arc v)",
+    "yuuri (arc v)"
+   ]
+  },
+  {
+   "id": "zarc",
+   "name": "扎克",
+   "group": "男主",
+   "kw": [
+    "zarc",
+    "z-arc"
+   ],
+   "tags": [
+    "zarc",
+    "zarc arc v"
+   ],
+   "retired": [
+    "zarc (arc v)"
+   ]
+  },
+  {
+   "id": "yuzu",
+   "name": "柊柚子",
+   "group": "女主",
+   "kw": [
+    "柚子",
+    "zuzu"
+   ],
+   "tags": [
+    "yuzu hiragi",
+    "yuzu hiiragi",
+    "hiiragi yuzu",
+    "zuzu boyle"
+   ],
+   "retired": [
+    "hiragi yuzu"
+   ]
+  },
+  {
+   "id": "ruri",
+   "name": "黑咲琉璃",
+   "group": "女主",
+   "kw": [
+    "琉璃",
+    "瑠璃",
+    "lulu"
+   ],
+   "tags": [
+    "ruri kurosaki",
+    "kurosaki ruri",
+    "lulu obsidian"
+   ]
+  },
+  {
+   "id": "rin",
+   "name": "凛",
+   "group": "女主",
+   "kw": [
+    "铃",
+    "rin"
+   ],
+   "tags": [
+    "rin arc v"
+   ],
+   "retired": [
+    "rin (arc v)",
+    "rin yugioh"
+   ]
+  },
+  {
+   "id": "serena",
+   "name": "塞瑞娜",
+   "group": "女主",
+   "kw": [
+    "赛瑞娜",
+    "celina"
+   ],
+   "tags": [
+    "serena arc v",
+    "celina arc v"
+   ],
+   "retired": [
+    "serena (arc v)",
+    "serena arcv"
+   ]
+  },
+  {
+   "id": "ray",
+   "name": "赤马零伊",
+   "group": "女主",
+   "kw": [
+    "零伊",
+    "零依",
+    "ray"
+   ],
+   "tags": [
+    "ray akaba",
+    "rei akaba"
+   ]
+  },
+  {
+   "id": "reiji",
+   "name": "赤马零儿",
+   "group": "枪兵团",
+   "kw": [
+    "零儿",
+    "零児",
+    "declan"
+   ],
+   "tags": [
+    "reiji akaba",
+    "akaba reiji",
+    "declan akaba"
+   ]
+  },
+  {
+   "id": "shun",
+   "name": "黑咲隼",
+   "group": "枪兵团",
+   "kw": [
+    "隼",
+    "shay"
+   ],
+   "tags": [
+    "shun kurosaki",
+    "kurosaki shun",
+    "shay obsidian"
+   ]
+  },
+  {
+   "id": "sora",
+   "name": "紫云院素良",
+   "group": "枪兵团",
+   "kw": [
+    "素良",
+    "紫雲院"
+   ],
+   "tags": [
+    "sora shiunin",
+    "shiunin sora",
+    "sora perse"
+   ],
+   "retired": [
+    "sora shiun'in",
+    "shiun'in sora"
+   ]
+  },
+  {
+   "id": "sawatari",
+   "name": "泽渡真吾",
+   "group": "枪兵团",
+   "kw": [
+    "泽渡",
+    "沢渡",
+    "sylvio"
+   ],
+   "tags": [
+    "shingo sawatari",
+    "sawatari shingo",
+    "sylvio sawatari"
+   ]
+  },
+  {
+   "id": "gongenzaka",
+   "name": "权现坂升",
+   "group": "枪兵团",
+   "kw": [
+    "权现坂",
+    "権現坂",
+    "gong"
+   ],
+   "tags": [
+    "noboru gongenzaka",
+    "gongenzaka noboru",
+    "gong strong"
+   ]
+  },
+  {
+   "id": "dennis",
+   "name": "丹尼斯",
+   "group": "枪兵团",
+   "kw": [
+    "dennis"
+   ],
+   "tags": [
+    "dennis macfield",
+    "dennis mcfield",
+    "dennis mackfield"
+   ]
+  },
+  {
+   "id": "tsukikage",
+   "name": "月影",
+   "group": "枪兵团",
+   "kw": [
+    "moon shadow"
+   ],
+   "tags": [
+    "tsukikage fuma",
+    "moon shadow arc v"
+   ],
+   "retired": [
+    "moon shadow (arc v)"
+   ]
+  },
+  {
+   "id": "reira",
+   "name": "赤马零罗",
+   "group": "枪兵团",
+   "kw": [
+    "零罗",
+    "零羅",
+    "riley"
+   ],
+   "tags": [
+    "reira akaba",
+    "akaba reira",
+    "riley akaba",
+    "layra akaba"
+   ]
+  },
+  {
+   "id": "yusho",
+   "name": "榊游胜",
+   "group": "标准次元",
+   "kw": [
+    "游胜",
+    "遊勝"
+   ],
+   "tags": [
+    "yusho sakaki",
+    "sakaki yusho",
+    "yuusho sakaki"
+   ]
+  },
+  {
+   "id": "yoko",
+   "name": "榊洋子",
+   "group": "标准次元",
+   "kw": [
+    "洋子"
+   ],
+   "tags": [
+    "yoko sakaki"
+   ]
+  },
+  {
+   "id": "shuzo",
+   "name": "柊修造",
+   "group": "标准次元",
+   "kw": [
+    "修造",
+    "skip"
+   ],
+   "tags": [
+    "shuzo hiragi",
+    "shuzou hiragi",
+    "skip boyle"
+   ]
+  },
+  {
+   "id": "himika",
+   "name": "赤马日美香",
+   "group": "标准次元",
+   "kw": [
+    "日美香",
+    "henrietta"
+   ],
+   "tags": [
+    "himika akaba",
+    "akaba himika",
+    "henrietta akaba"
+   ]
+  },
+  {
+   "id": "mieru",
+   "name": "方中美惠留",
+   "group": "标准次元",
+   "kw": [
+    "美惠留",
+    "aura"
+   ],
+   "tags": [
+    "mieru hochun",
+    "mieru houchun",
+    "aura sentia"
+   ]
+  },
+  {
+   "id": "masumi",
+   "name": "光津真澄",
+   "group": "标准次元",
+   "kw": [
+    "真澄",
+    "julia"
+   ],
+   "tags": [
+    "masumi kotsu",
+    "kotsu masumi",
+    "julia krystal"
+   ]
+  },
+  {
+   "id": "yaiba",
+   "name": "刀堂刃",
+   "group": "标准次元",
+   "kw": [
+    "刃",
+    "kit"
+   ],
+   "tags": [
+    "yaiba todo",
+    "kit blade"
+   ]
+  },
+  {
+   "id": "hokuto",
+   "name": "志岛北斗",
+   "group": "标准次元",
+   "kw": [
+    "北斗",
+    "dipper"
+   ],
+   "tags": [
+    "hokuto shijima",
+    "dipper orion"
+   ],
+   "retired": [
+    "dipper o'rion"
+   ]
+  },
+  {
+   "id": "ayu",
+   "name": "鲇川亚由",
+   "group": "标准次元",
+   "kw": [
+    "亚由",
+    "鮎川"
+   ],
+   "tags": [
+    "ayu ayukawa"
+   ]
+  },
+  {
+   "id": "tatsuya",
+   "name": "山城达也",
+   "group": "标准次元",
+   "kw": [
+    "达也"
+   ],
+   "tags": [
+    "tatsuya yamashiro"
+   ]
+  },
+  {
+   "id": "futoshi",
+   "name": "原田太志",
+   "group": "标准次元",
+   "kw": [
+    "太志"
+   ],
+   "tags": [
+    "futoshi harada"
+   ]
+  },
+  {
+   "id": "allen",
+   "name": "上月亚连",
+   "group": "超量次元",
+   "kw": [
+    "亚连"
+   ],
+   "tags": [
+    "allen kozuki"
+   ]
+  },
+  {
+   "id": "sayaka",
+   "name": "笹山沙耶香",
+   "group": "超量次元",
+   "kw": [
+    "沙耶香"
+   ],
+   "tags": [
+    "sayaka sasayama",
+    "saya sasayama"
+   ]
+  },
+  {
+   "id": "shinji",
+   "name": "信司·韦伯",
+   "group": "同调次元",
+   "kw": [
+    "信司"
+   ],
+   "tags": [
+    "shinji weber"
+   ]
+  },
+  {
+   "id": "chojiro",
+   "name": "德松长次郎",
+   "group": "同调次元",
+   "kw": [
+    "德松",
+    "徳松",
+    "长次郎"
+   ],
+   "tags": [
+    "chojiro tokumatsu",
+    "tokumatsu chojiro"
+   ]
+  },
+  {
+   "id": "sergey",
+   "name": "谢尔盖",
+   "group": "同调次元",
+   "kw": [
+    "sergey"
+   ],
+   "tags": [
+    "sergey volkov"
+   ]
+  },
+  {
+   "id": "melissa",
+   "name": "梅丽莎·克莱尔",
+   "group": "同调次元",
+   "kw": [
+    "梅丽莎"
+   ],
+   "tags": [
+    "melissa claire",
+    "melissa trail"
+   ]
+  },
+  {
+   "id": "leo",
+   "name": "赤马零王",
+   "group": "融合次元",
+   "kw": [
+    "零王"
+   ],
+   "tags": [
+    "leo akaba",
+    "akaba leo"
+   ]
+  },
+  {
+   "id": "roger",
+   "name": "让·米歇尔·罗杰",
+   "group": "融合次元",
+   "kw": [
+    "罗杰",
+    "roget"
+   ],
+   "tags": [
+    "jean michel roger",
+    "jean michel roget"
+   ],
+   "retired": [
+    "jean-michel roger",
+    "jean-michel roget"
+   ]
+  },
+  {
+   "id": "grace",
+   "name": "格蕾丝·泰勒",
+   "group": "融合次元",
+   "kw": [
+    "格蕾丝",
+    "泰勒"
+   ],
+   "tags": [
+    "grace tyler"
+   ]
+  },
+  {
+   "id": "gloria",
+   "name": "格洛丽亚·泰勒",
+   "group": "融合次元",
+   "kw": [
+    "格洛丽亚",
+    "泰勒"
+   ],
+   "tags": [
+    "gloria tyler"
+   ]
+  },
+  {
+   "id": "jack",
+   "name": "杰克·阿特拉斯",
+   "group": "前代客串角色",
+   "kw": [
+    "杰克"
+   ],
+   "tags": [
+    "jack atlas"
+   ]
+  },
+  {
+   "id": "crow",
+   "name": "克罗·霍根",
+   "group": "前代客串角色",
+   "kw": [
+    "克罗"
+   ],
+   "tags": [
+    "crow hogan"
+   ]
+  },
+  {
+   "id": "kaito",
+   "name": "天城快斗",
+   "group": "前代客串角色",
+   "kw": [
+    "快斗",
+    "kite"
+   ],
+   "tags": [
+    "kaito tenjo",
+    "kite tenjo",
+    "kaito tenjo arc v"
+   ]
+  },
+  {
+   "id": "edo",
+   "name": "艾德·菲尼克斯",
+   "group": "前代客串角色",
+   "kw": [
+    "艾德",
+    "aster"
+   ],
+   "tags": [
+    "edo phoenix",
+    "aster phoenix",
+    "edo phoenix arc v"
+   ]
+  },
+  {
+   "id": "asuka",
+   "name": "天上院明日香",
+   "group": "前代客串角色",
+   "kw": [
+    "明日香",
+    "alexis"
+   ],
+   "tags": [
+    "asuka tenjoin",
+    "alexis rhodes"
+   ]
+  },
+  {
+   "id": "ren",
+   "name": "莲",
+   "group": "漫画专属角色",
+   "kw": [
+    "蓮",
+    "ren"
+   ],
+   "tags": [
+    "ren arc v"
+   ],
+   "with": [
+    "manga"
+   ],
+   "retired": [
+    "ren (arc v)"
+   ]
+  },
+  {
+   "id": "eve",
+   "name": "夏娃",
+   "group": "漫画专属角色",
+   "kw": [
+    "eve"
+   ],
+   "tags": [
+    "eve arc v"
+   ],
+   "with": [
+    "manga"
+   ],
+   "retired": [
+    "eve (arc v)"
+   ]
+  },
+  {
+   "id": "miu",
+   "name": "紫云院美羽",
+   "group": "漫画专属角色",
+   "kw": [
+    "素良妹妹",
+    "ミウ",
+    "miu"
+   ],
+   "tags": [
+    "miu shiunin"
+   ],
+   "with": [
+    "manga"
+   ]
+  }
+ ],
+ "relations": [
+  {
+   "id": "fruit",
+   "name": "游矢 × 柚子",
+   "type": "romance",
+   "members": [
+    "yuya",
+    "yuzu"
+   ],
+   "kw": [
+    "fruitshipping",
+    "游柚",
+    "矢柚"
+   ],
+   "tags": [
+    "fruitshipping",
+    "yuyayuzu"
+   ]
+  },
+  {
+   "id": "fallenangel",
+   "name": "游斗 × 琉璃",
+   "type": "romance",
+   "members": [
+    "yuto",
+    "ruri"
+   ],
+   "kw": [
+    "fallenangelshipping",
+    "斗琉"
+   ],
+   "tags": [
+    "fallenangelshipping",
+    "yutoruri"
+   ]
+  },
+  {
+   "id": "apple",
+   "name": "游吾 × 凛",
+   "type": "romance",
+   "members": [
+    "yugo",
+    "rin"
+   ],
+   "kw": [
+    "appleshipping",
+    "吾凛"
+   ],
+   "tags": [
+    "appleshipping",
+    "yugorin"
+   ]
+  },
+  {
+   "id": "predator",
+   "name": "游里 × 塞瑞娜",
+   "type": "romance",
+   "members": [
+    "yuri",
+    "serena"
+   ],
+   "kw": [
+    "predatorshipping",
+    "里塞"
+   ],
+   "tags": [
+    "predatorshipping",
+    "yurisere"
+   ]
+  },
+  {
+   "id": "rebelfamily",
+   "name": "隼、游斗、琉璃（家人）",
+   "type": "family",
+   "members": [
+    "shun",
+    "yuto",
+    "ruri"
+   ],
+   "kw": [
+    "rebelfamilyshipping",
+    "三人"
+   ],
+   "tags": [
+    "rebelfamilyshipping"
+   ]
+  },
+  {
+   "id": "darkrebel",
+   "name": "隼 × 游斗",
+   "type": "romance",
+   "members": [
+    "shun",
+    "yuto"
+   ],
+   "kw": [
+    "darkrebelshipping",
+    "trashbagshipping",
+    "隼游"
+   ],
+   "tags": [
+    "darkrebelshipping",
+    "trashbagshipping",
+    "shunyuuto"
+   ]
+  },
+  {
+   "id": "reclaim",
+   "name": "隼 × 琉璃",
+   "type": "romance",
+   "members": [
+    "shun",
+    "ruri"
+   ],
+   "kw": [
+    "reclaimshipping",
+    "兄妹"
+   ],
+   "tags": [
+    "reclaimshipping"
+   ]
+  },
+  {
+   "id": "kurosaki-siblings",
+   "name": "黑咲兄妹（亲情）",
+   "type": "family",
+   "members": [
+    "shun",
+    "ruri"
+   ],
+   "kw": [
+    "kurosaki siblings",
+    "兄妹"
+   ],
+   "tags": [],
+   "retired": [
+    "kurosaki siblings"
+   ]
+  },
+  {
+   "id": "yu-boys",
+   "name": "四游同框",
+   "type": "friendship",
+   "members": [
+    "yuya",
+    "yuto",
+    "yugo",
+    "yuri"
+   ],
+   "kw": [
+    "yu boys",
+    "四游"
+   ],
+   "tags": [
+    "yu boys"
+   ]
+  },
+  {
+   "id": "bracelet-girls",
+   "name": "四柚同框",
+   "type": "friendship",
+   "members": [
+    "yuzu",
+    "serena",
+    "rin",
+    "ruri"
+   ],
+   "kw": [
+    "bracelet girls",
+    "四柚"
+   ],
+   "tags": [
+    "bracelet girls"
+   ]
+  }
+ ],
+ "presets": [
+  {
+   "id": "p-four-ships",
+   "name": "四组男女主 CP",
+   "kw": [
+    "四组",
+    "四次元"
+   ],
+   "members": [
+    "yuya",
+    "yuto",
+    "yugo",
+    "yuri",
+    "yuzu",
+    "ruri",
+    "rin",
+    "serena"
+   ],
+   "relations": [
+    "fruit",
+    "fallenangel",
+    "apple",
+    "predator"
+   ]
+  },
+  {
+   "id": "p-eight",
+   "name": "四游四柚八人群像",
+   "kw": [
+    "八人"
+   ],
+   "members": [
+    "yuya",
+    "yuto",
+    "yugo",
+    "yuri",
+    "yuzu",
+    "ruri",
+    "rin",
+    "serena"
+   ],
+   "relations": [
+    "yu-boys",
+    "bracelet-girls"
+   ]
+  },
+  {
+   "id": "p-eight-zarc",
+   "name": "四游四柚 + 扎克",
+   "kw": [
+    "九人",
+    "扎克"
+   ],
+   "members": [
+    "yuya",
+    "yuto",
+    "yugo",
+    "yuri",
+    "yuzu",
+    "ruri",
+    "rin",
+    "serena",
+    "zarc"
+   ],
+   "relations": [
+    "fruit",
+    "fallenangel",
+    "apple",
+    "predator"
+   ]
+  },
+  {
+   "id": "p-xyz",
+   "name": "隼／游斗／琉璃",
+   "kw": [
+    "xyz",
+    "超量",
+    "三人"
+   ],
+   "members": [
+    "shun",
+    "yuto",
+    "ruri"
+   ],
+   "relations": []
+  }
+ ],
+ "sections": [
+  {
+   "id": "works",
+   "name": "作品／版本",
+   "kind": "work",
+   "items": [
+    {
+     "id": "names",
+     "name": "作品名更多写法",
+     "kw": [
+      "arcv",
+      "arc-v",
+      "扩展"
+     ],
+     "tags": [
+      "arcv",
+      "arc v",
+      "yugioh arcv",
+      "yugioh arc v",
+      "yu gi oh",
+      "yu gi oh arc v"
+     ],
+     "retired": [
+      "arc-v",
+      "ygo arcv",
+      "yugioh arc-v",
+      "yu-gi-oh!"
+     ]
+    },
+    {
+     "id": "manga",
+     "name": "漫画版",
+     "kw": [
+      "manga",
+      "漫画"
+     ],
+     "tags": [
+      "arc v manga",
+      "yugioh arc v manga"
+     ],
+     "retired": [
+      "ygo arc v manga",
+      "arc-v manga"
+     ]
+    },
+    {
+     "id": "duel-links",
+     "name": "Duel Links",
+     "kw": [
+      "dl",
+      "duel links"
+     ],
+     "tags": [
+      "duel links",
+      "yugioh duel links"
+     ]
+    },
+    {
+     "id": "gx",
+     "name": "联动 GX",
+     "kw": [
+      "gx"
+     ],
+     "tags": [
+      "yugioh gx",
+      "ygo gx"
+     ],
+     "base": false
+    },
+    {
+     "id": "5ds",
+     "name": "联动 5D's",
+     "kw": [
+      "5ds"
+     ],
+     "tags": [
+      "yugioh 5ds",
+      "ygo 5ds"
+     ],
+     "base": false
+    },
+    {
+     "id": "zexal",
+     "name": "联动 ZEXAL",
+     "kw": [
+      "zexal"
+     ],
+     "tags": [
+      "yugioh zexal",
+      "ygo zexal",
+      "zexal"
+     ],
+     "base": false
+    },
+    {
+     "id": "ygo-general",
+     "name": "游戏王综合（非 ARC-V）",
+     "kw": [
+      "综合",
+      "全系列"
+     ],
+     "tags": [
+      "yugioh",
+      "ygo",
+      "yu gi oh"
+     ],
+     "base": false,
+     "retired": [
+      "yu-gi-oh!"
+     ]
+    }
+   ]
+  },
+  {
+   "id": "formats",
+   "name": "作品形式",
+   "kind": "format",
+   "items": [
+    {
+     "id": "fanart",
+     "name": "自己画的图",
+     "kw": [
+      "fanart",
+      "画"
+     ],
+     "tags": [
+      "fanart",
+      "yugioh fanart",
+      "my art",
+      "artists on tumblr"
+     ],
+     "base": false
+    },
+    {
+     "id": "fanfic",
+     "name": "自己写的文",
+     "kw": [
+      "fanfic",
+      "文"
+     ],
+     "tags": [
+      "fanfiction",
+      "fanfic",
+      "my writing"
+     ],
+     "base": false
+    },
+    {
+     "id": "comic",
+     "name": "自己画的漫画",
+     "kw": [
+      "comic",
+      "条漫"
+     ],
+     "tags": [
+      "fancomic",
+      "comic",
+      "my art"
+     ],
+     "base": false
+    },
+    {
+     "id": "au",
+     "name": "设定／脑洞／AU",
+     "kw": [
+      "au",
+      "headcanon"
+     ],
+     "tags": [
+      "headcanon"
+     ],
+     "base": false
+    },
+    {
+     "id": "gif",
+     "name": "自己做的 GIF",
+     "kw": [
+      "gif"
+     ],
+     "tags": [
+      "gifset",
+      "my gifs"
+     ],
+     "base": false
+    }
+   ]
+  }
+ ]
+}
