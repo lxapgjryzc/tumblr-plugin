@@ -1,5 +1,6 @@
-// Service worker: opens the manager page, blocks ad networks while "Hide ads" is on, and every 10 minutes
-// keeps reblogs between my blogs in line (TTHCore.autoMaintain) while that setting is on
+// Service worker: opens the manager page, fetches pack URLs for the content script, blocks ad networks while
+// "Hide ads" is on, and every 10 minutes keeps reblogs between my blogs in line (TTHCore.autoMaintain) while
+// that setting is on
 importScripts('core.js');
 const C = TTHCore;
 const TUMBLR = 'https://www.tumblr.com';
@@ -7,6 +8,16 @@ const TUMBLR = 'https://www.tumblr.com';
 // Clicking the toolbar icon opens the manager page
 chrome.action.onClicked.addListener(() => {
   chrome.tabs.create({ url: chrome.runtime.getURL('manager.html') });
+});
+
+// Pack installs from a URL on tumblr.com pages: the page's CSP would block the content script's own fetch
+chrome.runtime.onMessage.addListener((msg, sender, reply) => {
+  if (msg?.type !== 'fetchText') return;
+  fetch(msg.url).then(async r => {
+    if (!r.ok) throw new Error(r.status + ' ' + r.statusText);
+    reply({ text: await r.text() });
+  }).catch(e => reply({ error: C.errMsg(e) }));
+  return true;
 });
 
 // Ad networks are blocked at the request level (rules_ads.json, only for requests made by tumblr.com pages)
