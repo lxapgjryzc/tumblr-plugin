@@ -1249,7 +1249,7 @@
         mark(id, t('aiBusy'), true);
         try {
           const seen = await C.aiTagImage(settings.ai, aiKey, await C.imageDataUrl(rec[2][0][1] || rec[2][0][0]), undefined,
-            { notesLang: settings.ai.notes ? lang() : '' });
+            { notes: settings.ai.notes ? settings.ai.notesLang : '' });
           let tags = seen.aiArt === 'yes' ? [...seen.tags, C.AI_ART_TAG] : seen.tags;
           // the palette is worked out here for free, for posts that don't have it yet
           if (!recTags(rec).some(tag => C.refGroupOf(tag) === 'palette')) {
@@ -1328,8 +1328,13 @@
     $('aiKey').value = aiKey;
     $('aiAuto').checked = settings.ai.autoApply;
     $('aiNotesOn').checked = settings.ai.notes;
+    const sel = $('aiNotesLang');
+    sel.innerHTML = Object.keys(C.AI_NOTE_LANGS).map(code => `<option value="${code}">${C.esc(t('aiNoteLang_' + code))}</option>`).join('');
+    sel.value = C.AI_NOTE_LANGS[settings.ai.notesLang] ? settings.ai.notesLang : 'en';
+    sel.disabled = !settings.ai.notes;
   }
-  $('aiNotesOn').addEventListener('change', e => { settings.ai = { ...settings.ai, notes: e.target.checked }; saveSettings(); });
+  $('aiNotesLang').addEventListener('change', e => { settings.ai = { ...settings.ai, notesLang: e.target.value }; saveSettings(); });
+  $('aiNotesOn').addEventListener('change', e => { settings.ai = { ...settings.ai, notes: e.target.checked }; saveSettings(); $('aiNotesLang').disabled = !e.target.checked; });
   $('aiAuto').addEventListener('change', e => { settings.ai = { ...settings.ai, autoApply: e.target.checked }; saveSettings(); });
   $('aiBase').addEventListener('change', e => { settings.ai = { ...settings.ai, base: e.target.value.trim() }; saveSettings(); });
   $('aiModel').addEventListener('change', e => { settings.ai = { ...settings.ai, model: e.target.value.trim() }; saveSettings(); });
@@ -1731,6 +1736,11 @@
   }
   $('useBase').addEventListener('change', e => { settings.useBase = e.target.checked; saveSettings(); renderTplCard(); });
 
+  // Closing or reloading the page stops what runs in it (edits, the AI, the write queue): ask first
+  window.addEventListener('beforeunload', e => {
+    if (running || aiCtl || orgBusy) { e.preventDefault(); e.returnValue = ''; }
+  });
+
   // ---------- Startup ----------
   async function start() {
     const stored = await chrome.storage.local.get(['cache', 'settings', 'packs', 'aiKey']);
@@ -1746,7 +1756,7 @@
     settings.rules = { ...C.TPL_RULES, ...settings.rules };
     settings.clean = { notes: old?.notes ?? true, notesMax: old?.notesMax ?? 1 };
     settings.collect = { ...COLLECT, ...settings.collect };
-    settings.ai = { base: '', model: '', autoApply: true, notes: true, ...settings.ai };
+    settings.ai = { base: '', model: '', autoApply: true, notes: true, notesLang: 'en', ...settings.ai };
     rebuildIndex();
     document.documentElement.style.setProperty('--card', settings.card + 'px');
     $('cardSize').value = settings.card;

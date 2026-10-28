@@ -344,7 +344,7 @@ autoTest = async () => {
   const lay = C.relayout([{ type: 'rows', display: [{ blocks: [0] }, { blocks: [1] }, { blocks: [2] }] }], [img1, old, mine], c1);
   check(eq(lay[0].display.map(r => r.blocks), [[0], [1], [2]]), 'relayout: the removed note\'s row is dropped, the others follow their blocks, the new note gets a row: ' + JSON.stringify(lay));
   check(C.parseAiNotes('{"light": [], "notes": " 逆光：太阳在花后面。 "}') === '逆光：太阳在花后面。' && C.parseAiNotes('nope') === '', 'parseAiNotes');
-  check(C.aiPrompt('zh').includes('Simplified Chinese') && !C.aiPrompt('').includes('notes'), 'the prompt asks for notes only when wanted, in the page language');
+  check(C.aiPrompt('en').includes('"notes" in English') && C.aiPrompt('zh').includes('"notes" in Simplified Chinese') && !C.aiPrompt('').includes('notes'), 'the prompt asks for notes only when wanted, in the chosen language');
   const sent = [];
   const napi = async (path, opts = {}) => {
     if (opts.method === 'PUT') { sent.push(opts.body); return {}; }
