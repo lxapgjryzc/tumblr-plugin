@@ -196,9 +196,19 @@ const TTHCore = (() => {
       aiBase: 'API address', aiBasePh: 'https://api.example.com/v1', aiModel: 'Model', aiModelPh: 'a model that accepts images', aiKey: 'API key', aiKeyPh: 'Paste your key here',
       aiTest: 'Test', aiTesting: 'Sending a test image…', aiOk: tags => `It works${tags ? ' · it said: ' + tags : ''}`, aiFail: e => `Didn't work: ${e}`,
       aiNeedSetup: 'Set up AI image sorting in Settings first', aiNoAccess: 'Chrome wasn\'t allowed to reach this address',
+      colSkip_aiArt: 'tagged as AI-made by its poster (like taken back)',
+      orgAiArt: 'Check for AI images', orgAiArtHint: 'Reads the original\'s tags, tags others added and replies; all posts when none is selected',
+      orgAiArtOnly: 'Suspected AI images', aiArtChecking: (i, n) => `Checking for AI images… ${i} / ${n}`,
+      aiArtWhy_owner: 'its poster tagged it as AI', aiArtWhy_others: n => `${n} blogs tagged it as AI`, aiArtWhy_vision: 'the AI model is sure it is AI-made',
+      aiArtHit: (id, why) => `${id}: suspected AI image (${why})`,
+      orgDelete: 'Delete reblogs and unlike', orgDeleteConfirm: n => `Delete ${n} reblog(s) from the collection and take back their likes? Deleted reblogs can't be restored (the originals stay).`,
+      orgDeleted: (n, u) => `deleted ${n} reblog(s) · ${u} like(s) taken back`, orgDeleting: (i, n) => `Deleting… ${i} / ${n}`,
+      colUnliked: n => `${n} like(s) of AI-tagged posts taken back`,
+      hideAiArt: 'Hide posts tagged as AI-made while browsing Tumblr (tags like "ai art", "midjourney"; "not ai" tags are left alone)',
       orgAiGroup: 'AI sorting', orgAiNo: 'Not looked at by the AI yet', orgAiYes: 'Looked at by the AI',
-      orgAi: 'AI sort', orgAiHint: 'Selected posts only; each image goes to your AI service',
-      aiRunning: (i, n) => `AI is looking… ${i} / ${n}`, aiBusy: 'Looking…', aiCardDone: n => (n ? `${n} suggestion(s)` : 'nothing to add'), aiFinished: n => `AI is done: ${n} post(s) with suggestions below`, aiReviewTitle: 'AI suggestions: click a tag to leave it out, then write them',
+      orgAi: 'AI sort', orgAiHint: 'Selected posts only; each image goes to your AI service. The palette is worked out too, here and for free',
+      aiRunning: (i, n) => `AI is looking… ${i} / ${n}`, aiBusy: 'Looking…', aiCardDone: n => (n ? `${n} suggestion(s)` : 'nothing to add'), aiFinished: n => `AI is done: ${n} post(s) with suggestions below`, aiWriting: n => `AI is done: writing its tags to ${n} post(s)`,
+      aiAuto: 'Write the AI\'s tags right away, without review', aiReviewTitle: 'AI suggestions: click a tag to leave it out, then write them',
       aiApply: 'Write the suggested tags', aiDiscard: 'Discard', aiNothing: 'The AI had nothing to add', aiDone: (n, f) => `AI looked at ${n} post(s)${f ? ` · ${f} failed` : ''}`,
       aiMarkHint: 'Writing also tags every post the AI looked at with #ai sorted; Discard writes nothing',
       dailyTitle: 'Today\'s quick study', dailyCount: 'Images', dailyAnother: 'Another set', dailyRefresh: 'Read the collection again',
@@ -382,16 +392,26 @@ const TTHCore = (() => {
         'character': '人物', 'multiple characters': '多人', 'animal': '动物', 'landscape': '风景', 'cityscape': '街景', 'architecture': '建筑',
         'interior': '室内', 'still life': '静物', 'food': '食物', 'mecha': '机械',
         'painterly': '厚涂', 'cel shading': '赛璐璐', 'soft shading': '柔和渐变', 'flat colors': '平涂', 'lineless': '无线稿', 'line art': '线稿',
-        'ai sorted': 'AI 已识别', 'watercolor': '水彩', 'sketch': '速写/草稿', 'pixel art': '像素画', '3d render': '3D 渲染', 'photo': '照片',
+        'ai sorted': 'AI 已识别', 'suspected ai': '疑似 AI 图', 'watercolor': '水彩', 'sketch': '速写/草稿', 'pixel art': '像素画', '3d render': '3D 渲染', 'photo': '照片',
       },
       aiTitle: 'AI 识图',
       aiIntro: '可选。填一个能看图的 AI 模型（任何 OpenAI 兼容的服务）后，素材页的“AI 识别”会给选中的帖子建议光影、材质、构图、题材和画法 tag。每张图都会发给这个服务，并按张计费。key 只保存在这个浏览器里。',
       aiBase: '接口地址', aiBasePh: 'https://api.example.com/v1', aiModel: '模型', aiModelPh: '能看图的模型名', aiKey: 'API key', aiKeyPh: '在这里粘贴你的 key',
       aiTest: '测试', aiTesting: '正在发送测试图片…', aiOk: tags => `可以用${tags ? ' · 它的回答：' + tags : ''}`, aiFail: e => `不能用：${e}`,
       aiNeedSetup: '请先在设置里配置 AI 识图', aiNoAccess: 'Chrome 没有允许访问这个地址',
+      colSkip_aiArt: '原作者标了 AI 图（已取消喜欢）',
+      orgAiArt: '检查 AI 图', orgAiArtHint: '读原帖的 tag、别人转发时加的 tag 和评论；什么都没选时检查全部',
+      orgAiArtOnly: '疑似 AI 图', aiArtChecking: (i, n) => `正在检查 AI 图… ${i} / ${n}`,
+      aiArtWhy_owner: '原作者标了 AI', aiArtWhy_others: n => `${n} 个博客标了 AI`, aiArtWhy_vision: 'AI 看图很确定是 AI 图',
+      aiArtHit: (id, why) => `${id}：疑似 AI 图（${why}）`,
+      orgDelete: '删除转发并取消喜欢', orgDeleteConfirm: n => `从素材库删除 ${n} 条转发，并取消对应的喜欢？删掉的转发无法恢复（原帖还在）。`,
+      orgDeleted: (n, u) => `已删除 ${n} 条转发 · 取消了 ${u} 个喜欢`, orgDeleting: (i, n) => `正在删除… ${i} / ${n}`,
+      colUnliked: n => `已取消 ${n} 条标了 AI 的帖子的喜欢`,
+      hideAiArt: '浏览 Tumblr 时隐藏标了 AI 图的帖子（如 “ai art”“midjourney” 等 tag；“not ai” 这类不受影响）',
       orgAiGroup: 'AI 识别', orgAiNo: 'AI 还没识别过的', orgAiYes: 'AI 识别过的',
-      orgAi: 'AI 识别', orgAiHint: '只识别选中的帖子；每张图都会发给你的 AI 服务',
-      aiRunning: (i, n) => `AI 正在看图… ${i} / ${n}`, aiBusy: '识别中…', aiCardDone: n => (n ? `建议 ${n} 个` : '没有可加的'), aiFinished: n => `AI 看完了：${n} 条帖子有建议，在下面确认`, aiReviewTitle: 'AI 的建议：点一下 tag 可以不要它，然后写入',
+      orgAi: 'AI 识别', orgAiHint: '只识别选中的帖子；每张图都会发给你的 AI 服务。色调会顺带本地算好，不另外花钱',
+      aiRunning: (i, n) => `AI 正在看图… ${i} / ${n}`, aiBusy: '识别中…', aiCardDone: n => (n ? `建议 ${n} 个` : '没有可加的'), aiFinished: n => `AI 看完了：${n} 条帖子有建议，在下面确认`, aiWriting: n => `AI 看完了，正在给 ${n} 条帖子写入 tag`,
+      aiAuto: 'AI 识别后直接写入，不用确认', aiReviewTitle: 'AI 的建议：点一下 tag 可以不要它，然后写入',
       aiApply: '写入建议的 tag', aiDiscard: '放弃', aiNothing: 'AI 没有可以加的 tag', aiDone: (n, f) => `AI 看完了 ${n} 条帖子${f ? ` · ${f} 条失败` : ''}`,
       aiMarkHint: '写入时，AI 看过的每条帖子都会加上 #ai sorted；点“放弃”什么都不写',
       dailyTitle: '今日速涂', dailyCount: '张数', dailyAnother: '换一组', dailyRefresh: '重新读取素材博客',
@@ -987,7 +1007,11 @@ const TTHCore = (() => {
     const have = new Set((await newestPosts(api, target.uuid, 2)).map(rootKey));
     for (const p of likes) {
       const who = ownerOf(p), id = postId(p);
-      const why = collectSkip(p, have, myNames, collect);
+      let why = collectSkip(p, have, myNames, collect);
+      if (!why && aiArtVerdict({ owner: await ownerTagsOf(api, p) }).verdict) {
+        why = 'aiArt';
+        try { await unlikePost(api, p); } catch { /* still left out */ }
+      }
       if (why) { if (why !== 'have') out.skipped.push({ blog: who, id, reason: why }); }
       else {
         try {
@@ -1120,6 +1144,67 @@ const TTHCore = (() => {
     return url ? paletteTags(await imagePixels(url, 64, fetchFn)) : [];
   }
 
+  // ---------- AI-made images in the collection ----------
+  // Clues, strongest first: the original poster's own tags; tags other people add when they reblog it and
+  // replies (only when two or more different blogs say so and nobody says it isn't); the vision model, when
+  // it is sure. "Not AI" ("#not ai art", "#no ai", "#human art") always counts against, never for.
+  const AI_ART_TAG = 'suspected ai';
+  const AI_ART_YES = /\b(ai[\s_-]*(art|arts|artwork|generated|gen|image|images|illustration|illust|picture|pic|pics|slop|assisted|made)|aiart|aigenerated|midjourney|nijijourney|stable[\s_-]*diffusion|novel[\s_-]*ai|dall[\s_-]*e|generative[\s_-]*ai|(made|done|created)[\s_-]*(with|by|using)[\s_-]*ai)\b/i;
+  const AI_ART_NO = /\b(not|no|non|anti|never|zero|without)[\s_-]*ai\b|\bnoai\b|\bai[\s_-]*free\b|\bhuman[\s_-]*(made|art|artist)\b|\bnot[\s_-]*(ai[\s_-]*)?generated\b/i;
+  // In a reply, also "this is AI", "it looks like ai"
+  const AI_ART_SAID = /\b(this|that|it)('?s|\s+is|\s+was|\s+looks)\s+(like\s+)?(an?\s+)?ai\b/i;
+  // 'yes', 'no' or null for one tag or reply; links are left out (a site on .ai is not a clue)
+  function aiArtSignal(text, reply = false) {
+    const s = String(text || '').replace(/https?:\/\/\S+|\b[\w-]+(\.[\w-]+)*\.ai\b\S*/gi, ' ');
+    if (AI_ART_NO.test(s)) return 'no';
+    return AI_ART_YES.test(s) || (reply && AI_ART_SAID.test(s)) ? 'yes' : null;
+  }
+  // owner: the original poster's tags; others: [{ blog, text, reply }]; vision: 'yes' when the model is sure.
+  // Returns { verdict: 'ai' | 'suspect' | null, why: 'owner' | 'others' | 'vision', n }
+  function aiArtVerdict({ owner = [], others = [], vision = null }) {
+    const own = owner.map(tag => aiArtSignal(tag));
+    if (own.includes('no')) return { verdict: null };
+    if (own.includes('yes')) return { verdict: 'ai', why: 'owner' };
+    const yes = new Set(), no = new Set();
+    for (const o of others) {
+      const v = aiArtSignal(o.text, o.reply);
+      if (v === 'yes') yes.add(String(o.blog).toLowerCase()); else if (v === 'no') no.add(String(o.blog).toLowerCase());
+    }
+    if (yes.size >= 2 && !no.size) return { verdict: 'suspect', why: 'others', n: yes.size };
+    if (vision === 'yes') return { verdict: 'suspect', why: 'vision' };
+    return { verdict: null };
+  }
+  // The original poster's tags for a post: its own, or its original's for a reblog ([] if that is gone)
+  async function ownerTagsOf(api, p) {
+    const tr = (p.trail || [])[0];
+    if (!tr?.blog?.name || !tr?.post?.id) return p.tags || [];
+    try { return (await getPost(api, tr.blog.name, tr.post.id)).tags || []; } catch { return []; }
+  }
+  // All clues for one original ("blog/id"): its tags, the newest reblogs with tags, the replies
+  async function aiArtCheck(api, root) {
+    const [blog, id] = root.split('/');
+    let p;
+    try { p = await getPost(api, blog, id); } catch (e) { if (e.status === 404) return { verdict: null, gone: true }; throw e; }
+    const others = [];
+    const notes = async mode => (await api(`/v2/blog/${enc(blog)}/notes${qs({ id, mode })}`))?.notes || [];
+    try {
+      for (const n of await notes('reblogs_with_tags')) for (const tag of n.tags || []) others.push({ blog: pick(n, 'blogName', 'blog_name'), text: tag });
+    } catch { /* notes hidden or unavailable */ }
+    try {
+      for (const n of await notes('conversation')) if (n.type === 'reply') others.push({ blog: pick(n, 'blogName', 'blog_name'), text: pick(n, 'replyText', 'reply_text'), reply: true });
+    } catch { /* replies off */ }
+    return aiArtVerdict({ owner: p.tags || [], others });
+  }
+  // Take back a like (the liked post itself, which may be someone's reblog)
+  const unlikePost = (api, p) => api('/v2/user/unlike', { method: 'POST', body: { id: postId(p), reblog_key: pick(p, 'reblogKey', 'reblog_key') } });
+  // Delete one of my posts (the web client's DELETE first, then the documented endpoint)
+  async function deletePost(api, blog, id) {
+    try { return await api(`/v2/blog/${enc(blog)}/posts/${enc(id)}`, { method: 'DELETE' }); } catch (e) {
+      if (![404, 405].includes(e.status)) throw e;
+      return api(`/v2/blog/${enc(blog)}/post/delete`, { method: 'POST', body: { id: String(id) } });
+    }
+  }
+
   // ---------- Sorting by an AI vision model (optional, the user's own OpenAI-compatible endpoint) ----------
   // settings.ai = { base: 'https://…/v1', model }; the key is kept apart, in storage key `aiKey`.
   // The model may only pick tags from the hand-picked groups (the palette is worked out from pixels).
@@ -1130,7 +1215,8 @@ const TTHCore = (() => {
     return 'You sort reference images for a painter who does quick studies. For the image, choose the tags that clearly '
       + 'apply, only from these lists (use the exact words):\n'
       + AI_GROUPS().map(g => `${g.id}: ${g.tags.join(', ')}`).join('\n')
-      + '\nReply with JSON only, like {"light": ["backlight"], "material": [], ...}. Leave a list empty when nothing clearly fits.';
+      + '\nAlso say whether the image itself looks AI-generated: "ai_generated": "yes" only when you are sure, otherwise "no" or "unsure".'
+      + '\nReply with JSON only, like {"light": ["backlight"], "material": [], ..., "ai_generated": "no"}. Leave a list empty when nothing clearly fits.';
   }
   // The tags of a reply that are in the lists, in list order; anything else the model says is dropped
   function parseAiTags(text) {
@@ -1141,7 +1227,9 @@ const TTHCore = (() => {
     const said = new Set(Object.values(obj || {}).flat().filter(x => typeof x === 'string').map(key));
     return AI_GROUPS().flatMap(g => g.tags.filter(tag => said.has(tag)));
   }
-  // One image (a data: URL) to the model. Reasoning models spend tokens thinking first, so the budget is
+  // 'yes' when the model said it is sure the image is AI-generated
+  const parseAiArt = text => (/"ai_generated"\s*:\s*"yes"/i.test(String(text || '')) ? 'yes' : null);
+  // One image (a data: URL) to the model; returns { tags, aiArt }. Reasoning models spend tokens thinking first, so the budget is
   // generous. Providers that don't take response_format get the request again without it.
   async function aiTagImage(ai, apiKey, dataUrl, fetchFn = fetch) {
     const url = ai.base.replace(/\/+$/, '') + '/chat/completions';
@@ -1162,7 +1250,7 @@ const TTHCore = (() => {
     try { json = await send(true); } catch (e) { if (e.status !== 400 || !/response_format|json/i.test(e.message)) throw e; json = await send(false); }
     const text = json?.choices?.[0]?.message?.content;
     if (!text) throw new Error(json?.choices?.[0]?.finish_reason === 'length' ? 'the reply ran out of tokens' : 'empty reply');
-    return parseAiTags(text);
+    return { tags: parseAiTags(text), aiArt: parseAiArt(text) };
   }
   // An image as a JPEG data: URL, downscaled to fit `size` (works in pages and the service worker)
   async function imageDataUrl(url, size = 768, fetchFn = fetch) {
@@ -1800,7 +1888,8 @@ const TTHCore = (() => {
     errMsg, makeApi, getBlogs, postId, isPost, basePosts, nextPath, readLabel, readReblog, getPost, postImages, editPost, mutations,
     emptyCache, buildIndex, matchScore, suggest, syncBlog, syncAll, reblogSource, reblogFamilies, reblogDiffs, syncCopies, copyKeys, isCopyOf, notOnMain, reblogPost, newestPosts, autoMaintain, tagActivity, parseAuth,
     rootKey, likedPosts, emptyCollection, syncCollection, collectSkip, collectPost, isPostLimit,
-    REF_GROUPS, refGroupOf, paletteTags, imagePixels, postPalette, AI_MARK, aiPrompt, parseAiTags, aiTagImage, imageDataUrl, autoCollect, dailyPick,
+    REF_GROUPS, refGroupOf, paletteTags, imagePixels, postPalette, AI_MARK, aiPrompt, parseAiTags, parseAiArt, aiTagImage, imageDataUrl,
+    AI_ART_TAG, aiArtSignal, aiArtVerdict, ownerTagsOf, aiArtCheck, unlikePost, deletePost, autoCollect, dailyPick,
     TAG_STATS_TTL, statFresh, ensureTagStats, sortByHeat, sortTagsFair, nameGroups, packGrouping, heatRanks, heatText, tagHeader, TAG_RULES, judgeTags, suggestTagChanges, fandomShare, OFFTOPIC_SHARE, searchMatch,
     TPL_FORMAT, TPL_RULES, TPL_SEARCH_CUTS, parsePack, searchItems, expandPicks, suggestCombos, composeTemplate, packTags, upkeepTags, planUpkeep, itemsOnPost, itemsOnPosts, retagPost,
   };

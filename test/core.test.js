@@ -300,11 +300,40 @@ autoTest = async () => {
     return { ok: true, json: async () => ({ choices: [{ message: { content: '{"composition": ["close up"], "subject": ["animal"]}' } }] }) };
   };
   const aiTags = await C.aiTagImage({ base: 'https://ai.example/v1/', model: 'm' }, 'k', 'data:image/jpeg;base64,AA', aiFetch);
-  check(eq(aiTags, ['close up', 'animal']) && eq(aiCalls, ['https://ai.example/v1/chat/completions true Bearer k', 'https://ai.example/v1/chat/completions false Bearer k']),
+  check(eq(aiTags.tags, ['close up', 'animal']) && aiTags.aiArt === null && eq(aiCalls, ['https://ai.example/v1/chat/completions true Bearer k', 'https://ai.example/v1/chat/completions false Bearer k']),
     'aiTagImage posts to <base>/chat/completions and retries without response_format: ' + JSON.stringify(aiCalls));
   let aiErr = '';
   await C.aiTagImage({ base: 'https://ai.example/v1', model: 'm' }, 'k', 'x', async () => ({ ok: true, json: async () => ({ choices: [{ finish_reason: 'length', message: { content: '' } }] }) })).catch(e => { aiErr = e.message; });
   check(/tokens/.test(aiErr), 'aiTagImage says when the reply ran out of tokens');
+
+  // AI-made images: clues from tags and replies, "not ai" never counts for, one voice is not enough
+  check(eq(['ai art', 'AI-generated', 'midjourney', 'stable diffusion', 'made with ai'].map(x => C.aiArtSignal(x)), ['yes', 'yes', 'yes', 'yes', 'yes']), 'aiArtSignal: AI-art tags');
+  check(eq(['not ai art', 'no ai', 'anti ai', 'human art', 'ai free'].map(x => C.aiArtSignal(x)), ['no', 'no', 'no', 'no', 'no']), 'aiArtSignal: "not AI" tags count against');
+  check(eq(['ai', 'Ai (character)', 'digital art', 'https://example.ai/x'].map(x => C.aiArtSignal(x)), [null, null, null, null]), 'aiArtSignal: a bare "ai", a name or a .ai link is no clue');
+  check(C.aiArtSignal('this is ai', true) === 'yes' && C.aiArtSignal('is this ai?', true) === null && C.aiArtSignal('this is ai') === null, 'aiArtSignal: "this is AI" counts in replies only');
+  check(C.aiArtVerdict({ owner: ['art', 'ai art'] }).verdict === 'ai' && C.aiArtVerdict({ owner: ['not ai art'], others: [{ blog: 'a', text: 'ai art' }, { blog: 'b', text: 'ai art' }] }).verdict === null,
+    'aiArtVerdict: the poster\'s own tags decide first');
+  const oth = n => Array.from({ length: n }, (_, i) => ({ blog: 'b' + i, text: 'ai art' }));
+  check(C.aiArtVerdict({ others: oth(1) }).verdict === null && C.aiArtVerdict({ others: [...oth(1), { blog: 'B0', text: '#ai generated' }] }).verdict === null,
+    'aiArtVerdict: one blog (even tagging twice) is not enough');
+  check(C.aiArtVerdict({ others: oth(2) }).verdict === 'suspect' && C.aiArtVerdict({ others: [...oth(3), { blog: 'x', text: 'not ai' }] }).verdict === null,
+    'aiArtVerdict: two blogs make it suspect, unless someone says it is not');
+  check(C.aiArtVerdict({ vision: 'yes' }).verdict === 'suspect' && C.parseAiArt('{"light": [], "ai_generated": "yes"}') === 'yes' && C.parseAiArt('{"ai_generated": "unsure"}') === null,
+    'aiArtVerdict: a sure vision model makes it suspect');
+  // collecting: a like its poster tagged as AI-made is left out and unliked
+  const aiLikes = [like('a1', 'artist', now - 10, { tags: ['ai art'] }), like('a2', 'other', now - 20, { trail: [{ blog: { name: 'maker' }, post: { id: '9' } }] }), like('a3', 'painter', now - 30, { tags: ['not ai art'] })];
+  const aiCallsC = [];
+  const aapi = async (path, opts = {}) => {
+    if (path.startsWith('/v2/user/info')) return { user: { blogs: [{ name: 'main', uuid: 't:m', primary: true }, { name: 'col', uuid: 't:c' }] } };
+    if (path.startsWith('/v2/user/likes')) return { liked_posts: path.includes('before') ? [] : aiLikes };
+    if (path.startsWith('/v2/user/unlike')) { aiCallsC.push('UNLIKE ' + opts.body.id); return {}; }
+    if (path.startsWith('/v2/blog/maker/posts/9')) return { tags: ['midjourney'] };
+    if (opts.method === 'POST') { aiCallsC.push('REBLOG ' + opts.body.parent_post_id); return { id_string: 'n' }; }
+    return { posts: [] };
+  };
+  const ac = await C.autoCollect(aapi, { blog: 't:c', tags: [], imagesOnly: true, autoPalette: false }, now - 1000);
+  check(eq(aiCallsC, ['REBLOG a3', 'UNLIKE a2', 'UNLIKE a1']) && eq(ac.skipped.map(x => x.reason), ['aiArt', 'aiArt']),
+    'autoCollect leaves out and unlikes posts tagged as AI by their poster (also for a reblog, by its original): ' + JSON.stringify(aiCallsC));
   const store2 = { posts: { a: ['x', 1, [['s1', 'b1']]], b: ['y', 1, [['s2', 'b2'], ['s3', 'b3']]], c: ['z', 1, []], d: ['w', 1, [['s4', 'b4']]] } };
   const p1 = C.dailyPick(store2, 2, 'day|0'), p2 = C.dailyPick(store2, 2, 'day|0');
   check(eq(p1, p2) && p1.length === 2 && new Set(p1.map(p => p.id)).size === 2 && !p1.some(p => p.id === 'c'), 'dailyPick: same seed, same picks; distinct posts with images: ' + JSON.stringify(p1));

@@ -10,7 +10,7 @@
 
   let cache = C.emptyCache();
   const settings = {
-    delay: 800, autoSync: true, hideAds: true, hideRecs: false, syncReblogs: true, lang: '', card: 180,
+    delay: 800, autoSync: true, hideAds: true, hideRecs: false, hideAiArt: false, syncReblogs: true, lang: '', card: 180,
     // weak-tag rules (shared by the template edits and the cleanup) and the template options
     rules: { ...C.TPL_RULES }, useBase: true,
     // the cleanup's own rule: average notes on my posts
@@ -854,7 +854,7 @@
   const colSel = new Set();
   const collectSkipList = () => (settings.collect.blog ? [settings.collect.blog] : []);
   const colBlog = () => cache.blogList.find(b => b.uuid === settings.collect.blog) || null;
-  const SKIP_REASONS = ['mine', 'closed', 'noImages'];
+  const SKIP_REASONS = ['mine', 'closed', 'noImages', 'aiArt'];
   const today = () => new Date().toLocaleDateString('en-CA');
 
   async function loadCollection() {
@@ -933,12 +933,20 @@
       const mine = new Set(cache.blogList.filter(b => b.uuid !== settings.collect.blog).map(b => b.name.toLowerCase()));
       const items = [];
       let inIt = 0, skipped = 0;
-      for (const p of likes) {
+      const aiArt = [];
+      for (const [i, p] of likes.entries()) {
         const why = C.collectSkip(p, have, mine, settings.collect);
         if (why === 'have') inIt++;
         else if (why) skipped++;
-        else { items.push(p); have.add(C.rootKey(p)); }
+        else {
+          $('colStatus').textContent = t('aiArtChecking', i + 1, likes.length);
+          if (C.aiArtVerdict({ owner: await C.ownerTagsOf(api, p) }).verdict) { aiArt.push(p); skipped++; continue; }
+          items.push(p); have.add(C.rootKey(p));
+        }
       }
+      let unliked = 0;
+      for (const p of aiArt) { try { await C.unlikePost(api, p); unliked++; } catch (e) { log(t('logFail', C.postId(p), C.errMsg(e)), true, $('colLog')); } }
+      if (unliked) log(t('colUnliked', unliked), false, $('colLog'));
       colScan = { items, have: inIt, skipped };
       colSel.clear();
       items.forEach(p => colSel.add(C.postId(p)));
@@ -1016,7 +1024,7 @@
   const recTags = rec => rec?.[3] || [];
   // Tags on the collection that no category knows, leaving out the tags every reblog gets
   function otherTags() {
-    const common = new Set([...settings.collect.tags.map(C.key), C.AI_MARK]);
+    const common = new Set([...settings.collect.tags.map(C.key), C.AI_MARK, C.AI_ART_TAG]);
     const seen = new Map();
     for (const rec of Object.values(collection?.posts || {})) {
       for (const tag of recTags(rec)) if (!C.refGroupOf(tag) && !common.has(C.key(tag))) seen.set(C.key(tag), tag);
@@ -1041,7 +1049,7 @@
     for (const rec of Object.values(collection?.posts || {})) for (const tag of recTags(rec)) counts.set(C.key(tag), (counts.get(C.key(tag)) || 0) + 1);
     const opt = (v, label) => `<option value="${C.esc(v)}">${C.esc(label)}</option>`;
     sel.innerHTML = opt('', allLabel)
-      + (kinds.includes('a') ? `<optgroup label="${C.esc(t('orgAiGroup'))}">${opt('a:no', t('orgAiNo'))}${opt('a:yes', t('orgAiYes'))}</optgroup>` : '')
+      + (kinds.includes('a') ? `<optgroup label="${C.esc(t('orgAiGroup'))}">${opt('a:no', t('orgAiNo'))}${opt('a:yes', t('orgAiYes'))}${opt('t:' + C.AI_ART_TAG, t('orgAiArtOnly'))}</optgroup>` : '')
       + C.REF_GROUPS.map(g => {
       const name = t('refGroup_' + g.id);
       const own = g.tags.filter(tag => counts.get(tag));
@@ -1180,7 +1188,12 @@
         const rec = colRec(id);
         mark(id, t('aiBusy'), true);
         try {
-          const tags = await C.aiTagImage(settings.ai, aiKey, await C.imageDataUrl(rec[2][0][1] || rec[2][0][0]));
+          const seen = await C.aiTagImage(settings.ai, aiKey, await C.imageDataUrl(rec[2][0][1] || rec[2][0][0]));
+          let tags = seen.aiArt === 'yes' ? [...seen.tags, C.AI_ART_TAG] : seen.tags;
+          // the palette is worked out here for free, for posts that don't have it yet
+          if (!recTags(rec).some(tag => C.refGroupOf(tag) === 'palette')) {
+            try { tags = [...await C.postPalette(rec[2]), ...tags]; } catch { /* the AI's tags still count */ }
+          }
           const have = new Set(recTags(rec).map(C.key));
           const fresh = tags.filter(tag => !have.has(tag));
           if (fresh.length) aiSuggest.set(id, new Map(fresh.map(tag => [tag, true])));
@@ -1201,8 +1214,10 @@
     running = null;
     btn.disabled = false; btn.textContent = t('orgAi'); $('orgAiStop').hidden = true;
     $('orgInfo').textContent = t('orgCount', orgIds.length, orgSel.size);
-    if (aiSuggest.size) { toast(t('aiFinished', aiSuggest.size)); setTimeout(() => $('aiReview').scrollIntoView({ behavior: 'smooth', block: 'start' }), 50); }
     log(t('aiDone', done - fail, fail), false, logBox);
+    // written straight away (the default), or kept for review
+    if (settings.ai.autoApply && aiLooked.size) { toast(t('aiWriting', aiLooked.size)); return aiApply(); }
+    if (aiSuggest.size) { toast(t('aiFinished', aiSuggest.size)); setTimeout(() => $('aiReview').scrollIntoView({ behavior: 'smooth', block: 'start' }), 50); }
     setTimeout(() => { bar.hidden = true; bar.firstElementChild.style.width = '0'; }, 1500);
     renderOrgPanel();
     renderAiReview();
@@ -1241,7 +1256,9 @@
     $('aiBase').value = settings.ai.base;
     $('aiModel').value = settings.ai.model;
     $('aiKey').value = aiKey;
+    $('aiAuto').checked = settings.ai.autoApply;
   }
+  $('aiAuto').addEventListener('change', e => { settings.ai = { ...settings.ai, autoApply: e.target.checked }; saveSettings(); });
   $('aiBase').addEventListener('change', e => { settings.ai = { ...settings.ai, base: e.target.value.trim() }; saveSettings(); });
   $('aiModel').addEventListener('change', e => { settings.ai = { ...settings.ai, model: e.target.value.trim() }; saveSettings(); });
   $('aiKey').addEventListener('change', e => { aiKey = e.target.value.trim(); chrome.storage.local.set({ aiKey }); });
@@ -1257,12 +1274,66 @@
       gr.addColorStop(0, '#f6c35b'); gr.addColorStop(1, '#7a2e1d');
       g.fillStyle = gr; g.fillRect(0, 0, 256, 256);
       const url = URL.createObjectURL(await cv.convertToBlob({ type: 'image/png' }));
-      const tags = await C.aiTagImage(settings.ai, aiKey, await C.imageDataUrl(url, 256));
+      const { tags } = await C.aiTagImage(settings.ai, aiKey, await C.imageDataUrl(url, 256));
       URL.revokeObjectURL(url);
       $('aiStatus').textContent = t('aiOk', tags.map(refLabel).join(t('listSep')));
     } catch (e) {
       $('aiStatus').textContent = t('aiFail', C.errMsg(e));
     }
+  }
+
+  // ----- AI-made images: check the collection, delete reblogs and take back their likes -----
+  // Posts that look AI-made get the tag C.AI_ART_TAG; deleting is a separate, confirmed step
+  function aiArtRun() {
+    if (!collection?.syncedAt) return toast(t('orgNeedRead'));
+    const ids = orgSel.size ? [...orgSel] : Object.keys(collection.posts);
+    const flagged = id => recTags(colRec(id)).some(tag => C.key(tag) === C.AI_ART_TAG);
+    orgRun(t('orgAiArt'), ids, async id => {
+      if (flagged(id)) return null;
+      const v = await C.aiArtCheck(api, colRec(id)[0]);
+      if (!v.verdict) return null;
+      log(t('aiArtHit', id, t('aiArtWhy_' + v.why, v.n)), false, $('orgLog'));
+      return C.mutations.addTags([C.AI_ART_TAG]);
+    }, (i, n) => { $('orgInfo').textContent = t('aiArtChecking', i, n); });
+  }
+  async function deleteRun() {
+    const blog = colBlog();
+    const ids = [...orgSel];
+    if (running || !blog) return;
+    if (!ids.length) return toast(t('needSelect'));
+    if (!confirm(t('orgDeleteConfirm', ids.length))) return;
+    const ctl = running = { aborted: false };
+    const bar = $('orgProg'), logBox = $('orgLog');
+    bar.hidden = false;
+    let deleted = 0, unliked = 0;
+    try {
+      // my likes, by the original they stand for, to take back the ones behind these reblogs
+      const likes = new Map();
+      for (const p of await C.likedPosts(api, { ctl })) { const k = C.rootKey(p); likes.set(k, [...(likes.get(k) || []), p]); }
+      for (let i = 0; i < ids.length && !ctl.aborted; i++) {
+        const id = ids[i], rec = colRec(id);
+        $('orgInfo').textContent = t('orgDeleting', i + 1, ids.length);
+        try {
+          await C.deletePost(api, blog.uuid, id);
+          deleted++;
+          delete collection.posts[id];
+          orgSel.delete(id);
+          for (const p of likes.get(rec?.[0]) || []) { try { await C.unlikePost(api, p); unliked++; } catch (e) { log(t('logFail', C.postId(p), C.errMsg(e)), true, logBox); } }
+        } catch (e) {
+          log(t('logFail', id, C.errMsg(e)), true, logBox);
+          if (e.status === 401 || e.status === 429) break;
+        }
+        bar.firstElementChild.style.width = ((i + 1) / ids.length * 100) + '%';
+        await C.sleep(settings.delay);
+      }
+    } catch (e) {
+      log(C.errMsg(e), true, logBox);
+    }
+    running = null;
+    await chrome.storage.local.set({ collection });
+    log(t('orgDeleted', deleted, unliked), false, logBox);
+    setTimeout(() => { bar.hidden = true; bar.firstElementChild.style.width = '0'; }, 1500);
+    renderCollection();
   }
 
   // "Draw from" for today's images: the whole collection, a category or one tag
@@ -1379,6 +1450,8 @@
     dailyAnother,
     dailyRefresh,
     orgPalette: detectPalette,
+    orgAiArt: aiArtRun,
+    orgDelete: deleteRun,
     orgAi: aiRun,
     aiApply,
     aiDiscard,
@@ -1569,6 +1642,7 @@
   $('autoSync').addEventListener('change', e => { settings.autoSync = e.target.checked; saveSettings(); });
   $('hideAds').addEventListener('change', e => { settings.hideAds = e.target.checked; saveSettings(); });
   $('hideRecs').addEventListener('change', e => { settings.hideRecs = e.target.checked; saveSettings(); });
+  $('hideAiArt').addEventListener('change', e => { settings.hideAiArt = e.target.checked; saveSettings(); });
   $('syncReblogs').addEventListener('change', e => { settings.syncReblogs = e.target.checked; saveSettings(); });
   // Weak-tag rules and template options; a changed rule also changes what the template card plans
   const RULE_INPUTS = { ruleColdOn: 'cold', ruleCold: 'coldPct', ruleMatchOn: 'match', ruleMatch: 'matchMin', manyAt: 'manyAt', spellings: 'spellings' };
@@ -1598,7 +1672,7 @@
     settings.rules = { ...C.TPL_RULES, ...settings.rules };
     settings.clean = { notes: old?.notes ?? true, notesMax: old?.notesMax ?? 1 };
     settings.collect = { ...COLLECT, ...settings.collect };
-    settings.ai = { base: '', model: '', ...settings.ai };
+    settings.ai = { base: '', model: '', autoApply: true, ...settings.ai };
     rebuildIndex();
     document.documentElement.style.setProperty('--card', settings.card + 'px');
     $('cardSize').value = settings.card;
@@ -1606,6 +1680,7 @@
     $('autoSync').checked = settings.autoSync;
     $('hideAds').checked = settings.hideAds;
     $('hideRecs').checked = settings.hideRecs;
+    $('hideAiArt').checked = settings.hideAiArt;
     $('syncReblogs').checked = settings.syncReblogs;
     for (const [id, k] of Object.entries(RULE_INPUTS)) $(id)[$(id).type === 'checkbox' ? 'checked' : 'value'] = settings.rules[k];
     $('useBase').checked = settings.useBase;
