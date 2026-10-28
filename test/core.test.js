@@ -28,7 +28,7 @@ check(eq(C.sortByHeat(['a', 'b'], tie), ['b', 'a']), 'sortByHeat breaks follower
 
 // heatRanks: 1 = hottest, only sampled tags
 const ranks = C.heatRanks(['yuto', 'ygo', 'nope', 'yuto arc v'], stats);
-check(C.isUpsell('使用高级版获得无广告浏览，并可提前使用新功能。') && C.isUpsell('Go Ad-Free with Premium') && !C.isUpsell('查看这些博客 hollowed-light 关注') && !C.isUpsell('ad-free '.repeat(30)), 'isUpsell matches only short ad-free boxes');
+check(C.isUpsell('使用高级版获得无广告浏览，并可提前使用新功能。') && C.isUpsell('Go Ad-Free with Premium') && !C.isUpsell('查看这些博客 example-blog 关注') && !C.isUpsell('ad-free '.repeat(30)), 'isUpsell matches only short ad-free boxes');
 check(ranks.get('ygo') === 1 && ranks.get('yuto arc v') === 2 && ranks.get('yuto') === 3 && !ranks.has('nope'), 'heatRanks');
 
 // suggestTagChanges for the character 游斗 with tags [yuto arc v, yuto, yuto yugioh]
@@ -191,6 +191,126 @@ autoTest = async () => {
   const failing = C.makeApi(async (p, { method }) => { if (method === 'POST') { posts++; throw Object.assign(new Error('boom'), { status: 503 }); } return {}; });
   await failing('/v2/blog/x/posts', { method: 'POST', body: {} }).catch(() => {});
   check(posts === 1, 'a failed POST is not retried (no double reblog)');
+
+  // reblog control: set on my posts, opened only for a reblog between my own blogs, copied to my reblogs
+  const store = { 1: mk('1', now, ['a'], { interactability_reblog: 'everyone' }) };
+  const log = [];
+  const rapi = async (path, opts = {}) => {
+    const id = path.match(/\/posts\/(\w+)/)?.[1];
+    if (opts.method === 'PUT') { log.push('PUT ' + id + ' ' + opts.body.interactability_reblog); store[id].interactability_reblog = opts.body.interactability_reblog || store[id].interactability_reblog; return {}; }
+    if (opts.method === 'POST') { log.push('POST ' + opts.body.interactability_reblog + ' while ' + store[1].interactability_reblog); return { id_string: '2' }; }
+    return JSON.parse(JSON.stringify(store[id]));
+  };
+  const r1 = await C.editPost(rapi, k => k, 'side', '1', C.mutations.reblog('noone'));
+  check(r1.reblog === 'noone' && store[1].interactability_reblog === 'noone', 'mutations.reblog turns reblogs off');
+  check((await C.editPost(rapi, k => k, 'side', '1', C.mutations.reblog('noone'))).unchanged, 'turning off reblogs twice changes nothing');
+  log.length = 0;
+  await C.editPost(rapi, k => k, 'side', '1', C.mutations.addTags(['b']));
+  check(eq(log, ['PUT 1 noone']), 'other edits keep reblogs off: ' + JSON.stringify(log));
+  log.length = 0;
+  await C.reblogPost(rapi, 't:m', 't:s', '1', 'published');
+  check(eq(log, ['POST noone while noone']), 'reblogPost reblogs a closed post of mine as is, and closes the reblog: ' + JSON.stringify(log));
+  log.length = 0;
+  const strict = async (path, opts = {}) => {
+    if (opts.method === 'POST' && store[1].interactability_reblog === 'noone') { log.push('POST refused'); throw Object.assign(new Error('no'), { status: 403 }); }
+    return rapi(path, opts);
+  };
+  await C.reblogPost(strict, 't:m', 't:s', '1', 'published');
+  check(eq(log, ['POST refused', 'PUT 1 everyone', 'POST noone while everyone', 'PUT 1 noone']) && store[1].interactability_reblog === 'noone',
+    'if Tumblr refuses, reblogPost opens the original just for the reblog and closes it again: ' + JSON.stringify(log));
+  const cp = C.mutations.copyFrom({ tags: [], state: 'published', label: { has: false, categories: [] }, reblog: 'noone' })({ tags: [], state: 'published', label: { has: false, categories: [] }, reblog: 'everyone' }, { state: 'published' });
+  check(cp.reblog === 'noone', 'copyFrom copies the reblog control');
+  const dc = { blogs: { 't:m': { name: 'main', posts: { 5: [['a'], 1, 'published', 0, null, false, 'noone'] } }, 't:s': { name: 'side', posts: { 9: [['a'], 1, 'published', 0, 'main/5', false, 'everyone'] } } } };
+  check(C.reblogDiffs(dc)[0]?.diffs.join() === 'reblog', 'reblogDiffs finds a reblog whose reblog control differs');
+
+  // collection blog: likes paged by `before`, my own and closed posts left out, already collected ones skipped
+  const img = { type: 'image', media: [{ url: 'u-big', width: 1280 }, { url: 'u-small', width: 250 }] };
+  const like = (id, owner, lts, extra = {}) => ({ object_type: 'post', id_string: id, blog_name: owner, blog: { name: owner, uuid: 't:' + owner }, reblog_key: 'k' + id, liked_timestamp: lts, timestamp: lts - 5, content: [img], trail: [], ...extra });
+  const likes = [like('1', 'artist', now - 10), like('2', 'other', now - 20, { trail: [{ blog: { name: 'artist' }, post: { id: '7' } }] }), like('3', 'side', now - 30),
+    like('4', 'closed', now - 40, { interactability_reblog: 'noone' }), like('5', 'texty', now - 50, { content: [] }), ...Array.from({ length: 20 }, (_, i) => like('o' + i, 'old', now - 5000 - i))];
+  const colDb = [{ object_type: 'post', id_string: '50', timestamp: now - 9999, trail: [{ blog: { name: 'artist' }, post: { id: '7' } }], content: [], state: 'published' }];
+  const ccalls = [];
+  const capi = async (path, opts = {}) => {
+    if (path.startsWith('/v2/user/info')) return { user: { blogs: [{ name: 'main', uuid: 't:m', primary: true }, { name: 'side', uuid: 't:s' }, { name: 'col', uuid: 't:c' }] } };
+    if (path.startsWith('/v2/user/likes')) {
+      ccalls.push('LIKES ' + path);
+      const before = +new URLSearchParams(path.split('?')[1]).get('before') || Infinity;
+      const page = likes.filter(p => p.liked_timestamp < before).slice(0, 3);
+      return { liked_posts: page, liked_count: likes.length };
+    }
+    if (opts.method === 'POST') { ccalls.push('POST ' + path + ' ' + JSON.stringify(opts.body)); return { id_string: 'n' + ccalls.length }; }
+    return { posts: colDb };
+  };
+  const all = await C.likedPosts(capi);
+  check(all.length === likes.length && ccalls.filter(c => c.startsWith('LIKES')).length === 10, 'likedPosts pages through all likes with before= until an empty page: ' + all.length);
+  const have = new Set(colDb.map(C.rootKey));
+  const why = all.slice(0, 5).map(p => C.collectSkip(p, have, new Set(['main', 'side']), { imagesOnly: true }));
+  check(eq(why, ['', 'have', 'mine', 'closed', 'noImages']), 'collectSkip: new, already collected (same original), my own, reblogs off, no images: ' + JSON.stringify(why));
+  check(C.collectSkip(all[4], have, new Set(), { imagesOnly: false }) === '', 'collectSkip keeps text posts when imagesOnly is off');
+  ccalls.length = 0;
+  const r = await C.autoCollect(capi, { blog: 't:c', tags: ['color'], imagesOnly: true }, now - 1000);
+  const cposts = ccalls.filter(c => c.startsWith('POST'));
+  check(cposts.length === 1 && cposts[0].includes('/v2/blog/t%3Ac/posts') && cposts[0].includes('"parent_tumblelog_uuid":"t:artist"') && cposts[0].includes('"tags":"color"'),
+    'autoCollect reblogs only the new liked post to the collection with its tags: ' + JSON.stringify(cposts));
+  check(r.last === now - 10 && eq(r.skipped.map(s => s.reason), ['noImages', 'closed', 'mine']), 'autoCollect moves since to the newest like and reports what it left out: ' + JSON.stringify(r));
+  check(ccalls.filter(c => c.startsWith('LIKES')).length === 2, 'autoCollect stops reading likes at since');
+  const limited = async (path, opts = {}) => {
+    if (opts.method === 'POST') throw Object.assign(new Error('x'), { status: 400, body: { errors: [{ detail: "You've exceeded your daily post or media limit. Please try again tomorrow." }] } });
+    return capi(path, opts);
+  };
+  const rl = await C.autoCollect(limited, { blog: 't:c', tags: [], imagesOnly: true }, now - 1000);
+  check(rl.error && rl.last === now - 20 && !rl.skipped.some(s => /limit/.test(s.reason)),
+    'autoCollect stops at the daily post limit and tries that like again next time: ' + JSON.stringify(rl));
+  check(C.isPostLimit({ status: 429 }) && !C.isPostLimit({ status: 400, message: 'Bad request' }), 'isPostLimit');
+  const m2 = await C.autoMaintain(async (path, opts = {}) => {
+    if (path.startsWith('/v2/user/info')) return { user: { blogs: [{ name: 'main', uuid: 't:m', primary: true }, { name: 'col', uuid: 't:c' }] } };
+    if (opts.method === 'POST') throw new Error('must not reblog');
+    return { posts: path.includes('t%3Ac') ? [{ object_type: 'post', id_string: '1', timestamp: now, state: 'published', content: [], tags: [] }] : [] };
+  }, k => k, now - 3600, { skip: ['t:c'] });
+  check(m2.length === 0, 'autoMaintain leaves the collection blog out');
+
+
+  // reference categories: every tag in one group only, each with a Chinese name; palette from pixels
+  const refTags = C.REF_GROUPS.flatMap(g => g.tags);
+  check(new Set(refTags).size === refTags.length && refTags.every(tg => C.key(tg) === tg && /^[a-z0-9 ]+$/.test(tg)), 'reference tags are unique, lowercase and unpunctuated');
+  check(refTags.every(tg => C.STRINGS.zh.refNames[tg]), 'every reference tag has a Chinese name: ' + refTags.filter(tg => !C.STRINGS.zh.refNames[tg]));
+  check(C.refGroupOf('Backlight') === 'light' && C.refGroupOf('warm palette') === 'palette' && C.refGroupOf('my own tag') === null, 'refGroupOf');
+  const pix = f => { const a = new Uint8ClampedArray(32 * 32 * 4); for (let i = 0; i < 32 * 32; i++) a.set([...f(i % 32, Math.floor(i / 32)), 255], i * 4); return a; };
+  const has = (tags, ...want) => want.every(w => tags.includes(w));
+  const sunset = C.paletteTags(pix((x, y) => [230, 120 + y * 2, 40]));
+  check(has(sunset, 'warm palette', 'high saturation') && !sunset.includes('cool palette'), 'paletteTags: sunset is warm and saturated: ' + sunset);
+  const night = C.paletteTags(pix((x, y) => [20, 30 + y, 80 + y]));
+  check(has(night, 'cool palette', 'low key'), 'paletteTags: night blue is cool and dark: ' + night);
+  const gray = C.paletteTags(pix(x => [x * 8, x * 8, x * 8]));
+  check(has(gray, 'grayscale', 'high contrast') && !gray.includes('warm palette'), 'paletteTags: a gray ramp is grayscale with high contrast: ' + gray);
+  const ob = C.paletteTags(pix(x => (x < 16 ? [240, 130, 30] : [30, 90, 220])));
+  check(has(ob, 'warm cool contrast', 'complementary colors'), 'paletteTags: orange against blue: ' + ob);
+  check(C.paletteTags(new Uint8ClampedArray(16)).length === 0, 'paletteTags: a transparent image gives nothing');
+
+  // AI sorting: only listed tags survive, in list order; a provider without response_format is asked again
+  check(eq(C.parseAiTags('```json\n{"light": ["Soft Light", "made up"], "material": ["fur"], "palette": ["warm palette"], "x": 3}\n```'), ['soft light', 'fur']),
+    'parseAiTags keeps listed hand-picked tags only, case-insensitive');
+  check(eq(C.parseAiTags('no json here'), []) && eq(C.parseAiTags('{broken'), []), 'parseAiTags survives replies without JSON');
+  check(!C.aiPrompt().includes('warm palette') && C.aiPrompt().includes('backlight'), 'the prompt lists the hand-picked groups, not the palette');
+  const aiCalls = [];
+  const aiFetch = async (url, opts) => {
+    const body = JSON.parse(opts.body);
+    aiCalls.push(url + ' ' + ('response_format' in body) + ' ' + opts.headers.Authorization);
+    if (body.response_format) return { ok: false, status: 400, statusText: 'Bad', json: async () => ({ error: { message: 'response_format is not supported' } }) };
+    return { ok: true, json: async () => ({ choices: [{ message: { content: '{"composition": ["close up"], "subject": ["animal"]}' } }] }) };
+  };
+  const aiTags = await C.aiTagImage({ base: 'https://ai.example/v1/', model: 'm' }, 'k', 'data:image/jpeg;base64,AA', aiFetch);
+  check(eq(aiTags, ['close up', 'animal']) && eq(aiCalls, ['https://ai.example/v1/chat/completions true Bearer k', 'https://ai.example/v1/chat/completions false Bearer k']),
+    'aiTagImage posts to <base>/chat/completions and retries without response_format: ' + JSON.stringify(aiCalls));
+  let aiErr = '';
+  await C.aiTagImage({ base: 'https://ai.example/v1', model: 'm' }, 'k', 'x', async () => ({ ok: true, json: async () => ({ choices: [{ finish_reason: 'length', message: { content: '' } }] }) })).catch(e => { aiErr = e.message; });
+  check(/tokens/.test(aiErr), 'aiTagImage says when the reply ran out of tokens');
+  const store2 = { posts: { a: ['x', 1, [['s1', 'b1']]], b: ['y', 1, [['s2', 'b2'], ['s3', 'b3']]], c: ['z', 1, []], d: ['w', 1, [['s4', 'b4']]] } };
+  const p1 = C.dailyPick(store2, 2, 'day|0'), p2 = C.dailyPick(store2, 2, 'day|0');
+  check(eq(p1, p2) && p1.length === 2 && new Set(p1.map(p => p.id)).size === 2 && !p1.some(p => p.id === 'c'), 'dailyPick: same seed, same picks; distinct posts with images: ' + JSON.stringify(p1));
+  check(C.dailyPick(store2, 9, 'x').length === 3, 'dailyPick gives at most one image per post');
+  const seeds = new Set(Array.from({ length: 12 }, (_, k) => C.dailyPick(store2, 1, 'day|' + k)[0].id));
+  check(seeds.size >= 2, 'dailyPick changes with the seed');
 };
 check(C.statFresh(stats['yuto arc v']) && !C.statFresh({ match: 1, followers: 1, at: now }), 'statFresh requires co');
 

@@ -1,7 +1,7 @@
 {
   "manifest_version": 3,
   "name": "Tumblr Tag Helper",
-  "version": "0.7.0",
+  "version": "0.8.0",
   "description": "Tag autocomplete and tag templates on Tumblr, upgrades to the mass post editor, and a full-page manager for your posts and tags: bulk tags, visibility, community labels, tag cleanup and a shared tag library.",
   "permissions": [
     "storage",
@@ -9,8 +9,12 @@
     "declarativeNetRequest",
     "alarms"
   ],
+  "optional_host_permissions": [
+    "https://*/*"
+  ],
   "host_permissions": [
     "https://www.tumblr.com/*",
+    "https://*.media.tumblr.com/*",
     "https://raw.githubusercontent.com/*",
     "https://gist.githubusercontent.com/*"
   ],

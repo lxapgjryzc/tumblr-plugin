@@ -17,6 +17,7 @@
       <button class="tab" data-tab="lib" data-i18n="navLib"></button>
       <button class="tab" data-tab="packs" data-i18n="navPacks"></button>
       <button class="tab" data-tab="reblogs" data-i18n="navReblogs"></button>
+      <button class="tab" data-tab="collect" data-i18n="navCollect"></button>
       <button class="tab" data-tab="settings" data-i18n="navSettings"></button>
     </nav>
   </header>
@@ -50,6 +51,7 @@
             <option value="private" data-i18n="st_private"></option>
             <option value="label" data-i18n="hasLabel"></option>
             <option value="nolabel" data-i18n="noLabel"></option>
+            <option value="noreblog" data-i18n="reblogsOff"></option>
           </select>
           <button data-act="selAll" data-i18n="selAll"></button>
           <button data-act="selInvert" data-i18n="selInvert"></button>
@@ -87,6 +89,14 @@
           <div class="row">
             <button data-act="setPublic" data-i18n="setPublic"></button>
             <button data-act="setPrivate" data-i18n="setPrivate"></button>
+          </div>
+        </section>
+        <section class="card">
+          <h3 data-i18n="reblogCtl"></h3>
+          <div class="muted hint" data-i18n="reblogCtlHint"></div>
+          <div class="row">
+            <button data-act="reblogAllow" data-i18n="reblogAllow"></button>
+            <button data-act="reblogDeny" data-i18n="reblogDeny"></button>
           </div>
         </section>
         <section class="card">
@@ -204,6 +214,75 @@
       <div id="rbAuto" class="log"></div>
     </section>
 
+    <section class="view collect" data-view="collect" hidden>
+      <p class="muted" data-i18n="colIntro"></p>
+      <div class="row"><label for="colBlog" data-i18n="colBlog"></label><select id="colBlog"></select>
+        <label for="colTags" data-i18n="colTags"></label><input type="text" id="colTags" class="grow" data-i18n-ph="colTagsPh"></div>
+      <div class="row"><label><input type="checkbox" id="colAuto"><span data-i18n="colAuto"></span></label></div>
+      <div class="row"><label><input type="checkbox" id="colImagesOnly"><span data-i18n="colImagesOnly"></span></label></div>
+      <div class="row"><label><input type="checkbox" id="colAutoPalette"><span data-i18n="colAutoPalette"></span></label></div>
+
+      <h3 data-i18n="dailyTitle"></h3>
+      <div class="row">
+        <label for="dailyN" data-i18n="dailyCount"></label><input type="number" id="dailyN" min="1" max="12">
+        <label for="dailyFrom" data-i18n="dailyFrom"></label><select id="dailyFrom"></select>
+        <button class="pri" data-act="dailyAnother" data-i18n="dailyAnother"></button>
+        <button data-act="dailyRefresh" data-i18n="dailyRefresh"></button>
+        <span id="dailyInfo" class="muted"></span>
+      </div>
+      <div id="daily" class="daily"></div>
+
+      <h3 data-i18n="orgTitle"></h3>
+      <p class="muted" data-i18n="orgIntro"></p>
+      <div class="row">
+        <label for="orgShow" data-i18n="orgShow"></label><select id="orgShow"></select>
+        <button data-act="orgSelAll" data-i18n="selAll"></button>
+        <button data-act="orgSelNone" data-i18n="selNone"></button>
+        <button class="pri" data-act="orgPalette" data-i18n="orgPalette"></button>
+        <span class="muted" data-i18n="orgPaletteHint"></span>
+        <button class="pri" id="orgAiBtn" data-act="orgAi" data-i18n="orgAi"></button>
+        <button class="dan" id="orgAiStop" data-act="stopRun" data-i18n="stop" hidden></button>
+        <span class="muted" data-i18n="orgAiHint"></span>
+      </div>
+      <div class="organize">
+        <div class="orgleft">
+          <div id="orgInfo" class="muted"></div>
+          <div id="orgList" class="grid colgrid" tabindex="0"></div>
+        </div>
+        <aside id="orgPanel" class="orgpanel"></aside>
+      </div>
+      <div id="aiReview" class="aireview" hidden></div>
+      <div class="actions">
+        <div class="prog" id="orgProg" hidden><i></i></div>
+        <div id="orgLog" class="log"></div>
+      </div>
+
+      <h3 data-i18n="colScan"></h3>
+      <div class="row">
+        <button class="pri" data-act="colScan" data-i18n="colScan"></button>
+        <button data-act="colStop" hidden data-i18n="stop"></button>
+        <span id="colStatus" class="muted"></span>
+      </div>
+      <div class="row">
+        <button data-act="colAll" data-i18n="selAll"></button>
+        <button data-act="colNone" data-i18n="selNone"></button>
+        <span id="colSelInfo" class="muted"></span>
+      </div>
+      <div class="muted hint" data-i18n="selHint"></div>
+      <div id="colList" class="grid colgrid" tabindex="0"></div>
+      <div class="actions">
+        <div class="row">
+          <button class="pri" id="colReblogBtn" data-act="colReblog"></button>
+          <select id="colWhen"><option value="published" data-i18n="rbNow"></option><option value="queue" data-i18n="colQueue"></option></select>
+        </div>
+        <div class="prog" id="colProg" hidden><i></i></div>
+        <div class="row" id="colRunRow" hidden><span id="colRunInfo" class="muted grow"></span><button class="dan stop" data-act="stopRun" data-i18n="stop"></button></div>
+        <div id="colLog" class="log"></div>
+      </div>
+      <h3 data-i18n="colLogTitle"></h3>
+      <div id="colAutoLog" class="log"></div>
+    </section>
+
     <section class="view settings" data-view="settings" hidden>
       <div class="row"><label for="lang" data-i18n="langTitle"></label><select id="lang"></select></div>
       <div class="row"><label for="delay" data-i18n="delay"></label><input type="number" id="delay" min="200" step="100"></div>
@@ -217,6 +296,13 @@
         <input type="number" id="ruleCold" min="1" max="100" step="5"><span class="muted" data-i18n="tplRuleColdB"></span></div>
       <div class="row"><label><input type="checkbox" id="ruleMatchOn"><span data-i18n="tplRuleMatch"></span></label>
         <input type="number" id="ruleMatch" min="0" max="100" step="5"><span class="muted" data-i18n="tplRuleMatchB"></span></div>
+
+      <h3 data-i18n="aiTitle"></h3>
+      <p class="muted" data-i18n="aiIntro"></p>
+      <div class="row"><label for="aiBase" data-i18n="aiBase"></label><input type="text" id="aiBase" class="grow" data-i18n-ph="aiBasePh" spellcheck="false"></div>
+      <div class="row"><label for="aiModel" data-i18n="aiModel"></label><input type="text" id="aiModel" class="grow" data-i18n-ph="aiModelPh" spellcheck="false"></div>
+      <div class="row"><label for="aiKey" data-i18n="aiKey"></label><input type="password" id="aiKey" class="grow" data-i18n-ph="aiKeyPh" autocomplete="off"></div>
+      <div class="row"><button data-act="aiTest" data-i18n="aiTest"></button><span id="aiStatus" class="muted"></span></div>
 
       <h3 data-i18n="tplOptionsTitle"></h3>
       <div class="row"><label><input type="checkbox" id="useBase"><span data-i18n="tplUseBase"></span></label></div>

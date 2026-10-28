@@ -74,7 +74,7 @@
     if (syncing) return;
     syncing = { aborted: false };
     try {
-      await C.syncAll(api, cache, full, syncing, msg => { if (!quiet) toast(msg, true); }, t, save);
+      await C.syncAll(api, cache, full, syncing, msg => { if (!quiet) toast(msg, true); }, t, save, settings.collect?.blog ? [settings.collect.blog] : []);
       rebuildIndex();
       if (!quiet) toast(t('syncDone', index.tags.size));
     } catch (e) {
@@ -99,6 +99,8 @@
 .dd .it span { flex:1; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
 .dd .it small { color:var(--muted); }
 .dd .it.on { background:var(--sel); }
+.dd.menu { min-width:140px; }
+.dd.menu .it:hover { background:var(--sel); }
 .toast { position:fixed; left:50%; bottom:40px; transform:translateX(-50%); background:var(--fg); color:var(--bg); padding:8px 14px; border-radius:6px; font-size:13px; z-index:5; max-width:80vw; }
 .status { position:fixed; right:16px; bottom:16px; width:360px; max-height:50vh; overflow:auto; background:var(--bg); color:var(--fg); border:1px solid var(--line); border-radius:8px; box-shadow:0 8px 28px rgba(0,0,0,.35); font-size:13px; padding:10px 12px; z-index:5; white-space:pre-wrap; }
 .status .row { display:flex; gap:8px; align-items:center; margin-top:8px; justify-content:flex-end; }
@@ -114,7 +116,7 @@
   host.style.cssText = 'all:initial;position:fixed;top:0;left:0;width:0;height:0;z-index:2147483000;';
   document.body.appendChild(host);
   const root = host.attachShadow({ mode: 'open' });
-  root.innerHTML = `<style>${CSS}</style><div class="wrap"><div class="dd" hidden></div><div class="toast" hidden></div><div class="preview" hidden></div>
+  root.innerHTML = `<style>${CSS}</style><div class="wrap"><div class="dd" hidden></div><div class="dd menu" hidden></div><div class="toast" hidden></div><div class="preview" hidden></div>
     <div class="status" hidden><div class="msg"></div><div class="row"><button class="stop" hidden></button><button class="close">×</button></div></div></div>`;
 
   let toastTimer;
@@ -1117,7 +1119,7 @@
     function afterEdit(id, r) {
       liveTags.set(id, r.tags.slice());
       const rec = cache.blogs[blogUuid()]?.posts?.[id];
-      if (rec) { rec[0] = C.uniqTags(r.tags); rec[2] = r.state; }
+      if (rec) { rec[0] = C.uniqTags(r.tags); rec[2] = r.state; rec[6] = r.reblog; }
       const count = document.getElementById('tag_count_' + id);
       if (count) count.textContent = count.textContent.replace(/\d+/, String(r.tags.length));
       const brick = document.getElementById('post_' + id);
@@ -1174,8 +1176,27 @@
       // "Make public" next to the official "Make private"
       const pub = headerButton('tth_make_public', t('setPublic'), privateBtn, () =>
         runOnPosts(t('setPublic'), C.mutations.state(t, stateName, 'published')));
+      // Tumblr's reblog control, which the mass editor doesn't offer: one button with a small menu, so the
+      // toolbar stays on one line
+      const menu = root.querySelector('.dd.menu');
+      const rbWrap = headerButton('tth_reblog', t('reblogCtl') + ' ▾', pub, e => {
+        e.stopPropagation();
+        if (!menu.hidden) { menu.hidden = true; return; }
+        const r = e.currentTarget.getBoundingClientRect();
+        menu.innerHTML = [['noone', 'reblogDeny'], ['everyone', 'reblogAllow']]
+          .map(([mode, k]) => `<div class="it" data-mode="${mode}"><span>${C.esc(t(k))}</span></div>`).join('');
+        Object.assign(menu.style, { left: r.left + 'px', top: (r.bottom + 4) + 'px' });
+        menu.hidden = false;
+      });
+      menu.addEventListener('click', e => {
+        const it = e.target.closest('.it');
+        if (!it) return;
+        menu.hidden = true;
+        runOnPosts(t(it.dataset.mode === 'noone' ? 'reblogDeny' : 'reblogAllow'), C.mutations.reblog(it.dataset.mode));
+      });
+      document.addEventListener('click', () => { menu.hidden = true; });
       // Reorder each selected post's tags, most popular sitewide first
-      const sortWrap = headerButton('tth_sort_heat', t('sortHeat'), pub, async () => {
+      const sortWrap = headerButton('tth_sort_heat', t('sortHeat'), rbWrap, async () => {
         if (running) return;
         const ids = selectedIds();
         if (!ids.length) return toast(t('needSelect'));

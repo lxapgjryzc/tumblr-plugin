@@ -19,7 +19,7 @@ button:hover { border-color: var(--accent); }
 button.pri { background: var(--accent); color: var(--accent-fg); border-color: var(--accent); }
 button.dan { color: var(--danger); }
 button:disabled { opacity: .45; cursor: not-allowed; }
-input[type=text], input[type=number], select { background: var(--panel); border: 1px solid var(--line); border-radius: 6px; padding: 5px 8px; outline: none; }
+input[type=text], input[type=number], input[type=password], select { background: var(--panel); border: 1px solid var(--line); border-radius: 6px; padding: 5px 8px; outline: none; }
 input:focus, select:focus { border-color: var(--accent); }
 select option { background: var(--panel); color: var(--fg); }
 input[type=number] { width: 90px; }
@@ -112,8 +112,8 @@ textarea:focus { border-color: var(--accent); }
 .tr.hid .n { text-decoration: line-through; opacity: .6; }
 .tr.bad .muted { color: var(--danger); }
 .tr button { padding: 2px 8px; font-size: 12px; }
-.view.clean .actions, .view.packs .actions { display: flex; flex-direction: column; gap: 8px; }
-.view.packs h3, .view.settings h3 { margin: 10px 0 0; font-size: 15px; }
+.view.clean .actions, .view.packs .actions, .view.collect .actions { display: flex; flex-direction: column; gap: 8px; }
+.view.packs h3, .view.settings h3, .view.collect h3 { margin: 10px 0 0; font-size: 15px; }
 .view.settings .actions { display: flex; flex-direction: column; gap: 8px; }
 .view.settings .rblist { flex: none; min-height: 0; max-height: 40vh; }
 .post.copy { cursor: default; }
@@ -134,3 +134,28 @@ textarea:focus { border-color: var(--accent); }
 .dd .it small { color: var(--muted); }
 .dd .it.on { background: var(--sel); }
 .toast { position: fixed; left: 50%; bottom: 40px; transform: translateX(-50%); background: var(--fg); color: var(--bg); padding: 9px 16px; border-radius: 6px; z-index: 11; }
+
+/* Collection: today's study images and the liked posts not in the collection yet */
+.daily { display: grid; grid-template-columns: repeat(auto-fill, minmax(260px, 1fr)); gap: 12px; }
+.daily a { display: block; background: var(--soft); border-radius: 8px; overflow: hidden; }
+.daily img { width: 100%; height: 340px; object-fit: contain; display: block; }
+.daily .empty { padding: 30px; text-align: center; grid-column: 1 / -1; }
+.colgrid { flex: none; max-height: 60vh; min-height: 120px; --card: 140px; }
+.colgrid .post .who { font-size: 12px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; padding: 4px 8px 6px; }
+.organize { display: flex; gap: 16px; align-items: flex-start; }
+.orgleft { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 6px; }
+.orgpanel { width: 380px; flex: none; max-height: 70vh; overflow: auto; background: var(--panel); border: 1px solid var(--line); border-radius: 10px; padding: 10px 12px; display: flex; flex-direction: column; gap: 10px; }
+.orgpanel h4 { margin: 0 0 4px; font-size: 13px; color: var(--muted); font-weight: 600; }
+.chips2 { display: flex; flex-wrap: wrap; gap: 5px; }
+.refchip { padding: 2px 9px; border-radius: 12px; font-size: 13px; }
+.refchip.on { background: var(--accent); color: var(--accent-fg); border-color: var(--accent); }
+.refchip.part { border-color: var(--accent); background: var(--sel); }
+@media (max-width: 900px) { .organize { flex-direction: column; } .orgpanel { width: 100%; } }
+.aireview { background: var(--panel); border: 1px solid var(--line); border-radius: 10px; padding: 10px 12px; display: flex; flex-direction: column; gap: 8px; }
+.aireview h4 { margin: 0; font-size: 13px; color: var(--muted); font-weight: 600; }
+.airow { display: flex; gap: 10px; align-items: center; }
+.airow img { width: 72px; height: 72px; object-fit: cover; border-radius: 6px; flex: none; background: var(--soft); }
+.post.ai-busy::after, .post.ai-done::after { content: attr(data-ai); position: absolute; left: 0; right: 0; top: 0; aspect-ratio: 1; display: flex; align-items: center; justify-content: center; color: #fff; font-weight: 600; font-size: 14px; pointer-events: none; }
+.post.ai-busy::after { background: rgba(0,0,0,.55); animation: aipulse 1.2s ease-in-out infinite; }
+.post.ai-done::after { background: rgba(0,0,0,.35); font-size: 13px; }
+@keyframes aipulse { 50% { background: rgba(0,0,0,.3); } }

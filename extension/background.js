@@ -1,6 +1,6 @@
 // Service worker: opens the manager page, fetches pack URLs for the content script, blocks ad networks while
 // "Hide ads" is on, and every 10 minutes keeps reblogs between my blogs in line (TTHCore.autoMaintain) while
-// that setting is on
+// that setting is on, and reblogs new likes onto the collection blog (TTHCore.autoCollect) while that is on
 importScripts('core.js');
 const C = TTHCore;
 const TUMBLR = 'https://www.tumblr.com';
@@ -36,7 +36,7 @@ chrome.storage.onChanged.addListener(ch => {
 // so turning it on doesn't reblog the whole back catalogue. What was done goes to storage key autoLog.
 const ALARM = 'tth-maintain';
 chrome.alarms.get(ALARM).then(a => { if (!a) chrome.alarms.create(ALARM, { periodInMinutes: 10, delayInMinutes: 1 }); });
-chrome.alarms.onAlarm.addListener(a => { if (a.name === ALARM) maintain(); });
+chrome.alarms.onAlarm.addListener(a => { if (a.name === ALARM) maintain().then(collect); });
 
 async function request(path, { method, body }) {
   for (let retry = 0; ; retry++) {
@@ -60,16 +60,39 @@ async function maintain() {
   const { settings = {}, autoSince, autoLog = [] } = await chrome.storage.local.get(['settings', 'autoSince', 'autoLog']);
   if (settings.syncReblogs === false) return;
   busy = true;
+  const skip = settings.collect?.blog ? [settings.collect.blog] : [];
   try {
     let since = autoSince;
     if (!since) { since = Math.floor(Date.now() / 1000); await chrome.storage.local.set({ autoSince: since }); }
     const { t } = C.makeI18n(() => settings.lang || '', () => []);
-    const done = await C.autoMaintain(C.makeApi(request), t, since);
+    const done = await C.autoMaintain(C.makeApi(request), t, since, { skip });
     if (done.length) await chrome.storage.local.set({ autoLog: [{ at: Date.now(), done }, ...autoLog].slice(0, 30) });
   } catch (e) {
     // not logged in or offline: try again next time, and say so once
     if (autoLog[0]?.error !== C.errMsg(e)) await chrome.storage.local.set({ autoLog: [{ at: Date.now(), error: C.errMsg(e) }, ...autoLog].slice(0, 30) });
   } finally {
     busy = false;
+  }
+}
+
+// ---------- Likes onto the collection blog, unattended ----------
+// Only likes made after this was turned on (storage key collectSince, a liked timestamp that moves forward
+// with each pass) are reblogged; the manager page reblogs older ones on request. Log: storage key collectLog.
+let collecting = false;
+async function collect() {
+  const { settings = {}, collectSince, collectLog = [] } = await chrome.storage.local.get(['settings', 'collectSince', 'collectLog']);
+  const col = settings.collect;
+  if (!col?.blog || !col.auto || collecting) return;
+  collecting = true;
+  const note = e => chrome.storage.local.set({ collectLog: [{ at: Date.now(), ...e }, ...collectLog].slice(0, 30) });
+  try {
+    if (!collectSince) { await chrome.storage.local.set({ collectSince: Math.floor(Date.now() / 1000) }); return; }
+    const r = await C.autoCollect(C.makeApi(request), col, collectSince);
+    if (r.last > collectSince) await chrome.storage.local.set({ collectSince: r.last });
+    if (r.done.length || r.skipped.length || r.error) await note({ done: r.done, skipped: r.skipped, error: r.error });
+  } catch (e) {
+    if (collectLog[0]?.error !== C.errMsg(e)) await note({ error: C.errMsg(e) });
+  } finally {
+    collecting = false;
   }
 }

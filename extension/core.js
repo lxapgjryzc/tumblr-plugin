@@ -129,7 +129,9 @@ const TTHCore = (() => {
       boxPublished: 'Published', boxDraft: 'Drafts', boxQueue: 'Queue',
       phTagFilter: 'Filter by tag (optional)', load: 'Load', more: 'Load 100 more', all: 'Load all', stop: 'Stop',
       phSearch: 'Search text or tags in loaded posts', allStates: 'All states',
-      hasLabel: 'With community label', noLabel: 'Without community label',
+      hasLabel: 'With community label', noLabel: 'Without community label', reblogsOff: 'Reblogs turned off',
+      reblogCtl: 'Reblogs', reblogAllow: 'Allow reblogs', reblogDeny: 'Don\'t allow reblogs', reblogOffBadge: '⛔🔁',
+      reblogCtlHint: 'Tumblr\'s reblog control: who can reblog the post. Turned off, other accounts can\'t reblog it. My own blogs still reblog it to each other, and my reblogs get the same setting.',
       selAll: 'Select all', selInvert: 'Invert', selNone: 'Clear',
       selHint: 'Click or drag to select · Shift+click for a range · Ctrl+A for all',
       cardSize: 'Card size', visibility: 'Visibility', communityLabel: 'Community label', labelOn: 'Add', remove: 'Remove',
@@ -156,12 +158,51 @@ const TTHCore = (() => {
       rbIntro: 'Reblogs of my own posts follow the original. This finds reblogs whose tags, visibility or community label differ from their original, and published posts on my side blogs that my main blog hasn\'t reblogged yet (for example ones posted on tumblr.com or queued). Sync the tag library first.',
       rbFound: (d, m) => `${d} reblog(s) differ from their original · ${m} post(s) not on the main blog yet`,
       rbNone: 'Everything is in line', rbHint: 'Check to see what is out of line',
-      rbDiff_tags: 'tags', rbDiff_state: 'visibility', rbDiff_label: 'community label', rbMissing: name => `${name} hasn't reblogged it yet`,
+      rbDiff_tags: 'tags', rbDiff_state: 'visibility', rbDiff_label: 'community label', rbDiff_reblog: 'reblog control', rbMissing: name => `${name} hasn't reblogged it yet`,
       rbFix: 'Make reblogs match their original', rbReblog: 'Reblog these to my main blog', rbQueue: 'into the main blog\'s queue', rbNow: 'publish now',
       rbConfirmReblog: (n, name, when) => `Reblog ${n} post(s) to ${name} (${when})?`,
       autoTitle: 'Done in the background (every 10 minutes, posts published after this was turned on)',
       autoNone: 'Nothing yet', autoError: e => `Couldn't check: ${e}`,
       autoReblogged: (post, to) => `reblogged ${post} to ${to}`, autoFixed: (post, src) => `${post} brought in line with ${src}`,
+      navCollect: 'Collection',
+      colIntro: 'Pick one of your blogs as a collection: posts you like are reblogged onto it with your tags, and it hands you a few random images from it each day for a quick study. Your own posts and posts that don\'t allow reblogs are left out. The collection blog is left out of the tag library and of the reblogs between your blogs.',
+      colBlog: 'Collection blog', colBlogNone: '— off —', colTags: 'Tags on its reblogs', colTagsPh: 'Tags, separated by commas',
+      colAuto: 'Reblog posts I like onto it automatically (every 10 minutes, likes after this was turned on)',
+      colImagesOnly: 'Only posts with images', colQueue: 'into its queue',
+      colScan: 'Check my likes', colScanning: (n, total) => `Reading likes… ${n}${total ? ' / ' + total : ''}`,
+      colReading: n => `Reading the collection… ${n}`,
+      colFound: (n, have, skip) => `${n} liked post(s) not in the collection yet · ${have} already in it · ${skip} left out`,
+      colHint: 'Check your likes to see which aren\'t in the collection yet', colNone: 'Every liked post is in the collection',
+      colReblog: name => `Reblog the ticked posts to ${name}`, colConfirm: (n, name, when) => `Reblog ${n} liked post(s) to ${name} (${when})?`,
+      colSkip_mine: 'my own post', colSkip_closed: 'reblogs turned off', colSkip_noImages: 'no images',
+      colNeedBlog: 'Choose a collection blog first', colRateLimit: 'Tumblr\'s daily post limit was reached; the rest can go tomorrow',
+      colLogTitle: 'Done in the background', colAutoDone: (n, name) => `reblogged ${n} liked post(s) to ${name}`,
+      colAutoSkipped: list => `left out: ${list}`,
+      colAutoPalette: 'Work out the palette when reblogging and add its tags',
+      orgTitle: 'Sort the collection',
+      orgIntro: 'Tag the collection by what each image helps you study. Select posts (click, drag, Shift+click), then click a tag to add it to all of them, or click it again to take it off. Palette tags can be worked out from the image.',
+      orgShow: 'Show', orgAll: 'All posts', orgUnsorted: g => `Not sorted by ${g} yet`, orgWith: tag => `Tagged ${tag}`,
+      orgPalette: 'Detect palette', orgPaletteHint: 'For the selected posts, or every post without palette tags when none is selected',
+      orgOther: 'Other tags', orgOtherPh: 'Your own tags, separated by commas', orgAdd: 'Add',
+      orgNeedRead: 'Read the collection first', orgNone: 'No posts here', orgCount: (n, sel) => `${n} post(s) · ${sel} selected`,
+      orgAdded: (tag, n) => `#${tag} added to ${n} post(s)`, orgRemoved: (tag, n) => `#${tag} taken off ${n} post(s)`,
+      orgDetected: (n, m) => `palette tags added to ${n} post(s)${m ? ` · ${m} unchanged` : ''}`, orgDetecting: (i, n) => `Detecting palette… ${i} / ${n}`,
+      dailyFrom: 'Draw from', dailyFromAll: 'the whole collection',
+      refGroup_palette: 'Palette', refGroup_light: 'Light and shadow', refGroup_material: 'Material', refGroup_composition: 'Composition',
+      refGroup_subject: 'Subject', refGroup_technique: 'Technique', refGroup_other: 'Other',
+      refNames: {},
+      aiTitle: 'AI image sorting',
+      aiIntro: 'Optional. With an AI model that can see images (any OpenAI-compatible service), "AI sort" on the collection page suggests light, material, composition, subject and technique tags for the selected posts. Each image is sent to that service and it charges for every image. The key is kept only in this browser.',
+      aiBase: 'API address', aiBasePh: 'https://api.example.com/v1', aiModel: 'Model', aiModelPh: 'a model that accepts images', aiKey: 'API key', aiKeyPh: 'Paste your key here',
+      aiTest: 'Test', aiTesting: 'Sending a test image…', aiOk: tags => `It works${tags ? ' · it said: ' + tags : ''}`, aiFail: e => `Didn't work: ${e}`,
+      aiNeedSetup: 'Set up AI image sorting in Settings first', aiNoAccess: 'Chrome wasn\'t allowed to reach this address',
+      orgAiGroup: 'AI sorting', orgAiNo: 'Not looked at by the AI yet', orgAiYes: 'Looked at by the AI',
+      orgAi: 'AI sort', orgAiHint: 'Selected posts only; each image goes to your AI service',
+      aiRunning: (i, n) => `AI is looking… ${i} / ${n}`, aiBusy: 'Looking…', aiCardDone: n => (n ? `${n} suggestion(s)` : 'nothing to add'), aiFinished: n => `AI is done: ${n} post(s) with suggestions below`, aiReviewTitle: 'AI suggestions: click a tag to leave it out, then write them',
+      aiApply: 'Write the suggested tags', aiDiscard: 'Discard', aiNothing: 'The AI had nothing to add', aiDone: (n, f) => `AI looked at ${n} post(s)${f ? ` · ${f} failed` : ''}`,
+      aiMarkHint: 'Writing also tags every post the AI looked at with #ai sorted; Discard writes nothing',
+      dailyTitle: 'Today\'s quick study', dailyCount: 'Images', dailyAnother: 'Another set', dailyRefresh: 'Read the collection again',
+      dailyEmpty: 'The collection has no images yet', dailyInfo: (n, date) => `${n} post(s) with images in the collection${date ? ' · read ' + date : ''}`,
       blogStat: (name, n, date) => `${name}: ${n} posts${date ? ', ' + date : ''}`, statSep: '; ',
       neverSynced: 'Not synced yet. Click "Sync new posts" to read the tags of published posts on your main blog and all side blogs.',
       manual: ' · manual', nBlogs: n => ` · ${n} blogs`,
@@ -262,7 +303,9 @@ const TTHCore = (() => {
       boxPublished: '已发布', boxDraft: '草稿', boxQueue: '队列',
       phTagFilter: '按标签筛选（可留空）', load: '加载', more: '再加载 100 篇', all: '加载全部', stop: '停止',
       phSearch: '在已加载的帖子里搜索文字/标签', allStates: '全部状态',
-      hasLabel: '有内容标签', noLabel: '无内容标签',
+      hasLabel: '有内容标签', noLabel: '无内容标签', reblogsOff: '已禁止转发',
+      reblogCtl: '转发', reblogAllow: '允许转发', reblogDeny: '禁止转发', reblogOffBadge: '⛔🔁',
+      reblogCtlHint: '官方的转发控制（谁可以转发这条帖子）。关闭后其他账号不能转发；我自己的主博客和子博客之间照常互转，我的转发也会设成一样。',
       selAll: '全选', selInvert: '反选', selNone: '清空',
       selHint: '点击 / 拖动多选 · Shift 点选范围 · Ctrl+A 全选',
       cardSize: '卡片大小', visibility: '可见性', communityLabel: '内容标签', labelOn: '添加', remove: '移除',
@@ -289,12 +332,70 @@ const TTHCore = (() => {
       rbIntro: '转自自己博客的帖子会自动跟原帖保持一致。这里检查两件事：tag、可见性或内容标签和原帖不一致的转发；子博客上已发布、但主博客还没转发的帖子（比如在 Tumblr 网页上直接发的，或排队后才发出的）。请先同步标签库。',
       rbFound: (d, m) => `${d} 条转发和原帖不一致 · ${m} 条帖子还没转到主博客`,
       rbNone: '全部一致', rbHint: '点“检查转发”查看哪里不一致',
-      rbDiff_tags: 'tag', rbDiff_state: '可见性', rbDiff_label: '内容标签', rbMissing: name => `${name} 还没转发`,
+      rbDiff_tags: 'tag', rbDiff_state: '可见性', rbDiff_label: '内容标签', rbDiff_reblog: '转发控制', rbMissing: name => `${name} 还没转发`,
       rbFix: '按原帖修正转发', rbReblog: '转发到主博客', rbQueue: '加入主博客的队列', rbNow: '立即发布',
       rbConfirmReblog: (n, name, when) => `把 ${n} 条帖子转发到 ${name}（${when}）？`,
       autoTitle: '后台自动处理记录（每 10 分钟一次，只管开启之后发布的帖子）',
       autoNone: '还没有记录', autoError: e => `检查失败：${e}`,
       autoReblogged: (post, to) => `已把 ${post} 转发到 ${to}`, autoFixed: (post, src) => `已按 ${src} 修正 ${post}`,
+      navCollect: '素材',
+      colIntro: '选一个自己的博客当素材库：喜欢的帖子会带上你设的 tag 转发过去，每天还会从里面随机抽几张图给你做速涂。自己的帖子和禁止转发的帖子不会转。素材博客不计入标签库，也不参与主博客和子博客之间的互转。',
+      colBlog: '素材博客', colBlogNone: '— 不使用 —', colTags: '转发时加的 tag', colTagsPh: 'tag，用逗号分隔',
+      colAuto: '自动把我喜欢的帖子转发过去（每 10 分钟一次，只管开启之后点的喜欢）',
+      colImagesOnly: '只转有图片的帖子', colQueue: '加入它的队列',
+      colScan: '检查我的喜欢', colScanning: (n, total) => `正在读取喜欢… ${n}${total ? ' / ' + total : ''}`,
+      colReading: n => `正在读取素材博客… ${n}`,
+      colFound: (n, have, skip) => `${n} 条喜欢还没转进素材库 · ${have} 条已经有了 · ${skip} 条不转`,
+      colHint: '点“检查我的喜欢”看哪些还没转进素材库', colNone: '喜欢的帖子都已经在素材库里了',
+      colReblog: name => `把勾选的帖子转发到 ${name}`, colConfirm: (n, name, when) => `把 ${n} 条喜欢的帖子转发到 ${name}（${when}）？`,
+      colSkip_mine: '自己的帖子', colSkip_closed: '禁止转发', colSkip_noImages: '没有图片',
+      colNeedBlog: '请先选择素材博客', colRateLimit: '已达到 Tumblr 每天的发帖上限，剩下的明天再转',
+      colLogTitle: '后台自动处理记录', colAutoDone: (n, name) => `已把 ${n} 条喜欢的帖子转发到 ${name}`,
+      colAutoSkipped: list => `未转：${list}`,
+      colAutoPalette: '转发时自动识别色调并加上对应 tag',
+      orgTitle: '整理素材',
+      orgIntro: '按每张图能拿来练什么给素材分类。先选中帖子（点击、拖动、Shift 点选），再点下面的分类：给选中的帖子都加上这个 tag，再点一次就去掉。色调可以从图片自动识别。tag 本身是英文，这里只是显示成中文。',
+      orgShow: '显示', orgAll: '全部帖子', orgUnsorted: g => `还没按“${g}”分类的`, orgWith: tag => `带“${tag}”的`,
+      orgPalette: '自动识别色调', orgPaletteHint: '识别选中的帖子；什么都没选时，识别所有还没有色调 tag 的帖子',
+      orgOther: '其他 tag', orgOtherPh: '自己的 tag，用逗号分隔', orgAdd: '加上',
+      orgNeedRead: '请先读取素材博客', orgNone: '这里没有帖子', orgCount: (n, sel) => `${n} 条帖子 · 已选 ${sel} 条`,
+      orgAdded: (tag, n) => `已给 ${n} 条帖子加上 #${tag}`, orgRemoved: (tag, n) => `已从 ${n} 条帖子去掉 #${tag}`,
+      orgDetected: (n, m) => `已给 ${n} 条帖子加上色调 tag${m ? ` · ${m} 条不用改` : ''}`, orgDetecting: (i, n) => `正在识别色调… ${i} / ${n}`,
+      dailyFrom: '从这里抽', dailyFromAll: '整个素材库',
+      refGroup_palette: '色调', refGroup_light: '光影', refGroup_material: '材质', refGroup_composition: '构图',
+      refGroup_subject: '题材', refGroup_technique: '画法', refGroup_other: '其他',
+      refNames: {
+        'warm palette': '暖色调', 'cool palette': '冷色调', 'warm cool contrast': '冷暖对比', 'high saturation': '高饱和', 'muted colors': '低饱和（灰调）',
+        'pastel colors': '粉彩色', 'high key': '亮调', 'low key': '暗调', 'high contrast': '明暗对比强', 'low contrast': '明暗对比弱',
+        'monochrome': '单色系', 'grayscale': '黑白灰', 'complementary colors': '互补色', 'analogous colors': '邻近色',
+        'backlight': '逆光', 'rim light': '轮廓光', 'side light': '侧光', 'top light': '顶光', 'under light': '底光', 'hard light': '硬光',
+        'soft light': '柔光', 'golden hour': '黄昏/晨光', 'night scene': '夜景', 'neon light': '霓虹光', 'colored lights': '多色光源',
+        'volumetric light': '体积光（光束）', 'dappled light': '斑驳光影', 'cast shadow': '投影', 'reflected light': '反光（环境光）',
+        'subsurface scattering': '透光（次表面散射）', 'silhouette': '剪影', 'atmospheric perspective': '空气透视', 'fog': '雾气',
+        'skin': '皮肤', 'hair': '头发', 'eyes': '眼睛', 'fabric folds': '布料褶皱', 'sheer fabric': '薄纱', 'leather': '皮革', 'fur': '皮毛',
+        'metal': '金属', 'glass': '玻璃', 'transparent': '透明', 'gemstone': '宝石', 'water': '水', 'ice': '冰', 'fire': '火焰', 'smoke': '烟雾',
+        'foliage': '植物', 'flowers': '花', 'wood': '木头', 'rock': '岩石', 'sky and clouds': '天空和云',
+        'close up': '特写', 'bust shot': '半身', 'full body': '全身', 'wide shot': '远景', 'low angle': '仰视', 'high angle': '俯视',
+        'foreshortening': '透视缩短', 'dynamic pose': '动态姿势', 'centered composition': '中心构图', 'rule of thirds': '三分法',
+        'diagonal composition': '对角线构图', 'symmetry': '对称', 'negative space': '留白', 'framing': '框景', 'leading lines': '引导线',
+        'depth layers': '前中后景',
+        'character': '人物', 'multiple characters': '多人', 'animal': '动物', 'landscape': '风景', 'cityscape': '街景', 'architecture': '建筑',
+        'interior': '室内', 'still life': '静物', 'food': '食物', 'mecha': '机械',
+        'painterly': '厚涂', 'cel shading': '赛璐璐', 'soft shading': '柔和渐变', 'flat colors': '平涂', 'lineless': '无线稿', 'line art': '线稿',
+        'ai sorted': 'AI 已识别', 'watercolor': '水彩', 'sketch': '速写/草稿', 'pixel art': '像素画', '3d render': '3D 渲染', 'photo': '照片',
+      },
+      aiTitle: 'AI 识图',
+      aiIntro: '可选。填一个能看图的 AI 模型（任何 OpenAI 兼容的服务）后，素材页的“AI 识别”会给选中的帖子建议光影、材质、构图、题材和画法 tag。每张图都会发给这个服务，并按张计费。key 只保存在这个浏览器里。',
+      aiBase: '接口地址', aiBasePh: 'https://api.example.com/v1', aiModel: '模型', aiModelPh: '能看图的模型名', aiKey: 'API key', aiKeyPh: '在这里粘贴你的 key',
+      aiTest: '测试', aiTesting: '正在发送测试图片…', aiOk: tags => `可以用${tags ? ' · 它的回答：' + tags : ''}`, aiFail: e => `不能用：${e}`,
+      aiNeedSetup: '请先在设置里配置 AI 识图', aiNoAccess: 'Chrome 没有允许访问这个地址',
+      orgAiGroup: 'AI 识别', orgAiNo: 'AI 还没识别过的', orgAiYes: 'AI 识别过的',
+      orgAi: 'AI 识别', orgAiHint: '只识别选中的帖子；每张图都会发给你的 AI 服务',
+      aiRunning: (i, n) => `AI 正在看图… ${i} / ${n}`, aiBusy: '识别中…', aiCardDone: n => (n ? `建议 ${n} 个` : '没有可加的'), aiFinished: n => `AI 看完了：${n} 条帖子有建议，在下面确认`, aiReviewTitle: 'AI 的建议：点一下 tag 可以不要它，然后写入',
+      aiApply: '写入建议的 tag', aiDiscard: '放弃', aiNothing: 'AI 没有可以加的 tag', aiDone: (n, f) => `AI 看完了 ${n} 条帖子${f ? ` · ${f} 条失败` : ''}`,
+      aiMarkHint: '写入时，AI 看过的每条帖子都会加上 #ai sorted；点“放弃”什么都不写',
+      dailyTitle: '今日速涂', dailyCount: '张数', dailyAnother: '换一组', dailyRefresh: '重新读取素材博客',
+      dailyEmpty: '素材库里还没有图片', dailyInfo: (n, date) => `素材库里有 ${n} 条带图的帖子${date ? ' · 读取于 ' + date : ''}`,
       blogStat: (name, n, date) => `${name}：${n} 篇${date ? '，' + date : ''}`, statSep: '；',
       neverSynced: '还没有同步过。点击“同步新帖子”从主博客和所有子博客读取已发布帖子的标签。',
       manual: ' · 手动', nBlogs: n => ` · ${n} 个博客`,
@@ -422,6 +523,9 @@ const TTHCore = (() => {
     const cats = pick(p, 'communityLabelCategories', 'community_label_categories') ?? cl.categories ?? [];
     return { has: !!has, categories: [...cats] };
   }
+  // Reblog control (Tumblr's "who can reblog this"): 'everyone' or 'noone'. My own blogs still reblog each
+  // other's posts (reblogPost), and reblogs between my blogs carry the same setting.
+  const readReblog = p => (pick(p, 'interactabilityReblog', 'interactability_reblog') === 'noone' ? 'noone' : 'everyone');
 
   // Fields sent back unchanged when editing: [camelCase name, API parameter name]
   const PASSTHROUGH = [
@@ -431,7 +535,7 @@ const TTHCore = (() => {
     ['parentTumblelogUuid', 'parent_tumblelog_uuid'], ['parentPostId', 'parent_post_id'], ['reblogKey', 'reblog_key'],
   ];
 
-  const sameEdit = (a, b) => a.state === b.state
+  const sameEdit = (a, b) => a.state === b.state && a.reblog === b.reblog
     && a.tags.join('\u0001') === b.tags.join('\u0001')
     && a.label.has === b.label.has
     && [...a.label.categories].sort().join() === [...b.label.categories].sort().join();
@@ -452,8 +556,8 @@ const TTHCore = (() => {
     const path = `/v2/blog/${enc(blog)}/posts/${enc(id)}`;
     const p = await getPost(api, blog, id);
     if (pick(p, 'shouldOpenInLegacy', 'should_open_in_legacy')) return { skipped: true, reason: t('skipLegacy') };
-    const cur = { state: p.state, tags: (p.tags || []).slice(), label: readLabel(p) };
-    const next = mutate({ state: cur.state, tags: cur.tags.slice(), label: { has: cur.label.has, categories: cur.label.categories.slice() } }, cur);
+    const cur = { state: p.state, tags: (p.tags || []).slice(), label: readLabel(p), reblog: readReblog(p) };
+    const next = mutate({ state: cur.state, tags: cur.tags.slice(), label: { has: cur.label.has, categories: cur.label.categories.slice() }, reblog: cur.reblog }, cur);
     if (typeof next === 'string') return { skipped: true, reason: next };
     if (sameEdit(cur, next)) return { skipped: true, unchanged: true };
 
@@ -466,6 +570,7 @@ const TTHCore = (() => {
       community_label_categories: next.label.categories,
     };
     for (const [camel, snake] of PASSTHROUGH) { const v = pick(p, camel, snake); if (v !== undefined && v !== null) body[snake] = v; }
+    if (next.reblog !== cur.reblog) body.interactability_reblog = next.reblog;
     if (next.state === 'queue') { const v = pick(p, 'publishOn', 'publish_on'); if (v) body.publish_on = v; }
     await api(path, { method: 'PUT', body });
 
@@ -485,11 +590,14 @@ const TTHCore = (() => {
     labels: categories => n => Object.assign(n, { label: { has: categories.length > 0, categories } }),
     addTags: tags => n => Object.assign(n, { tags: withTags(n.tags, tags) }),
     removeTags: tags => { const ks = new Set(tags.map(key)); return n => Object.assign(n, { tags: n.tags.filter(tag => !ks.has(key(tag))) }); },
+    // Reblog control: 'everyone' (allow) or 'noone' (don't allow)
+    reblog: mode => n => Object.assign(n, { reblog: mode }),
   };
 
   // ---------- Tag library ----------
-  // cache.blogs[uuid] = { name, syncedAt, posts: { [postId]: [tags[], timestamp, state, noteCount|null, reblogSource|null, hasLabel] } }
+  // cache.blogs[uuid] = { name, syncedAt, posts: { [postId]: [tags[], timestamp, state, noteCount|null, reblogSource|null, hasLabel, reblog] } }
   //   reblogSource is "blogName/postId" of the original when the post is a reblog (reblogSource())
+  //   reblog is the reblog control, 'everyone' or 'noone' (readReblog())
   // cache.tagStats[tagKey] = { rate, match, at }: sitewide activity samples used by the cleanup
   const emptyCache = () => ({ blogs: {}, blogList: [], hidden: [], custom: [], tagStats: {}, lastAuto: 0 });
 
@@ -576,10 +684,10 @@ const TTHCore = (() => {
       for (const p of page.filter(isPost)) {
         const id = postId(p);
         const rec = [uniqTags(p.tags || []), p.timestamp || 0, p.state || 'published', pick(p, 'noteCount', 'note_count') ?? null,
-          reblogSource(p), readLabel(p).has];
+          reblogSource(p), readLabel(p).has, readReblog(p)];
         const old = entry.posts[id];
-        // records from before the reblog source was kept (length 4) count as changed, so they get it
-        if (!old || old.length < 6 || old[0].join('\u0001') !== rec[0].join('\u0001') || old[2] !== rec[2] || old[5] !== rec[5]) changed = true;
+        // records from before the reblog source / reblog control were kept count as changed, so they get them
+        if (!old || old.length < 7 || old[0].join('\u0001') !== rec[0].join('\u0001') || old[2] !== rec[2] || old[5] !== rec[5] || old[6] !== rec[6]) changed = true;
         entry.posts[id] = rec;
         if (fresh) fresh[id] = rec;
       }
@@ -625,8 +733,9 @@ const TTHCore = (() => {
   }
   // A post key is "<blog uuid>:<post id>"; uuids contain a colon ("t:abc"), post ids don't
   const splitKey = k => { const i = k.lastIndexOf(':'); return { blog: k.slice(0, i), id: k.slice(i + 1) }; };
-  // Reblogs whose tags, visibility or community label differ from their original (from the synced cache).
-  // Returns [{ root, copy, diffs: ['tags' | 'state' | 'label'] }] with root/copy as { key, blog, id }.
+  // Reblogs whose tags, visibility, community label or reblog control differ from their original (from the
+  // synced cache). Returns [{ root, copy, diffs: ['tags' | 'state' | 'label' | 'reblog'] }] with root/copy as
+  // { key, blog, id }.
   function reblogDiffs(cache) {
     const rec = k => { const { blog, id } = splitKey(k); return cache.blogs[blog]?.posts?.[id]; };
     const out = [];
@@ -641,22 +750,35 @@ const TTHCore = (() => {
         if (c[0].join('\u0001') !== r[0].join('\u0001')) diffs.push('tags');
         if (SYNC_STATES.includes(c[2]) && SYNC_STATES.includes(r[2]) && c[2] !== r[2]) diffs.push('state');
         if (c[5] !== undefined && r[5] !== undefined && c[5] !== r[5]) diffs.push('label');
+        if (c[6] !== undefined && r[6] !== undefined && c[6] !== r[6]) diffs.push('reblog');
         if (diffs.length) out.push({ root: { key: root, ...splitKey(root) }, copy: { key: k, ...splitKey(k) }, diffs });
       }
     }
     return out;
   }
-  // Reblog one of my posts onto another of my blogs with the same tags and community label.
+  // Reblog one of my posts onto another of my blogs with the same tags, community label and reblog control.
+  // My own blogs may reblog a post with reblogs turned off (seen live). Should Tumblr refuse, the original is
+  // opened just for this reblog and closed again right after.
   // Returns { id: new post id, post: the original as read, label }.
-  async function reblogPost(api, toBlog, fromBlog, id, state) {
+  async function reblogPost(api, toBlog, fromBlog, id, state, t = k => k) {
     const p = await getPost(api, fromBlog, id);
     const label = readLabel(p);
+    const closed = readReblog(p) === 'noone';
     const body = {
       parent_tumblelog_uuid: fromBlog, parent_post_id: String(id), reblog_key: pick(p, 'reblogKey', 'reblog_key'),
       content: [], layout: [], state, tags: (p.tags || []).join(','),
       ...(label.has ? { has_community_label: true, community_label_categories: label.categories } : {}),
+      ...(closed ? { interactability_reblog: 'noone' } : {}),
     };
-    const r = await api(`/v2/blog/${enc(toBlog)}/posts`, { method: 'POST', body });
+    const post = () => api(`/v2/blog/${enc(toBlog)}/posts`, { method: 'POST', body });
+    let r;
+    try {
+      r = await post();
+    } catch (e) {
+      if (!closed || !(e.status >= 400 && e.status < 500)) throw e;
+      await editPost(api, t, fromBlog, id, mutations.reblog('everyone'));
+      try { r = await post(); } finally { await editPost(api, t, fromBlog, id, mutations.reblog('noone')); }
+    }
     return { id: String(pick(r, 'idString', 'id_string') ?? r?.id ?? ''), post: p, label };
   }
 
@@ -676,11 +798,13 @@ const TTHCore = (() => {
   // One unattended pass over the newest posts of each of my blogs (the extension runs it every 10 minutes):
   // - a published original on a side blog, newer than `since` (seconds), that my main blog hasn't reblogged is
   //   reblogged to the main blog, published;
-  // - a reblog of my own post whose tags, visibility or community label drifted from its original is fixed.
+  // - a reblog of my own post whose tags, visibility, community label or reblog control drifted from its
+  //   original is fixed.
+  // opts.skip: uuids of blogs that take no part (the collection blog)
   // Returns what it did: [{ type: 'reblog' | 'fix', blog, id, to }]
   async function autoMaintain(api, t, since, opts = {}) {
-    const { pages = 1 } = opts;
-    const blogs = await getBlogs(api);
+    const { pages = 1, skip = [] } = opts;
+    const blogs = (await getBlogs(api)).filter(b => !skip.includes(b.uuid));
     const main = blogs.find(b => b.primary);
     if (!main || blogs.length < 2) return [];
     const names = new Set(blogs.map(b => b.name.toLowerCase()));
@@ -694,7 +818,7 @@ const TTHCore = (() => {
         const id = postId(p);
         if ((p.timestamp || 0) <= since || (p.state || 'published') !== 'published' || isCopyOf(p, names)) continue;
         if (onMain.has(`${b.name}/${id}`.toLowerCase())) continue;
-        await reblogPost(api, main.uuid, b.uuid, id, 'published');
+        await reblogPost(api, main.uuid, b.uuid, id, 'published', t);
         done.push({ type: 'reblog', blog: b.name, id, to: main.name });
         await sleep(1000);
       }
@@ -707,7 +831,7 @@ const TTHCore = (() => {
         const src = reblogSource(p);
         let orig = byKey.get(src.toLowerCase());
         if (!orig) { const [n, rid] = src.split('/'); try { orig = await getPost(api, n, rid); } catch { continue; } }
-        const r = await editPost(api, t, b.uuid, postId(p), mutations.copyFrom({ tags: orig.tags || [], state: orig.state, label: readLabel(orig) }));
+        const r = await editPost(api, t, b.uuid, postId(p), mutations.copyFrom({ tags: orig.tags || [], state: orig.state, label: readLabel(orig), reblog: readReblog(orig) }));
         if (!r.skipped) { done.push({ type: 'fix', blog: b.name, id: postId(p), to: src }); await sleep(1000); }
       }
     }
@@ -737,13 +861,15 @@ const TTHCore = (() => {
   const isCopyOf = (p, myNames) => { const s = reblogSource(p); return !!s && myNames.has(s.split('/')[0].toLowerCase()); };
   // Only these states are copied; a draft or queued copy keeps its own
   const SYNC_STATES = ['published', 'private'];
-  // Mutation: make a post carry another post's tags, visibility and community label
+  // Mutation: make a post carry another post's tags, visibility, community label and reblog control
   mutations.copyFrom = src => (n, cur) => Object.assign(n, {
     tags: src.tags.slice(),
     state: SYNC_STATES.includes(cur.state) && SYNC_STATES.includes(src.state) ? src.state : n.state,
     label: { has: src.label.has, categories: src.label.categories.slice() },
+    reblog: src.reblog || n.reblog,
   });
-  // After editing one post, give the same tags / visibility / label to its copies on my other blogs.
+  // After editing one post, give the same tags / visibility / label / reblog control to its copies on my other
+  // blogs.
   // result is what editPost returned for the edited post. Calls onEach(key, r) after each copy is edited.
   async function syncCopies(api, t, cache, blog, id, result, onEach) {
     const fam = reblogFamilies(cache).get(blog + ':' + id);
@@ -756,7 +882,7 @@ const TTHCore = (() => {
       if (!r.skipped) {
         n++;
         const rec = cache.blogs[m.blog]?.posts?.[m.id];
-        if (rec) { rec[0] = uniqTags(r.tags); rec[2] = r.state; rec[5] = r.label.has; }
+        if (rec) { rec[0] = uniqTags(r.tags); rec[2] = r.state; rec[5] = r.label.has; rec[6] = r.reblog; }
         onEach?.(k, r);
       }
       await sleep(400);
@@ -764,11 +890,303 @@ const TTHCore = (() => {
     return n;
   }
 
-  async function syncAll(api, cache, full, ctl, onStatus, t, save) {
+  // ---------- Collection blog: posts I like, reblogged onto one of my blogs ----------
+  // settings.collect = { blog: uuid of the collection blog ('' = off), auto, tags[], imagesOnly, autoPalette, daily, from }
+  // The post a liked post stands for: its original (first in the trail), or the post itself. Used to tell
+  // whether the collection already has it, whoever it was reblogged from.
+  const rootKey = p => (reblogSource(p) || `${pick(p, 'blogName', 'blog_name') ?? p.blog?.name}/${postId(p)}`).toLowerCase();
+  const likedAt = p => pick(p, 'likedTimestamp', 'liked_timestamp') || 0;
+  const ownerOf = p => pick(p, 'blogName', 'blog_name') ?? p.blog?.name ?? '';
+
+  // My likes, newest first, while they were liked after `after` (seconds)
+  async function likedPosts(api, { after = 0, ctl, onProgress } = {}) {
+    const out = [];
+    let path = '/v2/user/likes' + qs({ npf: true, limit: 20 });
+    while (path && !ctl?.aborted) {
+      const r = await api(path);
+      const page = (pick(r, 'likedPosts', 'liked_posts') || []).filter(isPost);
+      for (const p of page) { if (likedAt(p) <= after) return out; out.push(p); }
+      onProgress?.(out.length, pick(r, 'likedCount', 'liked_count'));
+      const next = (r.links || r._links)?.next;
+      const q = next?.queryParams || next?.query_params;
+      const href = next?.href && new URL(next.href, 'https://www.tumblr.com');
+      path = !page.length ? null
+        : href ? href.pathname.replace(/^\/api(?=\/v2)/, '') + href.search
+          : '/v2/user/likes' + qs(q || { npf: true, limit: 20, before: likedAt(page[page.length - 1]) });
+      await sleep(250);
+    }
+    return out;
+  }
+
+  // The collection blog's posts as kept in storage key `collection`:
+  // { blog, syncedAt, posts: { [id]: [rootKey, timestamp, images: [[small, big]...], tags] } }
+  const emptyCollection = blog => ({ blog, syncedAt: 0, posts: {} });
+  const collectRecord = p => [rootKey(p), p.timestamp || 0, postImages(p, 250, 1280).map(i => [i.small, i.big]), uniqTags(p.tags || [])];
+  // Newest first; stops after two pages with nothing new unless full
+  async function syncCollection(api, store, full, ctl, onProgress) {
+    const fresh = full ? {} : null;
+    let path = basePosts(store.blog), n = 0, unchanged = 0;
+    while (path && !ctl?.aborted) {
+      const r = await api(path);
+      const page = (r?.posts || []).filter(isPost);
+      let changed = false;
+      for (const p of page) {
+        const id = postId(p);
+        if (!store.posts[id]) changed = true;
+        store.posts[id] = collectRecord(p);
+        if (fresh) fresh[id] = store.posts[id];
+      }
+      n += page.length;
+      onProgress?.(n, r.totalPosts ?? r.total_posts ?? r.blog?.totalPosts);
+      if (!full) { unchanged = changed ? 0 : unchanged + 1; if (unchanged >= 2) break; }
+      path = page.length ? nextPath(r, store.blog, {}, n, page.length >= 20) : null;
+      await sleep(250);
+    }
+    if (fresh && !ctl?.aborted) store.posts = fresh;
+    store.syncedAt = Date.now();
+    return store;
+  }
+
+  // Why a liked post is not reblogged into the collection, or '' if it should be.
+  // have: Set of root keys the collection holds; myNames: Set of my other blogs' names (my own posts are left
+  // out: reblogs between my blogs are kept in line with their original, tags and all)
+  function collectSkip(p, have, myNames, opts = {}) {
+    if (have.has(rootKey(p))) return 'have';
+    if (myNames.has(ownerOf(p).toLowerCase()) || isCopyOf(p, myNames)) return 'mine';
+    if (pick(p, 'canReblog', 'can_reblog') === false || readReblog(p) === 'noone') return 'closed';
+    if (opts.imagesOnly !== false && !postImages(p).length) return 'noImages';
+    return '';
+  }
+
+  // Tumblr's daily post limit (also counts reblogs). It may come as a 4xx other than 429, so the message counts
+  // too: "You've exceeded your daily post or media limit"
+  const isPostLimit = e => e?.status === 429 || /daily (post|media)|post (or media )?limit/i.test(errMsg(e));
+
+  // Reblog someone's post onto the collection blog with my own tags
+  async function collectPost(api, toBlog, p, { tags = [], state = 'published' } = {}) {
+    const body = {
+      parent_tumblelog_uuid: p.blog?.uuid || ownerOf(p), parent_post_id: postId(p),
+      reblog_key: pick(p, 'reblogKey', 'reblog_key'), content: [], layout: [], state, tags: tags.join(','),
+    };
+    const r = await api(`/v2/blog/${enc(toBlog)}/posts`, { method: 'POST', body });
+    return String(pick(r, 'idString', 'id_string') ?? r?.id ?? '');
+  }
+
+  // One unattended pass: posts liked after `since` (seconds) are reblogged onto the collection blog, oldest
+  // first. Returns { done: [{ id, blog, post }], skipped: [{ blog, id, reason }], last, error }: `last` is the
+  // newest like handled, the `since` for the next pass. A like Tumblr refuses to reblog (4xx) is skipped for
+  // good; a login, rate-limit or server error stops the pass there and it is tried again next time.
+  async function autoCollect(api, collect, since) {
+    const blogs = await getBlogs(api);
+    const target = blogs.find(b => b.uuid === collect.blog);
+    if (!target) throw new Error('collection blog not found');
+    const myNames = new Set(blogs.filter(b => b.uuid !== target.uuid).map(b => b.name.toLowerCase()));
+    const likes = (await likedPosts(api, { after: since })).reverse();
+    const out = { done: [], skipped: [], last: since };
+    if (!likes.length) return out;
+    const have = new Set((await newestPosts(api, target.uuid, 2)).map(rootKey));
+    for (const p of likes) {
+      const who = ownerOf(p), id = postId(p);
+      const why = collectSkip(p, have, myNames, collect);
+      if (why) { if (why !== 'have') out.skipped.push({ blog: who, id, reason: why }); }
+      else {
+        try {
+          let tags = collect.tags || [];
+          if (collect.autoPalette !== false) { try { tags = withTags(tags, await postPalette(postImages(p))); } catch { /* reblogged without them */ } }
+          out.done.push({ id: await collectPost(api, target.uuid, p, { ...collect, tags }), blog: who, post: id });
+          have.add(rootKey(p));
+          await sleep(1000);
+        } catch (e) {
+          if (!(e.status >= 400 && e.status < 500) || e.status === 401 || isPostLimit(e)) { out.error = errMsg(e); break; }
+          out.skipped.push({ blog: who, id, reason: errMsg(e) });
+        }
+      }
+      out.last = Math.max(out.last, likedAt(p));
+    }
+    return out;
+  }
+
+  // A few images for a quick study: `n` different posts of the collection, one image of each, always the same
+  // for the same `seed` (the date plus how often "another set" was pressed). Returns [{ id, small, big }]
+  function dailyPick(store, n, seed) {
+    let h = 2166136261;
+    for (const ch of String(seed)) h = Math.imul(h ^ ch.charCodeAt(0), 16777619);
+    const rand = () => {
+      h = Math.imul(h ^ (h >>> 15), 2246822507);
+      h = Math.imul(h ^ (h >>> 13), 3266489909);
+      return ((h ^= h >>> 16) >>> 0) / 4294967296;
+    };
+    const pool = Object.entries(store?.posts || {}).filter(([, r]) => r[2]?.length).sort(([a], [b]) => (a < b ? -1 : a > b ? 1 : 0));
+    const out = [];
+    while (out.length < n && pool.length) {
+      const [id, rec] = pool.splice(Math.floor(rand() * pool.length), 1)[0];
+      const [small, big] = rec[2][Math.floor(rand() * rec[2].length)];
+      out.push({ id, small, big });
+    }
+    return out;
+  }
+
+  // ---------- Sorting the collection: reference categories ----------
+  // Plain English tags for drawing references, by what they help to study. The interface shows them translated
+  // (STRINGS refNames); the tags on the posts stay English. The palette group is worked out from the image
+  // (paletteTags); the others are picked by hand.
+  const REF_GROUPS = [
+    { id: 'palette', auto: true, tags: ['warm palette', 'cool palette', 'warm cool contrast', 'high saturation', 'muted colors', 'pastel colors',
+      'high key', 'low key', 'high contrast', 'low contrast', 'monochrome', 'grayscale', 'complementary colors', 'analogous colors'] },
+    { id: 'light', tags: ['backlight', 'rim light', 'side light', 'top light', 'under light', 'hard light', 'soft light', 'golden hour', 'night scene',
+      'neon light', 'colored lights', 'volumetric light', 'dappled light', 'cast shadow', 'reflected light', 'subsurface scattering', 'silhouette',
+      'atmospheric perspective', 'fog'] },
+    { id: 'material', tags: ['skin', 'hair', 'eyes', 'fabric folds', 'sheer fabric', 'leather', 'fur', 'metal', 'glass', 'transparent', 'gemstone',
+      'water', 'ice', 'fire', 'smoke', 'foliage', 'flowers', 'wood', 'rock', 'sky and clouds'] },
+    { id: 'composition', tags: ['close up', 'bust shot', 'full body', 'wide shot', 'low angle', 'high angle', 'foreshortening', 'dynamic pose',
+      'centered composition', 'rule of thirds', 'diagonal composition', 'symmetry', 'negative space', 'framing', 'leading lines', 'depth layers'] },
+    { id: 'subject', tags: ['character', 'multiple characters', 'animal', 'landscape', 'cityscape', 'architecture', 'interior', 'still life', 'food', 'mecha'] },
+    { id: 'technique', tags: ['painterly', 'cel shading', 'soft shading', 'flat colors', 'lineless', 'line art', 'watercolor', 'sketch', 'pixel art',
+      '3d render', 'photo'] },
+  ];
+  const refGroupOf = tag => REF_GROUPS.find(g => g.tags.includes(key(tag)))?.id || null;
+
+  // Palette tags from an image's pixels (RGBA bytes, best downscaled to about 64×64 first). Light and
+  // contrast come from luminance, saturation from chroma, warm and cool and the colour scheme from the hues
+  // of the clearly coloured pixels, weighted by how colourful they are.
+  function paletteTags(px) {
+    const lum = [];
+    let chromaSum = 0, colored = 0, warm = 0, cool = 0, wsum = 0, hx = 0, hy = 0;
+    const bins = new Array(12).fill(0);
+    for (let i = 0; i + 3 < px.length; i += 4) {
+      if (px[i + 3] < 128) continue; // transparent
+      const r = px[i] / 255, g = px[i + 1] / 255, b = px[i + 2] / 255;
+      const max = Math.max(r, g, b), min = Math.min(r, g, b), c = max - min;
+      lum.push(0.2126 * r + 0.7152 * g + 0.0722 * b);
+      chromaSum += c;
+      if (c < 0.15 || max < 0.12) continue;
+      colored++;
+      let h = max === r ? ((g - b) / c) % 6 : max === g ? (b - r) / c + 2 : (r - g) / c + 4;
+      h = (h * 60 + 360) % 360;
+      if (h < 75 || h >= 330) warm += c; else if (h >= 150 && h < 290) cool += c;
+      wsum += c;
+      hx += c * Math.cos(h * Math.PI / 180); hy += c * Math.sin(h * Math.PI / 180);
+      bins[Math.floor(h / 30) % 12] += c;
+    }
+    const n = lum.length;
+    if (!n) return [];
+    lum.sort((a, b) => a - b);
+    const meanL = lum.reduce((a, b) => a + b, 0) / n;
+    const spread = lum[Math.floor(n * 0.95)] - lum[Math.floor(n * 0.05)];
+    const meanC = chromaSum / n, colorShare = colored / n;
+    const tags = [];
+    if (meanC < 0.04) tags.push('grayscale');
+    else if (colorShare >= 0.15) {
+      const ws = warm / (warm + cool || 1);
+      if (ws >= 0.75) tags.push('warm palette');
+      else if (ws <= 0.25) tags.push('cool palette');
+      else if (warm >= 0.2 * wsum && cool >= 0.2 * wsum) tags.push('warm cool contrast');
+      // how concentrated the hues are (1 = all one hue), and the two strongest hue ranges
+      const R = Math.hypot(hx, hy) / wsum;
+      const top = bins.map((v, i) => [v, i]).sort((a, b) => b[0] - a[0]);
+      const apart = Math.min(Math.abs(top[0][1] - top[1][1]), 12 - Math.abs(top[0][1] - top[1][1]));
+      if (R >= 0.99) tags.push('monochrome');
+      else if (top[1][0] >= 0.15 * wsum && apart >= 5) tags.push('complementary colors');
+      else if (R >= 0.7) tags.push('analogous colors');
+    } else tags.push('monochrome');
+    if (meanC >= 0.38) tags.push('high saturation');
+    else if (meanC < 0.13 && meanC >= 0.04) tags.push('muted colors');
+    if (meanL >= 0.68 && meanC >= 0.06 && meanC < 0.3) tags.push('pastel colors');
+    if (meanL >= 0.62) tags.push('high key');
+    else if (meanL <= 0.32) tags.push('low key');
+    if (spread >= 0.75) tags.push('high contrast');
+    else if (spread <= 0.35) tags.push('low contrast');
+    return tags;
+  }
+
+  // An image's pixels, downscaled to fit `size`. Works in pages and in the service worker (no DOM); the
+  // extension's host permission for Tumblr's media hosts lets it read the image.
+  async function imagePixels(url, size = 64, fetchFn = fetch) {
+    const res = await fetchFn(url);
+    if (!res.ok) throw new Error(res.status + ' ' + res.statusText);
+    const bmp = await createImageBitmap(await res.blob());
+    const k = Math.min(1, size / Math.max(bmp.width, bmp.height));
+    const w = Math.max(1, Math.round(bmp.width * k)), h = Math.max(1, Math.round(bmp.height * k));
+    const cv = new OffscreenCanvas(w, h);
+    const ctx = cv.getContext('2d');
+    ctx.drawImage(bmp, 0, 0, w, h);
+    bmp.close?.();
+    return ctx.getImageData(0, 0, w, h).data;
+  }
+  // Palette tags for a post: from its first image
+  async function postPalette(images, fetchFn) {
+    const first = images?.[0];
+    const url = Array.isArray(first) ? first[0] : first?.small;
+    return url ? paletteTags(await imagePixels(url, 64, fetchFn)) : [];
+  }
+
+  // ---------- Sorting by an AI vision model (optional, the user's own OpenAI-compatible endpoint) ----------
+  // settings.ai = { base: 'https://…/v1', model }; the key is kept apart, in storage key `aiKey`.
+  // The model may only pick tags from the hand-picked groups (the palette is worked out from pixels).
+  const AI_GROUPS = () => REF_GROUPS.filter(g => !g.auto);
+  // The tag that says the AI has looked at a post (kept on the post, so every browser sees it)
+  const AI_MARK = 'ai sorted';
+  function aiPrompt() {
+    return 'You sort reference images for a painter who does quick studies. For the image, choose the tags that clearly '
+      + 'apply, only from these lists (use the exact words):\n'
+      + AI_GROUPS().map(g => `${g.id}: ${g.tags.join(', ')}`).join('\n')
+      + '\nReply with JSON only, like {"light": ["backlight"], "material": [], ...}. Leave a list empty when nothing clearly fits.';
+  }
+  // The tags of a reply that are in the lists, in list order; anything else the model says is dropped
+  function parseAiTags(text) {
+    const m = String(text || '').match(/\{[\s\S]*\}/);
+    if (!m) return [];
+    let obj;
+    try { obj = JSON.parse(m[0]); } catch { return []; }
+    const said = new Set(Object.values(obj || {}).flat().filter(x => typeof x === 'string').map(key));
+    return AI_GROUPS().flatMap(g => g.tags.filter(tag => said.has(tag)));
+  }
+  // One image (a data: URL) to the model. Reasoning models spend tokens thinking first, so the budget is
+  // generous. Providers that don't take response_format get the request again without it.
+  async function aiTagImage(ai, apiKey, dataUrl, fetchFn = fetch) {
+    const url = ai.base.replace(/\/+$/, '') + '/chat/completions';
+    const send = async withFormat => {
+      const res = await fetchFn(url, {
+        method: 'POST',
+        headers: { Authorization: 'Bearer ' + apiKey, 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          model: ai.model, max_tokens: 4000, ...(withFormat ? { response_format: { type: 'json_object' } } : {}),
+          messages: [{ role: 'user', content: [{ type: 'text', text: aiPrompt() }, { type: 'image_url', image_url: { url: dataUrl } }] }],
+        }),
+      });
+      const json = await res.json().catch(() => ({}));
+      if (!res.ok) throw Object.assign(new Error(json?.error?.message || res.status + ' ' + res.statusText), { status: res.status });
+      return json;
+    };
+    let json;
+    try { json = await send(true); } catch (e) { if (e.status !== 400 || !/response_format|json/i.test(e.message)) throw e; json = await send(false); }
+    const text = json?.choices?.[0]?.message?.content;
+    if (!text) throw new Error(json?.choices?.[0]?.finish_reason === 'length' ? 'the reply ran out of tokens' : 'empty reply');
+    return parseAiTags(text);
+  }
+  // An image as a JPEG data: URL, downscaled to fit `size` (works in pages and the service worker)
+  async function imageDataUrl(url, size = 768, fetchFn = fetch) {
+    const res = await fetchFn(url);
+    if (!res.ok) throw new Error(res.status + ' ' + res.statusText);
+    const bmp = await createImageBitmap(await res.blob());
+    const k = Math.min(1, size / Math.max(bmp.width, bmp.height));
+    const cv = new OffscreenCanvas(Math.max(1, Math.round(bmp.width * k)), Math.max(1, Math.round(bmp.height * k)));
+    cv.getContext('2d').drawImage(bmp, 0, 0, cv.width, cv.height);
+    bmp.close?.();
+    const bytes = new Uint8Array(await (await cv.convertToBlob({ type: 'image/jpeg', quality: 0.85 })).arrayBuffer());
+    let bin = '';
+    for (let i = 0; i < bytes.length; i += 0x8000) bin += String.fromCharCode(...bytes.subarray(i, i + 0x8000));
+    return 'data:image/jpeg;base64,' + btoa(bin);
+  }
+
+  // skip: uuids of blogs left out of the tag library (the collection blog holds other people's tags)
+  async function syncAll(api, cache, full, ctl, onStatus, t, save, skip = []) {
     const blogs = await getBlogs(api);
     if (blogs.length) cache.blogList = blogs;
+    for (const uuid of skip) delete cache.blogs[uuid];
     for (const b of blogs) {
       if (ctl.aborted) break;
+      if (skip.includes(b.uuid)) continue;
       await syncBlog(api, cache, b, full, (n, total) => onStatus(t('syncing', b.name, n, total)), ctl, save);
     }
     cache.lastAuto = Date.now();
@@ -1379,8 +1797,10 @@ const TTHCore = (() => {
   return {
     sleep, enc, decodeTag, norm, key, esc, pick, debounce, qs, uniqTags, withTags, fmtNum,
     LABEL_CATEGORIES, AD_CSS, REC_CSS, UPSELL_SELECTOR, isUpsell, STRINGS, LANG_NAMES, makeI18n,
-    errMsg, makeApi, getBlogs, postId, isPost, basePosts, nextPath, readLabel, getPost, postImages, editPost, mutations,
+    errMsg, makeApi, getBlogs, postId, isPost, basePosts, nextPath, readLabel, readReblog, getPost, postImages, editPost, mutations,
     emptyCache, buildIndex, matchScore, suggest, syncBlog, syncAll, reblogSource, reblogFamilies, reblogDiffs, syncCopies, copyKeys, isCopyOf, notOnMain, reblogPost, newestPosts, autoMaintain, tagActivity, parseAuth,
+    rootKey, likedPosts, emptyCollection, syncCollection, collectSkip, collectPost, isPostLimit,
+    REF_GROUPS, refGroupOf, paletteTags, imagePixels, postPalette, AI_MARK, aiPrompt, parseAiTags, aiTagImage, imageDataUrl, autoCollect, dailyPick,
     TAG_STATS_TTL, statFresh, ensureTagStats, sortByHeat, sortTagsFair, nameGroups, packGrouping, heatRanks, heatText, tagHeader, TAG_RULES, judgeTags, suggestTagChanges, fandomShare, OFFTOPIC_SHARE, searchMatch,
     TPL_FORMAT, TPL_RULES, TPL_SEARCH_CUTS, parsePack, searchItems, expandPicks, suggestCombos, composeTemplate, packTags, upkeepTags, planUpkeep, itemsOnPost, itemsOnPosts, retagPost,
   };

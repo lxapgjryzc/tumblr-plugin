@@ -1,6 +1,6 @@
 {
   "name": "tumblr-tag-helper",
-  "version": "0.7.0",
+  "version": "0.8.0",
   "private": true,
   "description": "Tumblr Tag Helper Chrome extension (package.json is for building and testing only)",
   "license": "MIT",
