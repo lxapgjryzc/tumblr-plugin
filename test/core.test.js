@@ -290,6 +290,7 @@ autoTest = async () => {
   // AI sorting: only listed tags survive, in list order; a provider without response_format is asked again
   check(eq(C.parseAiTags('```json\n{"light": ["Soft Light", "made up"], "material": ["fur"], "palette": ["warm palette"], "x": 3}\n```'), ['soft light', 'fur']),
     'parseAiTags keeps listed hand-picked tags only, case-insensitive');
+  check(eq(C.parseAiTags('{"light": ["backlight", "rim light", "side light", "fog"]}'), ['backlight', 'rim light']), 'parseAiTags keeps at most two tags per list');
   check(eq(C.parseAiTags('no json here'), []) && eq(C.parseAiTags('{broken'), []), 'parseAiTags survives replies without JSON');
   check(!C.aiPrompt().includes('warm palette') && C.aiPrompt().includes('backlight'), 'the prompt lists the hand-picked groups, not the palette');
   const aiCalls = [];
@@ -334,6 +335,26 @@ autoTest = async () => {
   const ac = await C.autoCollect(aapi, { blog: 't:c', tags: [], imagesOnly: true, autoPalette: false }, now - 1000);
   check(eq(aiCallsC, ['REBLOG a3', 'UNLIKE a2', 'UNLIKE a1']) && eq(ac.skipped.map(x => x.reason), ['aiArt', 'aiArt']),
     'autoCollect leaves out and unlikes posts tagged as AI by their poster (also for a reblog, by its original): ' + JSON.stringify(aiCallsC));
+
+  // AI notes: one text block in the post, replaced on the next run; layout rows follow the blocks
+  const img1 = { type: 'image', media: [] }, old = { type: 'text', text: C.AI_NOTE_MARK + 'old note' }, mine = { type: 'text', text: 'my words' };
+  const c1 = C.withAiNote([img1, old, mine], 'new note');
+  check(c1.length === 3 && c1[2].text === C.AI_NOTE_MARK + 'new note' && !c1.includes(old) && C.aiNoteOf(c1) === 'new note', 'withAiNote replaces the old note and keeps the rest');
+  check(eq(C.withAiNote([img1, old], ''), [img1]), 'withAiNote with no text removes the note');
+  const lay = C.relayout([{ type: 'rows', display: [{ blocks: [0] }, { blocks: [1] }, { blocks: [2] }] }], [img1, old, mine], c1);
+  check(eq(lay[0].display.map(r => r.blocks), [[0], [1], [2]]), 'relayout: the removed note\'s row is dropped, the others follow their blocks, the new note gets a row: ' + JSON.stringify(lay));
+  check(C.parseAiNotes('{"light": [], "notes": " 逆光：太阳在花后面。 "}') === '逆光：太阳在花后面。' && C.parseAiNotes('nope') === '', 'parseAiNotes');
+  check(C.aiPrompt('zh').includes('Simplified Chinese') && !C.aiPrompt('').includes('notes'), 'the prompt asks for notes only when wanted, in the page language');
+  const sent = [];
+  const napi = async (path, opts = {}) => {
+    if (opts.method === 'PUT') { sent.push(opts.body); return {}; }
+    return { state: 'published', tags: ['color'], content: [], layout: [], trail: [{ blog: { name: 'a' }, post: { id: '1' } }] };
+  };
+  await C.editPost(napi, k => k, 't:c', '5', n => Object.assign(n, { tags: [...n.tags, 'fog'], content: C.withAiNote(n.content, 'misty') }));
+  check(sent[0]?.tags === 'color,fog' && eq(sent[0]?.content, [{ type: 'text', text: C.AI_NOTE_MARK + 'misty' }]) && eq(sent[0]?.layout, []), 'editPost sends a changed content with the tags: ' + JSON.stringify(sent[0]));
+  sent.length = 0;
+  await C.editPost(napi, k => k, 't:c', '5', n => n);
+  check(sent.length === 0, 'editPost leaves a post alone when nothing changed');
   const store2 = { posts: { a: ['x', 1, [['s1', 'b1']]], b: ['y', 1, [['s2', 'b2'], ['s3', 'b3']]], c: ['z', 1, []], d: ['w', 1, [['s4', 'b4']]] } };
   const p1 = C.dailyPick(store2, 2, 'day|0'), p2 = C.dailyPick(store2, 2, 'day|0');
   check(eq(p1, p2) && p1.length === 2 && new Set(p1.map(p => p.id)).size === 2 && !p1.some(p => p.id === 'c'), 'dailyPick: same seed, same picks; distinct posts with images: ' + JSON.stringify(p1));

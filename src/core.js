@@ -207,10 +207,12 @@ const TTHCore = (() => {
       hideAiArt: 'Hide posts tagged as AI-made while browsing Tumblr (tags like "ai art", "midjourney"; "not ai" tags are left alone)',
       orgAiGroup: 'AI sorting', orgAiNo: 'Not looked at by the AI yet', orgAiYes: 'Looked at by the AI',
       orgAi: 'AI sort', orgAiHint: 'Selected posts only; each image goes to your AI service. The palette is worked out too, here and for free',
-      aiRunning: (i, n) => `AI is looking… ${i} / ${n}`, aiBusy: 'Looking…', aiCardDone: n => (n ? `${n} suggestion(s)` : 'nothing to add'), aiCardWritten: n => (n ? `${n} tag(s) written` : 'nothing to add'),
+      aiRunning: (i, n) => `AI is looking… ${i} / ${n}`, aiBusy: 'Looking…', aiCardDone: n => (n ? `${n} suggestion(s)` : 'nothing to add'), aiCardWritten: n => (n ? `${n} tag(s) written` : 'nothing to add'), aiCardQueued: n => `${n} tag(s) waiting to be written`, aiCardFailed: 'not written',
+      orgThrottled: (s, w) => `Tumblr is limiting edits: going on in ${s}s · ${w} waiting`, orgThrottledLog: e => `Tumblr is limiting edits (${e}); waiting a minute, nothing is dropped`,
+      orgStopped: 'Writing stopped; posts that weren\'t written say so on their card',
       aiFinishedAuto: (n, f) => `AI is done: looked at ${n} post(s), ${f} got new tags`, orgWait: 'Wait until the tags being written are done',
       orgQueue: (i, n, w) => `Writing tags${i ? ` ${i} / ${n}` : ''}…${w ? ` · ${w} more waiting` : ''}`, aiFinished: n => `AI is done: ${n} post(s) with suggestions below`, aiWriting: n => `AI is done: writing its tags to ${n} post(s)`,
-      aiAuto: 'Write the AI\'s tags right away, without review', aiReviewTitle: 'AI suggestions: click a tag to leave it out, then write them',
+      aiAuto: 'Write the AI\'s tags right away, without review', aiNotes: 'Write the AI\'s notes (what it saw, why the tags fit) into the post', aiReviewTitle: 'AI suggestions: click a tag to leave it out, then write them',
       aiApply: 'Write the suggested tags', aiDiscard: 'Discard', aiNothing: 'The AI had nothing to add', aiDone: (n, f) => `AI looked at ${n} post(s)${f ? ` · ${f} failed` : ''}`,
       aiMarkHint: 'Writing also tags every post the AI looked at with #ai sorted; Discard writes nothing',
       dailyTitle: 'Today\'s quick study', dailyCount: 'Images', dailyAnother: 'Another set', dailyRefresh: 'Read the collection again',
@@ -412,10 +414,12 @@ const TTHCore = (() => {
       hideAiArt: '浏览 Tumblr 时隐藏标了 AI 图的帖子（如 “ai art”“midjourney” 等 tag；“not ai” 这类不受影响）',
       orgAiGroup: 'AI 识别', orgAiNo: 'AI 还没识别过的', orgAiYes: 'AI 识别过的',
       orgAi: 'AI 识别', orgAiHint: '只识别选中的帖子；每张图都会发给你的 AI 服务。色调会顺带本地算好，不另外花钱',
-      aiRunning: (i, n) => `AI 正在看图… ${i} / ${n}`, aiBusy: '识别中…', aiCardDone: n => (n ? `建议 ${n} 个` : '没有可加的'), aiCardWritten: n => (n ? `已写入 ${n} 个` : '没有可加的'),
+      aiRunning: (i, n) => `AI 正在看图… ${i} / ${n}`, aiBusy: '识别中…', aiCardDone: n => (n ? `建议 ${n} 个` : '没有可加的'), aiCardWritten: n => (n ? `已写入 ${n} 个` : '没有可加的'), aiCardQueued: n => `排队写入 ${n} 个`, aiCardFailed: '写入失败',
+      orgThrottled: (s, w) => `被 Tumblr 限速了：${s} 秒后继续 · ${w} 项等待中`, orgThrottledLog: e => `被 Tumblr 限速了（${e}），等一分钟再继续，不会丢掉`,
+      orgStopped: '已停止写入；没写进去的帖子卡片上会显示“写入失败”',
       aiFinishedAuto: (n, f) => `AI 看完了 ${n} 条，其中 ${f} 条加了新 tag`, orgWait: '请等正在写入的 tag 完成',
       orgQueue: (i, n, w) => `正在写入 tag${i ? ` ${i} / ${n}` : ''}…${w ? ` · 还有 ${w} 项排队` : ''}`, aiFinished: n => `AI 看完了：${n} 条帖子有建议，在下面确认`, aiWriting: n => `AI 看完了，正在给 ${n} 条帖子写入 tag`,
-      aiAuto: 'AI 识别后直接写入，不用确认', aiReviewTitle: 'AI 的建议：点一下 tag 可以不要它，然后写入',
+      aiAuto: 'AI 识别后直接写入，不用确认', aiNotes: '把 AI 的说明（看到了什么、为什么这样标）写进帖子', aiReviewTitle: 'AI 的建议：点一下 tag 可以不要它，然后写入',
       aiApply: '写入建议的 tag', aiDiscard: '放弃', aiNothing: 'AI 没有可以加的 tag', aiDone: (n, f) => `AI 看完了 ${n} 条帖子${f ? ` · ${f} 条失败` : ''}`,
       aiMarkHint: '写入时，AI 看过的每条帖子都会加上 #ai sorted；点“放弃”什么都不写',
       dailyTitle: '今日速涂', dailyCount: '张数', dailyAnother: '换一组', dailyRefresh: '重新读取素材博客',
@@ -560,6 +564,7 @@ const TTHCore = (() => {
   ];
 
   const sameEdit = (a, b) => a.state === b.state && a.reblog === b.reblog
+    && (a.content === b.content || JSON.stringify(a.content) === JSON.stringify(b.content))
     && a.tags.join('\u0001') === b.tags.join('\u0001')
     && a.label.has === b.label.has
     && [...a.label.categories].sort().join() === [...b.label.categories].sort().join();
@@ -575,19 +580,38 @@ const TTHCore = (() => {
 
   const getPost = (api, blog, id) => api(`/v2/blog/${enc(blog)}/posts/${enc(id)}${qs({ post_format: 'npf' })}`);
 
+  // NPF layout entries point at content blocks by index. After blocks were removed or added, point them at the
+  // same blocks again, drop the removed ones and show added blocks in rows of their own (when there are rows).
+  function relayout(layout, oldContent, newContent) {
+    const moved = new Map(oldContent.map((b, i) => [i, newContent.indexOf(b)]));
+    const seen = new Set();
+    const out = layout.map(l => {
+      const fix = ids => (ids || []).map(i => moved.get(i)).filter(i => i !== undefined && i >= 0);
+      const m = { ...l };
+      if (l.display) m.display = l.display.map(r => ({ ...r, blocks: fix(r.blocks) })).filter(r => r.blocks.length);
+      if (l.blocks) m.blocks = fix(l.blocks);
+      for (const r of m.display || []) r.blocks.forEach(i => seen.add(i));
+      return m;
+    });
+    const rows = out.find(l => l.type === 'rows');
+    if (rows) newContent.forEach((b, i) => { if (!seen.has(i) && !oldContent.includes(b)) rows.display.push({ blocks: [i] }); });
+    return out;
+  }
+
   // mutate(next, cur) returns the modified next; returning a string skips the post with that reason
   async function editPost(api, t, blog, id, mutate, verifyLabel) {
     const path = `/v2/blog/${enc(blog)}/posts/${enc(id)}`;
     const p = await getPost(api, blog, id);
     if (pick(p, 'shouldOpenInLegacy', 'should_open_in_legacy')) return { skipped: true, reason: t('skipLegacy') };
-    const cur = { state: p.state, tags: (p.tags || []).slice(), label: readLabel(p), reblog: readReblog(p) };
-    const next = mutate({ state: cur.state, tags: cur.tags.slice(), label: { has: cur.label.has, categories: cur.label.categories.slice() }, reblog: cur.reblog }, cur);
+    const cur = { state: p.state, tags: (p.tags || []).slice(), label: readLabel(p), reblog: readReblog(p), content: p.content || [] };
+    // content is the post's own blocks (a reblog's comment); a mutation may replace or add blocks
+    const next = mutate({ state: cur.state, tags: cur.tags.slice(), label: { has: cur.label.has, categories: cur.label.categories.slice() }, reblog: cur.reblog, content: cur.content.slice() }, cur);
     if (typeof next === 'string') return { skipped: true, reason: next };
     if (sameEdit(cur, next)) return { skipped: true, unchanged: true };
 
     const body = {
-      content: p.content || [],
-      layout: p.layout || [],
+      content: next.content,
+      layout: next.content === cur.content || JSON.stringify(next.content) === JSON.stringify(cur.content) ? p.layout || [] : relayout(p.layout || [], cur.content, next.content),
       state: next.state,
       tags: next.tags.join(','),
       has_community_label: next.label.has,
@@ -1213,12 +1237,30 @@ const TTHCore = (() => {
   // settings.ai = { base: 'https://…/v1', model }; the key is kept apart, in storage key `aiKey`.
   // The model may only pick tags from the hand-picked groups (the palette is worked out from pixels).
   const AI_GROUPS = () => REF_GROUPS.filter(g => !g.auto);
+  // The model tags what an image is good for studying, not everything in it: this many per list at most
+  const AI_MAX = { light: 2, material: 2, composition: 2, subject: 1, technique: 1 };
+  const aiMax = id => AI_MAX[id] ?? 2;
   // The tag that says the AI has looked at a post (kept on the post, so every browser sees it)
   const AI_MARK = 'ai sorted';
-  function aiPrompt() {
-    return 'You sort reference images for a painter who does quick studies. For the image, choose the tags that clearly '
-      + 'apply, only from these lists (use the exact words):\n'
-      + AI_GROUPS().map(g => `${g.id}: ${g.tags.join(', ')}`).join('\n')
+  // The AI's note (what it saw and why the tags fit) is a text block in the post that starts with this mark
+  const AI_NOTE_MARK = '🤖 ';
+  const isAiNote = b => b?.type === 'text' && String(b.text || '').startsWith(AI_NOTE_MARK);
+  // Mutation part: put `text` as the post's AI note, replacing an older one ('' just removes it)
+  const withAiNote = (content, text) => [...content.filter(b => !isAiNote(b)), ...(text ? [{ type: 'text', text: AI_NOTE_MARK + text }] : [])];
+  const aiNoteOf = content => (content || []).find(isAiNote)?.text.slice(AI_NOTE_MARK.length) || '';
+  function aiPrompt(notesLang = '') {
+    return 'You sort reference images for a painter who does quick studies. Tag what this image is worth studying for, '
+      + 'not everything that can be seen in it. Use only the exact words from these lists, at most the given number per list:\n'
+      + AI_GROUPS().map(g => `${g.id} (at most ${aiMax(g.id)}): ${g.tags.join(', ')}`).join('\n')
+      + '\nRules:'
+      + '\n- Only tag what is clearly in the image. Never guess: no skin, hair or eyes unless a person or an animal\'s face shows them clearly.'
+      + '\n- light: the light that shapes the whole picture. silhouette only when the subject is a dark shape against light.'
+      + '\n- material: only surfaces that fill a large part of the image and are worth painting on their own.'
+      + '\n- composition: close up, bust shot and full body only for a person or an animal; wide shot for wide views.'
+      + '\n- subject: the one main subject. cityscape and architecture only when buildings are the subject.'
+      + '\n- technique: photo for any photograph; the painting techniques only for drawn or painted images.'
+      + (notesLang ? '\nAlso write "notes": two or three short sentences on what the image shows and why each tag you chose fits'
+        + (notesLang === 'zh' ? ', in Simplified Chinese, naming things in Chinese rather than quoting the English tag words.' : '.') : '')
       + '\nAlso say whether the image itself looks AI-generated: "ai_generated": "yes" only when you are sure, otherwise "no" or "unsure".'
       + '\nReply with JSON only, like {"light": ["backlight"], "material": [], ..., "ai_generated": "no"}. Leave a list empty when nothing clearly fits.';
   }
@@ -1229,13 +1271,18 @@ const TTHCore = (() => {
     let obj;
     try { obj = JSON.parse(m[0]); } catch { return []; }
     const said = new Set(Object.values(obj || {}).flat().filter(x => typeof x === 'string').map(key));
-    return AI_GROUPS().flatMap(g => g.tags.filter(tag => said.has(tag)));
+    return AI_GROUPS().flatMap(g => g.tags.filter(tag => said.has(tag)).slice(0, aiMax(g.id)));
   }
   // 'yes' when the model said it is sure the image is AI-generated
   const parseAiArt = text => (/"ai_generated"\s*:\s*"yes"/i.test(String(text || '')) ? 'yes' : null);
-  // One image (a data: URL) to the model; returns { tags, aiArt }. Reasoning models spend tokens thinking first, so the budget is
+  const parseAiNotes = text => {
+    const m = String(text || '').match(/\{[\s\S]*\}/);
+    try { const v = JSON.parse(m[0]).notes; return typeof v === 'string' ? v.trim().slice(0, 800) : ''; } catch { return ''; }
+  };
+  // One image (a data: URL) to the model; returns { tags, aiArt, notes }. opts.notesLang ('en', 'zh') asks for
+  // a short note on what it saw and why the tags fit; '' asks for none. Reasoning models spend tokens thinking first, so the budget is
   // generous. Providers that don't take response_format get the request again without it.
-  async function aiTagImage(ai, apiKey, dataUrl, fetchFn = fetch) {
+  async function aiTagImage(ai, apiKey, dataUrl, fetchFn = fetch, opts = {}) {
     const url = ai.base.replace(/\/+$/, '') + '/chat/completions';
     const send = async withFormat => {
       const res = await fetchFn(url, {
@@ -1243,7 +1290,7 @@ const TTHCore = (() => {
         headers: { Authorization: 'Bearer ' + apiKey, 'Content-Type': 'application/json' },
         body: JSON.stringify({
           model: ai.model, max_tokens: 4000, ...(withFormat ? { response_format: { type: 'json_object' } } : {}),
-          messages: [{ role: 'user', content: [{ type: 'text', text: aiPrompt() }, { type: 'image_url', image_url: { url: dataUrl } }] }],
+          messages: [{ role: 'user', content: [{ type: 'text', text: aiPrompt(opts.notesLang || '') }, { type: 'image_url', image_url: { url: dataUrl } }] }],
         }),
       });
       const json = await res.json().catch(() => ({}));
@@ -1254,7 +1301,7 @@ const TTHCore = (() => {
     try { json = await send(true); } catch (e) { if (e.status !== 400 || !/response_format|json/i.test(e.message)) throw e; json = await send(false); }
     const text = json?.choices?.[0]?.message?.content;
     if (!text) throw new Error(json?.choices?.[0]?.finish_reason === 'length' ? 'the reply ran out of tokens' : 'empty reply');
-    return { tags: parseAiTags(text), aiArt: parseAiArt(text) };
+    return { tags: parseAiTags(text), aiArt: parseAiArt(text), notes: opts.notesLang ? parseAiNotes(text) : '' };
   }
   // An image as a JPEG data: URL, downscaled to fit `size` (works in pages and the service worker)
   async function imageDataUrl(url, size = 768, fetchFn = fetch) {
@@ -1892,7 +1939,7 @@ const TTHCore = (() => {
     errMsg, makeApi, getBlogs, postId, isPost, basePosts, nextPath, readLabel, readReblog, getPost, postImages, editPost, mutations,
     emptyCache, buildIndex, matchScore, suggest, syncBlog, syncAll, reblogSource, reblogFamilies, reblogDiffs, syncCopies, copyKeys, isCopyOf, notOnMain, reblogPost, newestPosts, autoMaintain, tagActivity, parseAuth,
     rootKey, likedPosts, emptyCollection, syncCollection, collectSkip, collectPost, isPostLimit,
-    REF_GROUPS, refGroupOf, paletteTags, imagePixels, postPalette, AI_MARK, aiPrompt, parseAiTags, parseAiArt, aiTagImage, imageDataUrl,
+    REF_GROUPS, refGroupOf, paletteTags, imagePixels, postPalette, AI_MARK, AI_NOTE_MARK, withAiNote, aiNoteOf, aiPrompt, parseAiTags, parseAiArt, parseAiNotes, aiTagImage, imageDataUrl, relayout,
     AI_ART_TAG, aiArtSignal, aiArtVerdict, ownerTagsOf, aiArtCheck, unlikePost, deletePost, autoCollect, dailyPick,
     TAG_STATS_TTL, statFresh, ensureTagStats, sortByHeat, sortTagsFair, nameGroups, packGrouping, heatRanks, heatText, tagHeader, TAG_RULES, judgeTags, suggestTagChanges, fandomShare, OFFTOPIC_SHARE, searchMatch,
     TPL_FORMAT, TPL_RULES, TPL_SEARCH_CUTS, parsePack, searchItems, expandPicks, suggestCombos, composeTemplate, packTags, upkeepTags, planUpkeep, itemsOnPost, itemsOnPosts, retagPost,

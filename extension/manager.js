@@ -1067,7 +1067,7 @@
     const ai = aiCards.get(id);
     return `<div class="post${orgSel.has(id) ? ' sel' : ''}${ai ? (ai.busy ? ' ai-busy' : ' ai-done') : ''}" data-i="${i}" data-id="${C.esc(id)}"${ai ? ` data-ai="${C.esc(ai.text)}"` : ''}>
         <img class="thumb" loading="lazy" src="${C.esc(rec[2][0][0])}" alt=""><span class="ck"></span>
-        <div class="badges">${aiSeen(id) ? `<span class="st" title="${C.esc(t('orgAiYes'))}">AI</span>` : ''}<a href="${C.esc(`${TUMBLR}/${C.enc(colBlog()?.name || '')}/${C.enc(id)}`)}" target="_blank" rel="noopener" title="${C.esc(t('openPost'))}">↗</a></div>
+        <div class="badges"><a href="${C.esc(`${TUMBLR}/${C.enc(colBlog()?.name || '')}/${C.enc(id)}`)}" target="_blank" rel="noopener" title="${C.esc(t('openPost'))}">↗</a></div>
         <div class="who" title="${C.esc(tags.map(refLabel).join(' · '))}">${C.esc(tags.map(refLabel).join(' · '))}</div></div>`;
   }
   const orgCard = id => $('orgList').querySelector(`.post[data-id="${CSS.escape(id)}"]`);
@@ -1116,18 +1116,22 @@
   // Edits on the collection's posts go through one queue and run one post at a time, so two of them never change
   // the same post at once, while the AI and the rest of the page keep working. mutateFor(id) gives each post's
   // mutation (or null to leave it); the stored record takes the tags the post has afterwards. A quiet job (the
-  // AI writing one post) redraws just its card and logs only failures.
+  // AI writing one post) redraws just its card and logs only failures; onEach(id, written) says how each post
+  // went. When Tumblr throttles edits (429) or has a hiccup (5xx) the queue waits and tries the same post again,
+  // so nothing queued is dropped; only "stop" or a lost login ends it.
   const orgQueue = [];
   let orgBusy = null;
-  function orgRun(title, ids, mutateFor, onProgress, quiet = false) {
+  const QUEUE_WAIT = 60;
+  function orgRun(title, ids, mutateFor, onProgress, quiet = false, onEach = null) {
     if (!colBlog() || !ids.length) return;
-    orgQueue.push({ title, ids, mutateFor, onProgress, quiet });
+    orgQueue.push({ title, ids, mutateFor, onProgress, quiet, onEach });
     renderQueue();
     if (!orgBusy) drainQueue();
   }
-  function renderQueue(i, n) {
+  function renderQueue(i, n, wait) {
     const waiting = orgQueue.length - (orgBusy ? 1 : 0);
-    $('orgQueue').textContent = orgBusy || waiting > 0 ? t('orgQueue', i, n, Math.max(0, waiting)) : '';
+    $('orgQueue').textContent = wait ? t('orgThrottled', wait, Math.max(0, waiting) + 1)
+      : orgBusy || waiting > 0 ? t('orgQueue', i, n, Math.max(0, waiting)) : '';
     $('orgQueueStop').hidden = !orgBusy;
   }
   async function drainQueue() {
@@ -1141,16 +1145,28 @@
         const id = job.ids[i];
         job.onProgress?.(i + 1, job.ids.length);
         renderQueue(i + 1, job.ids.length);
-        try {
-          const mutate = await job.mutateFor(id);
-          const r = mutate ? await C.editPost(api, t, blog.uuid, id, mutate) : { skipped: true, unchanged: true };
-          if (r.skipped) skip++;
-          else { ok++; const rec = colRec(id); if (rec) rec[3] = C.uniqTags(r.tags); }
-        } catch (e) {
-          fail++;
-          log(t('logFail', id, C.errMsg(e)), true, logBox);
-          if (e.status === 401 || e.status === 429 || e.status >= 500) ctl.aborted = true;
+        let written = false;
+        for (let tries = 0; ; tries++) {
+          try {
+            const mutate = await job.mutateFor(id);
+            const r = mutate ? await C.editPost(api, t, blog.uuid, id, mutate) : { skipped: true, unchanged: true };
+            if (r.skipped) skip++;
+            else { ok++; const rec = colRec(id); if (rec) rec[3] = C.uniqTags(r.tags); }
+            written = !r.skipped || r.unchanged;
+          } catch (e) {
+            const throttled = e.status === 429 || e.status >= 500;
+            if (throttled && tries < 5 && !ctl.aborted) {
+              if (!tries) log(t('orgThrottledLog', C.errMsg(e)), true, logBox);
+              for (let s = QUEUE_WAIT; s > 0 && !ctl.aborted; s--) { renderQueue(0, 0, s); await C.sleep(1000); }
+              continue;
+            }
+            fail++;
+            log(t('logFail', id, C.errMsg(e)), true, logBox);
+            if (e.status === 401 || throttled) ctl.aborted = true;
+          }
+          break;
         }
+        job.onEach?.(id, written);
         if (!job.quiet) bar.firstElementChild.style.width = ((i + 1) / job.ids.length * 100) + '%';
         await C.sleep(settings.delay);
       }
@@ -1160,7 +1176,9 @@
       if (job.quiet) { job.ids.forEach(refreshCard); renderOrgPanel(); } else renderOrganize();
       renderDailyFrom();
     }
-    orgQueue.length = 0;
+    // stopped: whatever was still waiting is reported as not written, never silently dropped
+    for (const job of orgQueue.splice(0)) for (const id of job.ids) job.onEach?.(id, false);
+    if (ctl.aborted) log(t('orgStopped'), true, logBox);
     orgBusy = null;
     renderQueue();
     setTimeout(() => { if (!orgBusy) { bar.hidden = true; bar.firstElementChild.style.width = '0'; } }, 1500);
@@ -1182,7 +1200,16 @@
   // Suggestions wait for review: id -> Map(tag -> kept?). Every post the AI looked at gets the tag C.AI_MARK when
   // they are written, so "looked at" lives on the post, not in this browser.
   let aiKey = '';
-  const aiSuggest = new Map(), aiLooked = new Set();
+  const aiSuggest = new Map(), aiLooked = new Set(), aiRedo = new Set();
+  // The AI's tags on a post: added, or for a post it looked at before, replacing that post's tags in the AI's
+  // lists (light, material, composition, subject, technique); palette and other tags stay
+  const AI_LISTS = new Set(C.REF_GROUPS.filter(g => !g.auto).map(g => g.id));
+  // note: the AI's few sentences on what it saw, kept in the post (replacing an older note); null leaves it
+  const aiWrite = (redo, tags, note = null) => n => Object.assign(n, {
+    tags: C.withTags(redo ? n.tags.filter(tag => !AI_LISTS.has(C.refGroupOf(tag))) : n.tags, [...tags, C.AI_MARK]),
+    ...(note ? { content: C.withAiNote(n.content, note) } : {}),
+  });
+  const aiNotes = new Map();
   const aiReady = () => !!(settings.ai.base && settings.ai.model && aiKey);
   // The endpoint's origin is an optional host permission, asked for on a click (Chrome wants a user gesture)
   async function aiAccess() {
@@ -1221,20 +1248,27 @@
         const rec = colRec(id);
         mark(id, t('aiBusy'), true);
         try {
-          const seen = await C.aiTagImage(settings.ai, aiKey, await C.imageDataUrl(rec[2][0][1] || rec[2][0][0]));
+          const seen = await C.aiTagImage(settings.ai, aiKey, await C.imageDataUrl(rec[2][0][1] || rec[2][0][0]), undefined,
+            { notesLang: settings.ai.notes ? lang() : '' });
           let tags = seen.aiArt === 'yes' ? [...seen.tags, C.AI_ART_TAG] : seen.tags;
           // the palette is worked out here for free, for posts that don't have it yet
           if (!recTags(rec).some(tag => C.refGroupOf(tag) === 'palette')) {
             try { tags = [...await C.postPalette(rec[2]), ...tags]; } catch { /* the AI's tags still count */ }
           }
+          // looked at before: the new tags replace its old ones in the AI's lists
+          const redo = aiSeen(id);
           const have = new Set(recTags(rec).map(C.key));
-          const fresh = tags.filter(tag => !have.has(tag));
+          const fresh = redo ? tags : tags.filter(tag => !have.has(tag));
           if (fresh.length) found++;
           if (auto) {
-            orgRun(t('aiApply'), [id], () => C.mutations.addTags([...fresh, C.AI_MARK]), null, true);
-            mark(id, t('aiCardWritten', fresh.length), false);
+            // the card says "waiting" until the tags are really on the post
+            mark(id, t('aiCardQueued', fresh.length), false);
+            orgRun(t('aiApply'), [id], () => aiWrite(redo, fresh, seen.notes), null, true,
+              (pid, written) => { mark(pid, written ? t('aiCardWritten', fresh.length) : t('aiCardFailed'), false); refreshCard(pid); });
           } else {
             if (fresh.length) aiSuggest.set(id, new Map(fresh.map(tag => [tag, true])));
+            if (redo) aiRedo.add(id);
+            if (seen.notes) aiNotes.set(id, seen.notes);
             aiLooked.add(id);
             mark(id, t('aiCardDone', fresh.length), false);
           }
@@ -1281,9 +1315,11 @@
     const ids = [...aiLooked];
     aiSuggest.clear(); aiLooked.clear();
     renderAiReview();
-    if (ids.length) orgRun(t('aiApply'), ids, id => C.mutations.addTags([...(picks.get(id) || []), C.AI_MARK]));
+    const redo = new Set(aiRedo), notes = new Map(aiNotes);
+    aiRedo.clear(); aiNotes.clear();
+    if (ids.length) orgRun(t('aiApply'), ids, id => aiWrite(redo.has(id), picks.get(id) || [], notes.get(id)));
   }
-  const aiDiscard = () => { aiSuggest.clear(); aiLooked.clear(); renderAiReview(); };
+  const aiDiscard = () => { aiSuggest.clear(); aiLooked.clear(); aiRedo.clear(); aiNotes.clear(); renderAiReview(); };
 
   // Settings: the endpoint and model are settings; the key goes to its own storage key
   function renderAiSettings() {
@@ -1291,7 +1327,9 @@
     $('aiModel').value = settings.ai.model;
     $('aiKey').value = aiKey;
     $('aiAuto').checked = settings.ai.autoApply;
+    $('aiNotesOn').checked = settings.ai.notes;
   }
+  $('aiNotesOn').addEventListener('change', e => { settings.ai = { ...settings.ai, notes: e.target.checked }; saveSettings(); });
   $('aiAuto').addEventListener('change', e => { settings.ai = { ...settings.ai, autoApply: e.target.checked }; saveSettings(); });
   $('aiBase').addEventListener('change', e => { settings.ai = { ...settings.ai, base: e.target.value.trim() }; saveSettings(); });
   $('aiModel').addEventListener('change', e => { settings.ai = { ...settings.ai, model: e.target.value.trim() }; saveSettings(); });
@@ -1708,7 +1746,7 @@
     settings.rules = { ...C.TPL_RULES, ...settings.rules };
     settings.clean = { notes: old?.notes ?? true, notesMax: old?.notesMax ?? 1 };
     settings.collect = { ...COLLECT, ...settings.collect };
-    settings.ai = { base: '', model: '', autoApply: true, ...settings.ai };
+    settings.ai = { base: '', model: '', autoApply: true, notes: true, ...settings.ai };
     rebuildIndex();
     document.documentElement.style.setProperty('--card', settings.card + 'px');
     $('cardSize').value = settings.card;
