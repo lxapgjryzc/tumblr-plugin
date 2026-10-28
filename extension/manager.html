@@ -241,7 +241,7 @@
         <button class="pri" data-act="orgPalette" data-i18n="orgPalette"></button>
         <span class="muted" data-i18n="orgPaletteHint"></span>
         <button class="pri" id="orgAiBtn" data-act="orgAi" data-i18n="orgAi"></button>
-        <button class="dan" id="orgAiStop" data-act="stopRun" data-i18n="stop" hidden></button>
+        <button class="dan" id="orgAiStop" data-act="aiStop" data-i18n="stop" hidden></button>
         <label><input type="checkbox" id="aiAuto"><span data-i18n="aiAuto"></span></label>
       </div>
       <div class="row">
@@ -252,7 +252,7 @@
       </div>
       <div class="organize">
         <div class="orgleft">
-          <div id="orgInfo" class="muted"></div>
+          <div class="row"><span id="orgInfo" class="muted"></span><span id="orgQueue" class="muted"></span><button class="dan stop" data-act="stopRun" id="orgQueueStop" hidden data-i18n="stop"></button></div>
           <div id="orgList" class="grid colgrid" tabindex="0"></div>
         </div>
         <aside id="orgPanel" class="orgpanel"></aside>

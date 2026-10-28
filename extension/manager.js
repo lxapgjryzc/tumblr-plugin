@@ -1059,6 +1059,22 @@
     sel.value = [...sel.options].some(o => o.value === keep) ? keep : '';
   }
 
+  // What the AI is doing to each card (id -> { text, busy }), kept so a redraw doesn't lose it
+  const aiCards = new Map();
+  function orgCardHtml(id, i) {
+    const rec = colRec(id);
+    const tags = recTags(rec).filter(tag => C.key(tag) !== C.AI_MARK && !settings.collect.tags.some(x => C.key(x) === C.key(tag)));
+    const ai = aiCards.get(id);
+    return `<div class="post${orgSel.has(id) ? ' sel' : ''}${ai ? (ai.busy ? ' ai-busy' : ' ai-done') : ''}" data-i="${i}" data-id="${C.esc(id)}"${ai ? ` data-ai="${C.esc(ai.text)}"` : ''}>
+        <img class="thumb" loading="lazy" src="${C.esc(rec[2][0][0])}" alt=""><span class="ck"></span>
+        <div class="badges">${aiSeen(id) ? `<span class="st" title="${C.esc(t('orgAiYes'))}">AI</span>` : ''}<a href="${C.esc(`${TUMBLR}/${C.enc(colBlog()?.name || '')}/${C.enc(id)}`)}" target="_blank" rel="noopener" title="${C.esc(t('openPost'))}">↗</a></div>
+        <div class="who" title="${C.esc(tags.map(refLabel).join(' · '))}">${C.esc(tags.map(refLabel).join(' · '))}</div></div>`;
+  }
+  const orgCard = id => $('orgList').querySelector(`.post[data-id="${CSS.escape(id)}"]`);
+  function refreshCard(id) {
+    const card = orgCard(id);
+    if (card) card.outerHTML = orgCardHtml(id, +card.dataset.i);
+  }
   function renderOrganize() {
     if (!collection) return;
     filterOptions($('orgShow'), ['u', 'a'], t('orgAll'));
@@ -1067,14 +1083,8 @@
       .sort(([, a], [, b]) => b[1] - a[1]).map(([id]) => id);
     for (const id of [...orgSel]) if (!orgIds.includes(id)) orgSel.delete(id);
     orgGrid.reset();
-    $('orgList').innerHTML = orgIds.map((id, i) => {
-      const rec = colRec(id);
-      const tags = recTags(rec).filter(tag => C.key(tag) !== C.AI_MARK && !settings.collect.tags.some(x => C.key(x) === C.key(tag)));
-      return `<div class="post${orgSel.has(id) ? ' sel' : ''}" data-i="${i}" data-id="${C.esc(id)}">
-        <img class="thumb" loading="lazy" src="${C.esc(rec[2][0][0])}" alt=""><span class="ck"></span>
-        <div class="badges">${aiSeen(id) ? `<span class="st" title="${C.esc(t('orgAiYes'))}">AI</span>` : ''}<a href="${C.esc(`${TUMBLR}/${C.enc(colBlog()?.name || '')}/${C.enc(id)}`)}" target="_blank" rel="noopener" title="${C.esc(t('openPost'))}">↗</a></div>
-        <div class="who" title="${C.esc(tags.map(refLabel).join(' · '))}">${C.esc(tags.map(refLabel).join(' · '))}</div></div>`;
-    }).join('') || `<div class="empty muted">${C.esc(t(collection.syncedAt ? 'orgNone' : 'orgNeedRead'))}</div>`;
+    $('orgList').innerHTML = orgIds.map(orgCardHtml).join('')
+      || `<div class="empty muted">${C.esc(t(collection.syncedAt ? 'orgNone' : 'orgNeedRead'))}</div>`;
     renderOrgPanel();
   }
   // The category chips: on when every selected post has the tag, half when some do
@@ -1103,37 +1113,57 @@
   });
   $('orgPanel').addEventListener('keydown', e => { if (e.key === 'Enter' && e.target.id === 'orgOther') actions.orgAddOther(); });
 
-  // Edits on the collection's posts, one after another; mutateFor(id) gives each post's mutation (or null to
-  // leave it). The stored record takes the tags the post has afterwards.
-  async function orgRun(title, ids, mutateFor, onProgress) {
-    const blog = colBlog();
-    if (running || !blog || !ids.length) return;
-    const ctl = running = { aborted: false };
+  // Edits on the collection's posts go through one queue and run one post at a time, so two of them never change
+  // the same post at once, while the AI and the rest of the page keep working. mutateFor(id) gives each post's
+  // mutation (or null to leave it); the stored record takes the tags the post has afterwards. A quiet job (the
+  // AI writing one post) redraws just its card and logs only failures.
+  const orgQueue = [];
+  let orgBusy = null;
+  function orgRun(title, ids, mutateFor, onProgress, quiet = false) {
+    if (!colBlog() || !ids.length) return;
+    orgQueue.push({ title, ids, mutateFor, onProgress, quiet });
+    renderQueue();
+    if (!orgBusy) drainQueue();
+  }
+  function renderQueue(i, n) {
+    const waiting = orgQueue.length - (orgBusy ? 1 : 0);
+    $('orgQueue').textContent = orgBusy || waiting > 0 ? t('orgQueue', i, n, Math.max(0, waiting)) : '';
+    $('orgQueueStop').hidden = !orgBusy;
+  }
+  async function drainQueue() {
+    const ctl = orgBusy = { aborted: false };
     const bar = $('orgProg'), logBox = $('orgLog');
-    bar.hidden = false;
-    let ok = 0, skip = 0, fail = 0;
-    for (let i = 0; i < ids.length && !ctl.aborted; i++) {
-      const id = ids[i];
-      onProgress?.(i + 1, ids.length);
-      try {
-        const mutate = await mutateFor(id);
-        const r = mutate ? await C.editPost(api, t, blog.uuid, id, mutate) : { skipped: true, unchanged: true };
-        if (r.skipped) skip++;
-        else { ok++; const rec = colRec(id); if (rec) rec[3] = C.uniqTags(r.tags); }
-      } catch (e) {
-        fail++;
-        log(t('logFail', id, C.errMsg(e)), true, logBox);
-        if (e.status === 401 || e.status === 429 || e.status >= 500) break;
+    while (orgQueue.length && !ctl.aborted) {
+      const job = orgQueue[0], blog = colBlog();
+      if (!job.quiet) bar.hidden = false;
+      let ok = 0, skip = 0, fail = 0;
+      for (let i = 0; i < job.ids.length && !ctl.aborted && blog; i++) {
+        const id = job.ids[i];
+        job.onProgress?.(i + 1, job.ids.length);
+        renderQueue(i + 1, job.ids.length);
+        try {
+          const mutate = await job.mutateFor(id);
+          const r = mutate ? await C.editPost(api, t, blog.uuid, id, mutate) : { skipped: true, unchanged: true };
+          if (r.skipped) skip++;
+          else { ok++; const rec = colRec(id); if (rec) rec[3] = C.uniqTags(r.tags); }
+        } catch (e) {
+          fail++;
+          log(t('logFail', id, C.errMsg(e)), true, logBox);
+          if (e.status === 401 || e.status === 429 || e.status >= 500) ctl.aborted = true;
+        }
+        if (!job.quiet) bar.firstElementChild.style.width = ((i + 1) / job.ids.length * 100) + '%';
+        await C.sleep(settings.delay);
       }
-      bar.firstElementChild.style.width = ((i + 1) / ids.length * 100) + '%';
-      await C.sleep(settings.delay);
+      orgQueue.shift();
+      await chrome.storage.local.set({ collection });
+      if (!job.quiet) log(t('logDone', job.title, ctl.aborted, ok, skip, fail), false, logBox);
+      if (job.quiet) { job.ids.forEach(refreshCard); renderOrgPanel(); } else renderOrganize();
+      renderDailyFrom();
     }
-    running = null;
-    await chrome.storage.local.set({ collection });
-    log(t('logDone', title, ctl.aborted, ok, skip, fail), false, logBox);
-    setTimeout(() => { bar.hidden = true; bar.firstElementChild.style.width = '0'; }, 1500);
-    renderOrganize();
-    renderDailyFrom();
+    orgQueue.length = 0;
+    orgBusy = null;
+    renderQueue();
+    setTimeout(() => { if (!orgBusy) { bar.hidden = true; bar.firstElementChild.style.width = '0'; } }, 1500);
   }
   // Palette tags worked out from each post's first image; they replace the palette tags it had
   function detectPalette() {
@@ -1145,7 +1175,7 @@
       const found = await C.postPalette(colRec(id)[2]);
       if (!found.length) return null;
       return n => Object.assign(n, { tags: C.withTags(n.tags.filter(tag => C.refGroupOf(tag) !== 'palette'), found) });
-    }, (i, n) => { $('orgInfo').textContent = t('orgDetecting', i, n); });
+    });
   }
 
   // ----- AI sorting (settings.ai = { base, model }; the key in storage key aiKey) -----
@@ -1160,25 +1190,28 @@
     try { origin = new URL(settings.ai.base).origin + '/*'; } catch { return false; }
     return chrome.permissions.request({ origins: [origin] }).catch(() => false);
   }
+  let aiCtl = null;
   async function aiRun() {
-    if (running) return;
+    if (aiCtl) return;
     if (!aiReady()) return toast(t('aiNeedSetup'));
     const ids = [...orgSel];
     if (!ids.length) return toast(t('needSelect'));
     if (!(await aiAccess())) return toast(t('aiNoAccess'));
-    const ctl = running = { aborted: false };
-    const bar = $('orgProg'), logBox = $('orgLog'), btn = $('orgAiBtn');
-    bar.hidden = false;
-    let done = 0, fail = 0, next = 0;
+    const ctl = aiCtl = { aborted: false };
+    const logBox = $('orgLog'), btn = $('orgAiBtn');
+    const auto = settings.ai.autoApply;
+    let done = 0, fail = 0, next = 0, found = 0;
     // the button shows the count and a stop button sits beside it; each card shows what happens to it
-    const progress = () => { btn.textContent = $('orgInfo').textContent = t('aiRunning', done, ids.length); };
+    const progress = () => { btn.textContent = t('aiRunning', done, ids.length); };
     const mark = (id, text, busy) => {
-      const card = $('orgList').querySelector(`.post[data-id="${CSS.escape(id)}"]`);
+      aiCards.set(id, { text, busy });
+      const card = orgCard(id);
       if (!card) return;
       card.dataset.ai = text;
       card.classList.toggle('ai-busy', busy);
       card.classList.toggle('ai-done', !busy);
     };
+    aiCards.clear();
     btn.disabled = true; $('orgAiStop').hidden = false;
     progress();
     // two at a time: each image takes a few seconds while the model thinks
@@ -1196,9 +1229,15 @@
           }
           const have = new Set(recTags(rec).map(C.key));
           const fresh = tags.filter(tag => !have.has(tag));
-          if (fresh.length) aiSuggest.set(id, new Map(fresh.map(tag => [tag, true])));
-          aiLooked.add(id);
-          mark(id, t('aiCardDone', fresh.length), false);
+          if (fresh.length) found++;
+          if (auto) {
+            orgRun(t('aiApply'), [id], () => C.mutations.addTags([...fresh, C.AI_MARK]), null, true);
+            mark(id, t('aiCardWritten', fresh.length), false);
+          } else {
+            if (fresh.length) aiSuggest.set(id, new Map(fresh.map(tag => [tag, true])));
+            aiLooked.add(id);
+            mark(id, t('aiCardDone', fresh.length), false);
+          }
         } catch (e) {
           fail++;
           mark(id, '✕', false);
@@ -1207,22 +1246,17 @@
         }
         done++;
         progress();
-        bar.firstElementChild.style.width = (done / ids.length * 100) + '%';
       }
     };
     await Promise.all([worker(), worker()]);
-    running = null;
+    aiCtl = null;
     btn.disabled = false; btn.textContent = t('orgAi'); $('orgAiStop').hidden = true;
-    $('orgInfo').textContent = t('orgCount', orgIds.length, orgSel.size);
     log(t('aiDone', done - fail, fail), false, logBox);
-    // written straight away (the default), or kept for review
-    if (settings.ai.autoApply && aiLooked.size) { toast(t('aiWriting', aiLooked.size)); return aiApply(); }
-    if (aiSuggest.size) { toast(t('aiFinished', aiSuggest.size)); setTimeout(() => $('aiReview').scrollIntoView({ behavior: 'smooth', block: 'start' }), 50); }
-    setTimeout(() => { bar.hidden = true; bar.firstElementChild.style.width = '0'; }, 1500);
-    renderOrgPanel();
+    if (auto) return toast(t('aiFinishedAuto', done - fail, found));
     renderAiReview();
+    if (aiSuggest.size) { toast(t('aiFinished', aiSuggest.size)); setTimeout(() => $('aiReview').scrollIntoView({ behavior: 'smooth', block: 'start' }), 50); }
     // nothing to review: mark what it looked at right away
-    if (!aiSuggest.size) { if (!fail) toast(t('aiNothing')); aiApply(); }
+    else { if (!fail) toast(t('aiNothing')); aiApply(); }
   }
   function renderAiReview() {
     const box = $('aiReview');
@@ -1294,12 +1328,13 @@
       if (!v.verdict) return null;
       log(t('aiArtHit', id, t('aiArtWhy_' + v.why, v.n)), false, $('orgLog'));
       return C.mutations.addTags([C.AI_ART_TAG]);
-    }, (i, n) => { $('orgInfo').textContent = t('aiArtChecking', i, n); });
+    });
   }
   async function deleteRun() {
     const blog = colBlog();
     const ids = [...orgSel];
     if (running || !blog) return;
+    if (orgBusy || aiCtl) return toast(t('orgWait'));
     if (!ids.length) return toast(t('needSelect'));
     if (!confirm(t('orgDeleteConfirm', ids.length))) return;
     const ctl = running = { aborted: false };
@@ -1549,7 +1584,8 @@
       $('runRow').hidden = true;
       if (!ctl.aborted) runBatch(t('sortHeat'), C.mutations.sortByHeat(cache.tagStats, fairOpts()));
     },
-    stopRun: () => { if (running) running.aborted = true; },
+    stopRun: () => { if (running) running.aborted = true; if (orgBusy) orgBusy.aborted = true; },
+    aiStop: () => { if (aiCtl) aiCtl.aborted = true; },
     cleanScan: scanCleanup,
     cleanStop: () => { if (scanCtl) scanCtl.aborted = true; },
     cleanAll: () => { cleanResults.forEach(r => cleanSel.add(r.key)); renderClean(); },
