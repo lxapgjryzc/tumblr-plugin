@@ -28,6 +28,11 @@
   </div>
 
   <main>
+    <div id="rolesAsk" class="ask" hidden>
+      <p data-i18n="rolesAsk"></p>
+      <div id="rolesAskList" class="table"></div>
+      <div class="row"><button data-act="rolesLater" data-i18n="rolesLater"></button></div>
+    </div>
     <section class="view posts" data-view="posts">
       <div class="left">
         <div class="row">
@@ -149,6 +154,7 @@
       </div>
       <p id="blogStats" class="muted"></p>
       <div class="row">
+        <select id="libRole"><option value="share" data-i18n="libShare"></option><option value="material" data-i18n="libMaterial"></option></select>
         <input type="text" id="libSearch" class="grow" data-i18n-ph="phLibSearch">
         <label class="muted"><input type="checkbox" id="showHidden"><span data-i18n="showHidden"></span></label>
       </div>
@@ -216,6 +222,8 @@
 
     <section class="view collect" data-view="collect" hidden>
       <p class="muted" data-i18n="colIntro"></p>
+      <div class="row"><label for="colView" data-i18n="colView"></label><select id="colView"></select>
+        <span id="colViewInfo" class="muted" data-i18n="colViewHint"></span></div>
       <div class="row"><label for="colBlog" data-i18n="colBlog"></label><select id="colBlog"></select>
         <label for="colTags" data-i18n="colTags"></label><input type="text" id="colTags" class="grow" data-i18n-ph="colTagsPh"></div>
       <div class="row"><label><input type="checkbox" id="colAuto"><span data-i18n="colAuto"></span></label></div>
@@ -297,6 +305,10 @@
       <div class="row"><label><input type="checkbox" id="hideAds"><span data-i18n="hideAds"></span></label></div>
       <div class="row"><label><input type="checkbox" id="hideRecs"><span data-i18n="hideRecs"></span></label></div>
       <div class="row"><label><input type="checkbox" id="hideAiArt"><span data-i18n="hideAiArt"></span></label></div>
+
+      <h3 data-i18n="myBlogs"></h3>
+      <p class="muted" data-i18n="myBlogsIntro"></p>
+      <div id="blogRoles" class="table roles"></div>
 
       <h3 data-i18n="rulesTitle"></h3>
       <p class="muted" data-i18n="rulesIntro"></p>

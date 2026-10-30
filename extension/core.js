@@ -164,8 +164,12 @@ const TTHCore = (() => {
       autoTitle: 'Done in the background (every 10 minutes, posts published after this was turned on)',
       autoNone: 'Nothing yet', autoError: e => `Couldn't check: ${e}`,
       autoReblogged: (post, to) => `reblogged ${post} to ${to}`, autoFixed: (post, src) => `${post} brought in line with ${src}`,
+      autoFailed: (post, e) => `${post} failed: ${e}`, autoRepeat: n => ` (${n} times, last shown)`,
+      rbGone: n => `${n} deleted post(s) dropped from the list`,
       navCollect: 'Collection',
       colIntro: 'Pick one of your blogs as a collection: posts you like are reblogged onto it with your tags, and it hands you a few random images from it each day for a quick study. Your own posts and posts that don\'t allow reblogs are left out. The collection blog is left out of the tag library and of the reblogs between your blogs.',
+      colView: 'Material blog', colViewHint: 'Today and Sort work on this blog; likes are collected into the collection blog below',
+      colViewNone: 'No material blog yet: choose a collection blog below, or mark a blog as material in Settings → My blogs',
       colBlog: 'Collection blog', colBlogNone: '— off —', colTags: 'Tags on its reblogs', colTagsPh: 'Tags, separated by commas',
       colAuto: 'Reblog posts I like onto it automatically (every 10 minutes, likes after this was turned on)',
       colImagesOnly: 'Only posts with images', colQueue: 'into its queue',
@@ -196,6 +200,18 @@ const TTHCore = (() => {
       aiBase: 'API address', aiBasePh: 'https://api.example.com/v1', aiModel: 'Model', aiModelPh: 'a model that accepts images', aiKey: 'API key', aiKeyPh: 'Paste your key here',
       aiTest: 'Test', aiTesting: 'Sending a test image…', aiOk: tags => `It works${tags ? ' · it said: ' + tags : ''}`, aiFail: e => `Didn't work: ${e}`,
       aiNeedSetup: 'Set up AI image sorting in Settings first', aiNoAccess: 'Chrome wasn\'t allowed to reach this address',
+      myBlogs: 'My blogs', myBlogsIntro: 'Sharing blogs (fan works, original work: posts for others) take part in the reblog sync to the main blog and in tag tidying. Material blogs (reference images) are left out of both, have their own tag library and get the collection tools and Redo AI.',
+      roleShare: 'Sharing', roleMaterial: 'Material', roleMain: 'main blog · always sharing', roleCollect: 'collection blog · always material', roleUnset: 'not set yet',
+      roleToMaterial: name => `${name} is a material blog now: its posts leave the reblog sync (its copies on main stay as they are) and its tags move to the material library`,
+      roleToShare: name => `${name} is a sharing blog now: only its posts from now on are reblogged to main (Check reblogs lists older ones); its tags move to the sharing library`,
+      rolesAsk: 'These blogs have no role yet. Sharing or material? Until you choose, they are left out of the background reblog sync.', rolesLater: 'Later',
+      rolesUnsetBg: names => `Left out of the reblog sync until their role is set in Settings → My blogs: ${names}`,
+      libShare: 'Sharing blogs', libMaterial: 'Material blogs',
+      aiRedoNotMaterial: 'Redo AI works on material blogs only (Settings → My blogs)', aiRedoManagerBusy: 'The manager is running edits; try again when they are done',
+      aiRedo: '🤖 Redo AI', aiRedoHint: 'Let the AI look at this post again: its tags and note are replaced, written straight to the post',
+      aiRedoBusy: '🤖 Thinking…', aiRedoDone: n => `🤖 Done · ${n} tag(s)`, aiRedoFail: e => `AI didn't work: ${e}`,
+      aiRedoWritten: 'Written to the post; reload to see it', aiNoImages: 'This post has no images',
+      aiNoAccessPage: 'Chrome isn\'t allowed to reach the AI address yet: press Test in the manager\'s AI settings once',
       colSkip_aiArt: 'tagged as AI-made by its poster (like taken back)',
       orgAiArt: 'Check for AI images', orgAiArtHint: 'Reads the original\'s tags, tags others added and replies; all posts when none is selected',
       orgAiArtOnly: 'Suspected AI images', aiArtChecking: (i, n) => `Checking for AI images… ${i} / ${n}`,
@@ -352,9 +368,13 @@ const TTHCore = (() => {
       autoTitle: '后台自动处理记录（每 10 分钟一次，只管开启之后发布的帖子）',
       autoNone: '还没有记录', autoError: e => `检查失败：${e}`,
       autoReblogged: (post, to) => `已把 ${post} 转发到 ${to}`, autoFixed: (post, src) => `已按 ${src} 修正 ${post}`,
+      autoFailed: (post, e) => `${post} 失败：${e}`, autoRepeat: n => `（共 ${n} 次，显示最近一次）`,
+      rbGone: n => `${n} 个已删除的帖子已从列表移除`,
       navCollect: '素材',
       colIntro: '选一个自己的博客当素材库：喜欢的帖子会带上你设的 tag 转发过去，每天还会从里面随机抽几张图给你做速涂。自己的帖子和禁止转发的帖子不会转。素材博客不计入标签库，也不参与主博客和子博客之间的互转。',
-      colBlog: '素材博客', colBlogNone: '— 不使用 —', colTags: '转发时加的 tag', colTagsPh: 'tag，用逗号分隔',
+      colView: '素材博客', colViewHint: '“今日速写”和“分类”作用在这个博客上；喜欢的帖子收进下面的收藏博客',
+      colViewNone: '还没有素材博客：在下面选一个收藏博客，或者在设置 → 我的博客里把博客设为素材型',
+      colBlog: '收藏博客', colBlogNone: '— 不使用 —', colTags: '转发时加的 tag', colTagsPh: 'tag，用逗号分隔',
       colAuto: '自动把我喜欢的帖子转发过去（每 10 分钟一次，只管开启之后点的喜欢）',
       colImagesOnly: '只转有图片的帖子', colQueue: '加入它的队列',
       colScan: '检查我的喜欢', colScanning: (n, total) => `正在读取喜欢… ${n}${total ? ' / ' + total : ''}`,
@@ -363,7 +383,7 @@ const TTHCore = (() => {
       colHint: '点“检查我的喜欢”看哪些还没转进素材库', colNone: '喜欢的帖子都已经在素材库里了',
       colReblog: name => `把勾选的帖子转发到 ${name}`, colConfirm: (n, name, when) => `把 ${n} 条喜欢的帖子转发到 ${name}（${when}）？`,
       colSkip_mine: '自己的帖子', colSkip_closed: '禁止转发', colSkip_noImages: '没有图片',
-      colNeedBlog: '请先选择素材博客', colRateLimit: '已达到 Tumblr 每天的发帖上限，剩下的明天再转',
+      colNeedBlog: '请先选择收藏博客', colRateLimit: '已达到 Tumblr 每天的发帖上限，剩下的明天再转',
       colLogTitle: '后台自动处理记录', colAutoDone: (n, name) => `已把 ${n} 条喜欢的帖子转发到 ${name}`,
       colAutoSkipped: list => `未转：${list}`,
       colAutoPalette: '转发时自动识别色调并加上对应 tag',
@@ -403,6 +423,18 @@ const TTHCore = (() => {
       aiBase: '接口地址', aiBasePh: 'https://api.example.com/v1', aiModel: '模型', aiModelPh: '能看图的模型名', aiKey: 'API key', aiKeyPh: '在这里粘贴你的 key',
       aiTest: '测试', aiTesting: '正在发送测试图片…', aiOk: tags => `可以用${tags ? ' · 它的回答：' + tags : ''}`, aiFail: e => `不能用：${e}`,
       aiNeedSetup: '请先在设置里配置 AI 识图', aiNoAccess: 'Chrome 没有允许访问这个地址',
+      myBlogs: '我的博客', myBlogsIntro: '分享型博客（同人、原创等给别人看的帖子）参与转发到主博客的同步和 tag 整理。素材型博客（参考图）不参与这两项，有自己的 tag 库，可以用素材库工具和“重新 AI”。',
+      roleShare: '分享', roleMaterial: '素材', roleMain: '主博客 · 总是分享型', roleCollect: '收藏博客 · 总是素材型', roleUnset: '还没设置',
+      roleToMaterial: name => `${name} 现在是素材博客：它的帖子不再参与转发同步（已经转到主博客的保持原样），它的 tag 移到素材 tag 库`,
+      roleToShare: name => `${name} 现在是分享博客：只有从现在起的新帖会转到主博客（更早的在“检查转发”里列出）；它的 tag 移到分享 tag 库`,
+      rolesAsk: '这些博客还没有设置类型：分享型还是素材型？选好之前，后台转发同步不会处理它们。', rolesLater: '以后再说',
+      rolesUnsetBg: names => `这些博客还没设置类型，在设置 → 我的博客里选好之前不参与转发同步：${names}`,
+      libShare: '分享博客', libMaterial: '素材博客',
+      aiRedoNotMaterial: '“重新 AI”只能用在素材博客上（设置 → 我的博客）', aiRedoManagerBusy: '管理页正在批量修改，等它做完再试',
+      aiRedo: '🤖 重新 AI', aiRedoHint: '让 AI 重新看这条帖子：替换它之前给的 tag 和说明，直接写进帖子',
+      aiRedoBusy: '🤖 思考中…', aiRedoDone: n => `🤖 完成 · ${n} 个 tag`, aiRedoFail: e => `AI 没成功：${e}`,
+      aiRedoWritten: '已写进帖子，刷新页面就能看到', aiNoImages: '这条帖子没有图片',
+      aiNoAccessPage: 'Chrome 还没被允许访问 AI 地址：先在管理页的 AI 设置里点一次“测试”',
       colSkip_aiArt: '原作者标了 AI 图（已取消喜欢）',
       orgAiArt: '检查 AI 图', orgAiArtHint: '读原帖的 tag、别人转发时加的 tag 和评论；什么都没选时检查全部',
       orgAiArtOnly: '疑似 AI 图', aiArtChecking: (i, n) => `正在检查 AI 图… ${i} / ${n}`,
@@ -571,11 +603,20 @@ const TTHCore = (() => {
 
   // All images of an NPF post (its own content, then reblog trail), each as { small, big } URLs
   // picked from the media sizes closest to the given widths
+  // The post's images, main ones first: decorative strips (dividers, banners: one side at least 4 times the
+  // other) and tiny images go last, so whatever takes the first image (AI sort, palette, thumbnails) gets a
+  // real picture. They are kept for posts that have nothing else.
   function postImages(p, smallW = 250, bigW = 640) {
     const near = (media, w) => media.reduce((a, b) => (Math.abs((b.width || 0) - w) < Math.abs((a.width || 0) - w) ? b : a)).url;
-    return [...(p.content || []), ...(p.trail || []).flatMap(tr => tr.content || [])]
+    const minor = media => {
+      const m = media.reduce((a, b) => ((b.width || 0) > (a.width || 0) ? b : a));
+      const w = m.width || 0, h = m.height || 0;
+      return !!(w && h) && (Math.max(w, h) >= 4 * Math.min(w, h) || Math.max(w, h) < 100);
+    };
+    const all = [...(p.content || []), ...(p.trail || []).flatMap(tr => tr.content || [])]
       .filter(b => b.type === 'image' && b.media?.length)
-      .map(b => ({ small: near(b.media, smallW), big: near(b.media, bigW) }));
+      .map(b => ({ small: near(b.media, smallW), big: near(b.media, bigW), minor: minor(b.media) }));
+    return [...all.filter(i => !i.minor), ...all.filter(i => i.minor)].map(({ small, big }) => ({ small, big }));
   }
 
   const getPost = (api, blog, id) => api(`/v2/blog/${enc(blog)}/posts/${enc(id)}${qs({ post_format: 'npf' })}`);
@@ -641,6 +682,45 @@ const TTHCore = (() => {
     // Reblog control: 'everyone' (allow) or 'noone' (don't allow)
     reblog: mode => n => Object.assign(n, { reblog: mode }),
   };
+
+  // ---------- Blog roles ----------
+  // settings.blogRoles = { uuid: { role: 'share' | 'material', at } }, set by hand (never guessed). Sharing blogs hold
+  // posts meant for others: they take part in the reblog sync and the tag tidying. Material blogs hold reference
+  // images: their own tag library and the collection tools. The main blog is always sharing and the collection
+  // blog always material.
+  const ROLES = ['share', 'material'];
+  // blog: { uuid, primary } or a uuid (looked up in blogList); null = no role yet
+  function blogRole(settings, blog, blogList = []) {
+    const b = typeof blog === 'string' ? blogList.find(x => x.uuid === blog) || { uuid: blog } : blog;
+    if (!b) return null;
+    if (b.primary) return 'share';
+    if (settings?.collect?.blog && b.uuid === settings.collect.blog) return 'material';
+    const r = settings?.blogRoles?.[b.uuid]?.role;
+    return ROLES.includes(r) ? r : null;
+  }
+  // The library and tidying count a blog with no role yet as sharing, as before roles existed
+  const libraryRole = (settings, blog, blogList) => blogRole(settings, blog, blogList) || 'share';
+  // Blogs that still need a role (the manager asks about them)
+  const unsetBlogs = (settings, blogList = []) => blogList.filter(b => !blogRole(settings, b));
+  // A view of the cache with only one role's blogs (same blog objects, so writes go through). Reblogs between
+  // blogs of different roles are plain reblogs, never copies, because each view only knows its own blogs.
+  function roleCache(cache, settings, role) {
+    const blogs = {};
+    for (const [uuid, b] of Object.entries(cache.blogs)) if (libraryRole(settings, uuid, cache.blogList) === role) blogs[uuid] = b;
+    return { ...cache, blogs, blogList: cache.blogList.filter(b => libraryRole(settings, b, cache.blogList) === role) };
+  }
+  // The background reblog sync: only blogs with the sharing role. A side blog that went from material to sharing
+  // (the manager keeps `at` then) has its posts reblogged only from then on: { skip: [uuid], after: { uuid: seconds } }
+  // for autoMaintain
+  function reblogScope(settings, blogList) {
+    const skip = [], after = {};
+    for (const b of blogList) {
+      if (blogRole(settings, b) !== 'share') { skip.push(b.uuid); continue; }
+      const at = settings?.blogRoles?.[b.uuid]?.at;
+      if (!b.primary && at) after[b.uuid] = Math.floor(at / 1000);
+    }
+    return { skip, after };
+  }
 
   // ---------- Tag library ----------
   // cache.blogs[uuid] = { name, syncedAt, posts: { [postId]: [tags[], timestamp, state, noteCount|null, reblogSource|null, hasLabel, reblog] } }
@@ -848,10 +928,12 @@ const TTHCore = (() => {
   //   reblogged to the main blog, published;
   // - a reblog of my own post whose tags, visibility, community label or reblog control drifted from its
   //   original is fixed.
-  // opts.skip: uuids of blogs that take no part (the collection blog)
-  // Returns what it did: [{ type: 'reblog' | 'fix', blog, id, to }]
+  // opts.skip: uuids of blogs that take no part (material blogs and blogs with no role: reblogScope);
+  // opts.after: { uuid: seconds }, a side blog's posts older than this are not reblogged
+  // One post failing doesn't stop the pass (what was done before it would go unlogged).
+  // Returns what it did: [{ type: 'reblog' | 'fix' | 'fail', blog, id, to, error }]
   async function autoMaintain(api, t, since, opts = {}) {
-    const { pages = 1, skip = [] } = opts;
+    const { pages = 1, skip = [], after = {} } = opts;
     const blogs = (await getBlogs(api)).filter(b => !skip.includes(b.uuid));
     const main = blogs.find(b => b.primary);
     if (!main || blogs.length < 2) return [];
@@ -864,10 +946,12 @@ const TTHCore = (() => {
       if (b.uuid === main.uuid) continue;
       for (const p of lists.get(b.uuid)) {
         const id = postId(p);
-        if ((p.timestamp || 0) <= since || (p.state || 'published') !== 'published' || isCopyOf(p, names)) continue;
+        if ((p.timestamp || 0) <= Math.max(since, after[b.uuid] || 0) || (p.state || 'published') !== 'published' || isCopyOf(p, names)) continue;
         if (onMain.has(`${b.name}/${id}`.toLowerCase())) continue;
-        await reblogPost(api, main.uuid, b.uuid, id, 'published', t);
-        done.push({ type: 'reblog', blog: b.name, id, to: main.name });
+        try {
+          await reblogPost(api, main.uuid, b.uuid, id, 'published', t);
+          done.push({ type: 'reblog', blog: b.name, id, to: main.name });
+        } catch (e) { done.push({ type: 'fail', blog: b.name, id, to: main.name, error: errMsg(e) }); }
         await sleep(1000);
       }
     }
@@ -879,8 +963,12 @@ const TTHCore = (() => {
         const src = reblogSource(p);
         let orig = byKey.get(src.toLowerCase());
         if (!orig) { const [n, rid] = src.split('/'); try { orig = await getPost(api, n, rid); } catch { continue; } }
-        const r = await editPost(api, t, b.uuid, postId(p), mutations.copyFrom({ tags: orig.tags || [], state: orig.state, label: readLabel(orig), reblog: readReblog(orig) }));
-        if (!r.skipped) { done.push({ type: 'fix', blog: b.name, id: postId(p), to: src }); await sleep(1000); }
+        try {
+          const r = await editPost(api, t, b.uuid, postId(p), mutations.copyFrom({ tags: orig.tags || [], state: orig.state, label: readLabel(orig), reblog: readReblog(orig) }));
+          if (r.skipped) continue;
+          done.push({ type: 'fix', blog: b.name, id: postId(p), to: src });
+        } catch (e) { done.push({ type: 'fail', blog: b.name, id: postId(p), to: src, error: errMsg(e) }); }
+        await sleep(1000);
       }
     }
     return done;
@@ -969,6 +1057,18 @@ const TTHCore = (() => {
   // The collection blog's posts as kept in storage key `collection`:
   // { blog, syncedAt, posts: { [id]: [rootKey, timestamp, images: [[small, big]...], tags] } }
   const emptyCollection = blog => ({ blog, syncedAt: 0, posts: {} });
+  // Schema 2 (blog roles): the one `collection` entry moves into `materials` (one entry per material blog, the same
+  // shape), and the collection blog becomes material. Takes the stored { settings, collection, materials }; returns
+  // the keys to write and to remove, or null when there is nothing to do.
+  function migrateMaterials({ settings = {}, collection, materials } = {}) {
+    if ((settings.schema || 1) >= 2) return null;
+    const out = { materials: { ...materials }, settings: { ...settings, schema: 2 } };
+    if (collection?.blog) {
+      if (!out.materials[collection.blog]) out.materials[collection.blog] = collection;
+      out.settings.blogRoles = { ...settings.blogRoles, [collection.blog]: { role: 'material', at: settings.blogRoles?.[collection.blog]?.at || 0 } };
+    }
+    return { set: out, remove: collection ? ['collection'] : [] };
+  }
   const collectRecord = p => [rootKey(p), p.timestamp || 0, postImages(p, 250, 1280).map(i => [i.small, i.big]), uniqTags(p.tags || [])];
   // Newest first; stops after two pages with nothing new unless full
   async function syncCollection(api, store, full, ctl, onProgress) {
@@ -1251,10 +1351,15 @@ const TTHCore = (() => {
   // Languages the AI's note can be written in (the tags stay English)
   const AI_NOTE_LANGS = { en: 'English', zh: 'Simplified Chinese' };
   // notes: the language code of the note to ask for, or '' for none
-  function aiPrompt(notes = '') {
+  // images: how many images of the post are sent. With more than one the model picks the main pictures itself:
+  // posts often carry decorative dividers, banners, text or logos around the picture that matters.
+  function aiPrompt(notes = '', images = 1) {
     const lang = AI_NOTE_LANGS[notes] || AI_NOTE_LANGS.en;
     return 'You sort reference images for a painter who does quick studies. Tag what this image is worth studying for, '
-      + 'not everything that can be seen in it. Use only the exact words from these lists, at most the given number per list:\n'
+      + 'not everything that can be seen in it. '
+      + (images > 1 ? `These ${images} images are all from one post. Ignore decorative dividers, banners, borders, text, `
+        + 'logos and stickers; judge the main pictures together. "This image" below means those main pictures. ' : '')
+      + 'Use only the exact words from these lists, at most the given number per list:\n'
       + AI_GROUPS().map(g => `${g.id} (at most ${aiMax(g.id)}): ${g.tags.join(', ')}`).join('\n')
       + '\nRules:'
       + '\n- Only tag what is clearly in the image. Never guess: no skin, hair or eyes unless a person or an animal\'s face shows them clearly.'
@@ -1283,18 +1388,21 @@ const TTHCore = (() => {
     const m = String(text || '').match(/\{[\s\S]*\}/);
     try { const v = JSON.parse(m[0]).notes; return typeof v === 'string' ? v.trim().slice(0, 800) : ''; } catch { return ''; }
   };
-  // One image (a data: URL) to the model; returns { tags, aiArt, notes }. opts.notes ('en', 'zh') asks for a short
+  // A post's images (data: URLs; one string or a list, at most AI_MAX_IMAGES) to the model in one request; returns
+  // { tags, aiArt, notes }. opts.notes ('en', 'zh') asks for a short
   // note in that language on what it saw and why the tags fit. Reasoning models spend tokens thinking first, so the
   // budget is generous. Providers that don't take response_format get the request again without it.
   async function aiTagImage(ai, apiKey, dataUrl, fetchFn = fetch, opts = {}) {
     const url = ai.base.replace(/\/+$/, '') + '/chat/completions';
+    const images = [].concat(dataUrl).slice(0, AI_MAX_IMAGES);
     const send = async withFormat => {
       const res = await fetchFn(url, {
         method: 'POST',
         headers: { Authorization: 'Bearer ' + apiKey, 'Content-Type': 'application/json' },
         body: JSON.stringify({
           model: ai.model, max_tokens: 4000, ...(withFormat ? { response_format: { type: 'json_object' } } : {}),
-          messages: [{ role: 'user', content: [{ type: 'text', text: aiPrompt(opts.notes || '') }, { type: 'image_url', image_url: { url: dataUrl } }] }],
+          messages: [{ role: 'user', content: [{ type: 'text', text: aiPrompt(opts.notes || '', images.length) },
+            ...images.map(u => ({ type: 'image_url', image_url: { url: u } }))] }],
         }),
       });
       const json = await res.json().catch(() => ({}));
@@ -1307,6 +1415,38 @@ const TTHCore = (() => {
     if (!text) throw new Error(json?.choices?.[0]?.finish_reason === 'length' ? 'the reply ran out of tokens' : 'empty reply');
     return { tags: parseAiTags(text), aiArt: parseAiArt(text), notes: opts.notes ? parseAiNotes(text) : '' };
   }
+  // The AI's lists (light, material, composition, subject, technique); the palette is worked out from pixels
+  const AI_LISTS = new Set(AI_GROUPS().map(g => g.id));
+  // Mutation: the AI's tags on a post, added, or for a post it looked at before (redo), replacing that post's tags
+  // in the AI's lists; palette and other tags stay. note: the AI's few sentences, replacing an older note (null
+  // leaves it). The post gets AI_MARK either way.
+  const aiWrite = (redo, tags, note = null) => n => Object.assign(n, {
+    tags: withTags(redo ? n.tags.filter(tag => !AI_LISTS.has(refGroupOf(tag))) : n.tags, [...tags, AI_MARK]),
+    ...(note ? { content: withAiNote(n.content, note) } : {}),
+  });
+  // AI sort of one post, written at once (the "Redo AI" button on tumblr.com, run by the service worker): its
+  // images go to the model as in the collection's AI sort, the palette is added when missing, and a post the AI
+  // looked at before has its AI tags and note replaced. Returns { tags, note } as written.
+  async function aiSortPost(api, t, blog, id, ai, apiKey, fetchFn = fetch) {
+    const p = await getPost(api, blog, id);
+    const imgs = postImages(p).slice(0, AI_MAX_IMAGES);
+    if (!imgs.length) throw new Error(t('aiNoImages'));
+    const urls = await Promise.all(imgs.map(i => imageDataUrl(i.big || i.small, aiImageSize(imgs.length), fetchFn)));
+    const seen = await aiTagImage(ai, apiKey, urls, fetchFn, { notes: ai.notes === false ? '' : ai.notesLang || 'en' });
+    let tags = seen.aiArt === 'yes' ? [...seen.tags, AI_ART_TAG] : seen.tags;
+    const have = p.tags || [];
+    if (!have.some(tag => refGroupOf(tag) === 'palette')) {
+      try { tags = [...await postPalette(imgs, fetchFn), ...tags]; } catch { /* the AI's tags still count */ }
+    }
+    const redo = have.some(tag => key(tag) === AI_MARK);
+    const res = await editPost(api, t, blog, id, aiWrite(redo, tags, seen.notes));
+    if (res?.skipped && !res.unchanged) throw new Error(res.reason);
+    return { tags, note: seen.notes };
+  }
+  // At most this many of a post's images go to the model, each downscaled more the more there are
+  // (aiImageSize), so a long photoset costs about as much as a few single images
+  const AI_MAX_IMAGES = 10;
+  const aiImageSize = n => Math.max(384, Math.round(768 / Math.sqrt(Math.max(1, n))));
   // An image as a JPEG data: URL, downscaled to fit `size` (works in pages and the service worker)
   async function imageDataUrl(url, size = 768, fetchFn = fetch) {
     const res = await fetchFn(url);
@@ -1940,10 +2080,10 @@ const TTHCore = (() => {
   return {
     sleep, enc, decodeTag, norm, key, esc, pick, debounce, qs, uniqTags, withTags, fmtNum,
     LABEL_CATEGORIES, AD_CSS, REC_CSS, UPSELL_SELECTOR, isUpsell, STRINGS, LANG_NAMES, makeI18n,
-    errMsg, makeApi, getBlogs, postId, isPost, basePosts, nextPath, readLabel, readReblog, getPost, postImages, editPost, mutations,
+    errMsg, makeApi, getBlogs, ROLES, blogRole, libraryRole, unsetBlogs, roleCache, reblogScope, postId, isPost, basePosts, nextPath, readLabel, readReblog, getPost, postImages, editPost, mutations,
     emptyCache, buildIndex, matchScore, suggest, syncBlog, syncAll, reblogSource, reblogFamilies, reblogDiffs, syncCopies, copyKeys, isCopyOf, notOnMain, reblogPost, newestPosts, autoMaintain, tagActivity, parseAuth,
-    rootKey, likedPosts, emptyCollection, syncCollection, collectSkip, collectPost, isPostLimit,
-    REF_GROUPS, refGroupOf, paletteTags, imagePixels, postPalette, AI_MARK, AI_NOTE_MARK, withAiNote, aiNoteOf, aiPrompt, parseAiTags, parseAiArt, parseAiNotes, AI_NOTE_LANGS, aiTagImage, imageDataUrl, relayout,
+    rootKey, likedPosts, emptyCollection, migrateMaterials, syncCollection, collectSkip, collectPost, isPostLimit,
+    REF_GROUPS, refGroupOf, paletteTags, imagePixels, postPalette, AI_MARK, AI_NOTE_MARK, withAiNote, aiNoteOf, aiPrompt, parseAiTags, parseAiArt, parseAiNotes, AI_NOTE_LANGS, aiTagImage, imageDataUrl, AI_MAX_IMAGES, aiImageSize, relayout, aiWrite, aiSortPost,
     AI_ART_TAG, aiArtSignal, aiArtVerdict, ownerTagsOf, aiArtCheck, unlikePost, deletePost, autoCollect, dailyPick,
     TAG_STATS_TTL, statFresh, ensureTagStats, sortByHeat, sortTagsFair, nameGroups, packGrouping, heatRanks, heatText, tagHeader, TAG_RULES, judgeTags, suggestTagChanges, fandomShare, OFFTOPIC_SHARE, searchMatch,
     TPL_FORMAT, TPL_RULES, TPL_SEARCH_CUTS, parsePack, searchItems, expandPicks, suggestCombos, composeTemplate, packTags, upkeepTags, planUpkeep, itemsOnPost, itemsOnPosts, retagPost,

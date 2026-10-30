@@ -11,6 +11,8 @@
   let cache = C.emptyCache();
   const settings = {
     delay: 800, autoSync: true, hideAds: true, hideRecs: false, hideAiArt: false, syncReblogs: true, lang: '', card: 180,
+    // sharing or material per blog (TTHCore.blogRole), set by hand in Settings → My blogs
+    blogRoles: {},
     // weak-tag rules (shared by the template edits and the cleanup) and the template options
     rules: { ...C.TPL_RULES }, useBase: true,
     // the cleanup's own rule: average notes on my posts
@@ -49,8 +51,19 @@
   }
   const api = C.makeApi(request);
 
-  let index = C.buildIndex(cache);
-  const rebuildIndex = () => { index = C.buildIndex(cache); };
+  // Sharing blogs (and blogs with no role yet) take part in the reblog sync and the tag tidying; material blogs
+  // have their own tag library. shared() is the cache seen from the sharing side.
+  const shared = () => C.roleCache(cache, settings, 'share');
+  const roleOf = uuid => C.libraryRole(settings, uuid, cache.blogList);
+  let index, matIndex;
+  const rebuildIndex = () => {
+    index = C.buildIndex(shared());
+    matIndex = C.buildIndex(C.roleCache(cache, settings, 'material'));
+  };
+  rebuildIndex();
+  const shareIndex = () => index;
+  // the library that suggests for the blog picked at the top
+  const libFor = uuid => (roleOf(uuid) === 'material' ? matIndex : index);
 
   // ---------- Small UI helpers ----------
   let toastTimer;
@@ -103,7 +116,7 @@
     const update = () => {
       const q = input.value.split(',').pop();
       const ctx = context();
-      const items = C.suggest(index, q, ctx, exclude(), 10, pool ? pool() : null);
+      const items = C.suggest(libFor($('blog').value), q, ctx, exclude(), 10, pool ? pool() : null);
       if (!items.length) { if (dd.input === input) hideDD(); return; }
       showDD(input, items, t(!C.norm(q) ? (ctx.length ? 'ddRelated' : 'ddFrequent') : 'ddMine'), onPick);
     };
@@ -184,10 +197,11 @@
       images: C.postImages(p, 300, 800),
       url: C.pick(p, 'postUrl', 'post_url') || `${TUMBLR}/${C.enc(cache.blogList.find(b => b.uuid === blog)?.name || blog)}/${C.enc(id)}`,
       // a reblog of one of my own posts: kept in line with the original automatically, so not editable here
-      copyOf: C.isCopyOf(p, myNames()) ? C.reblogSource(p) : null,
+      copyOf: roleOf(blog) === 'share' && C.isCopyOf(p, myNames()) ? C.reblogSource(p) : null,
     };
   }
-  const myNames = () => new Set(cache.blogList.map(b => b.name.toLowerCase()));
+  // copies are reblogs between sharing blogs only
+  const myNames = () => new Set(shared().blogList.map(b => b.name.toLowerCase()));
   const selectable = p => !p.copyOf;
 
   function renderBlogOptions() {
@@ -368,7 +382,7 @@
   async function runBatch(title, mutate, opts = {}) {
     if (running) return;
     // reblogs of my own posts are never edited directly: they follow their original
-    const copies = C.copyKeys(cache);
+    const copies = C.copyKeys(shared());
     const targets = (opts.targets || posts.filter(p => selected.has(p.key))).filter(p => !p.copyOf && !copies.has(p.key));
     if (!targets.length) return toast(t(opts.targets ? 'cleanNoPosts' : 'needSelect'));
     if (!confirm(t('confirmRun', title, targets.length))) return;
@@ -396,7 +410,7 @@
           if (item) renderCard(item);
           // the same tags, visibility and label for its reblogs (or original) on my other blogs
           if (settings.syncReblogs) {
-            const n = await C.syncCopies(api, t, cache, p.blog, p.id, r, (k, rr) => {
+            const n = await C.syncCopies(api, t, shared(), p.blog, p.id, r, (k, rr) => {
               const copy = posts.find(x => x.key === k);
               if (copy) { Object.assign(copy, { state: rr.state, tags: C.uniqTags(rr.tags), label: rr.label, reblog: rr.reblog }); renderCard(copy); }
             });
@@ -457,8 +471,9 @@
     const owned = C.packGrouping(packs).groups;
     const stats = new Map();
     let missingNotes = 0;
-    const copies = C.copyKeys(cache); // reblogs of my own posts follow their original
-    for (const [uuid, b] of Object.entries(cache.blogs)) {
+    // sharing blogs only; reblogs of my own posts follow their original
+    const scope = shared(), copies = C.copyKeys(scope);
+    for (const [uuid, b] of Object.entries(scope.blogs)) {
       for (const [id, rec] of Object.entries(b.posts || {})) {
         if (copies.has(uuid + ':' + id)) continue;
         const notes = rec[3] ?? null;
@@ -508,8 +523,8 @@
   }
   function cleanTargets() {
     const out = [];
-    const copies = C.copyKeys(cache);
-    for (const [uuid, b] of Object.entries(cache.blogs)) {
+    const scope = shared(), copies = C.copyKeys(scope);
+    for (const [uuid, b] of Object.entries(scope.blogs)) {
       for (const [id, rec] of Object.entries(b.posts || {})) {
         if (copies.has(uuid + ':' + id)) continue;
         if (rec[0].some(tag => cleanSel.has(C.key(tag)))) out.push({ key: uuid + ':' + id, blog: uuid, id });
@@ -575,7 +590,8 @@
   }
 
   function renderLibrary() {
-    const stats = Object.values(cache.blogs).map(b =>
+    const index = $('libRole').value === 'material' ? matIndex : shareIndex();
+    const stats = Object.values(C.roleCache(cache, settings, $('libRole').value).blogs).map(b =>
       t('blogStat', b.name, Object.keys(b.posts || {}).length, b.syncedAt && new Date(b.syncedAt).toLocaleString(locale())));
     $('blogStats').textContent = stats.length ? stats.join(t('statSep')) : t('neverSynced');
     const q = C.key($('libSearch').value);
@@ -752,8 +768,9 @@
   function scanUpkeep() {
     if (!parsedPacks().length) return toast(t('upkNeedPack'));
     if (!Object.keys(cache.blogs).length) return toast(t('cleanNeedSync'));
-    const copies = C.copyKeys(cache); // reblogs of my own posts follow their original
-    const records = Object.entries(cache.blogs).flatMap(([uuid, b]) =>
+    // sharing blogs only; reblogs of my own posts follow their original
+    const scope = shared(), copies = C.copyKeys(scope);
+    const records = Object.entries(scope.blogs).flatMap(([uuid, b]) =>
       Object.entries(b.posts || {}).map(([id, rec]) => ({ key: uuid + ':' + id, blog: uuid, id, tags: rec[0] }))).filter(r => !copies.has(r.key));
     upk = C.planUpkeep(records, parsedPacks());
     upkSel.clear();
@@ -802,8 +819,9 @@
   // What the background pass did (extension/background.js writes storage key autoLog)
   async function renderAutoLog() {
     const { autoLog = [] } = await chrome.storage.local.get(['autoLog']);
-    $('rbAuto').innerHTML = autoLog.length ? autoLog.slice(0, 10).map(e => `<div${e.error ? ' class="err"' : ''}>${C.esc(new Date(e.at).toLocaleString(locale()))} · ${C.esc(
-      e.error ? t('autoError', e.error) : e.done.map(d => t(d.type === 'reblog' ? 'autoReblogged' : 'autoFixed', `${d.blog}/${d.id}`, d.to)).join(t('listSep')))}</div>`).join('')
+    const line = d => d.type === 'fail' ? t('autoFailed', `${d.blog}/${d.id}`, d.error) : t(d.type === 'reblog' ? 'autoReblogged' : 'autoFixed', `${d.blog}/${d.id}`, d.to);
+    $('rbAuto').innerHTML = autoLog.length ? autoLog.slice(0, 10).map(e => `<div${e.error || e.done.some(d => d.type === 'fail') ? ' class="err"' : ''}>${C.esc(new Date(e.at).toLocaleString(locale()))} · ${C.esc(
+      e.error ? t('autoError', e.error) + (e.n > 1 ? t('autoRepeat', e.n) : '') : e.done.map(line).join(t('listSep')))}</div>`).join('')
       : `<div>${C.esc(t('autoNone'))}</div>`;
   }
 
@@ -811,10 +829,36 @@
   function scanReblogs() {
     if (!Object.keys(cache.blogs).length) return toast(t('cleanNeedSync'));
     const main = mainBlog();
-    rb = { diffs: C.reblogDiffs(cache), missing: main ? C.notOnMain(cache, main.uuid) : [] };
+    rb = { diffs: C.reblogDiffs(shared()), missing: main ? C.notOnMain(shared(), main.uuid) : [] };
     rbScanned = true;
     $('rbStatus').textContent = t('rbFound', rb.diffs.length, rb.missing.length);
     renderReblogs();
+    dropDeleted();
+  }
+  // An incremental sync never sees deletions, so posts listed here may be gone: look them up and drop the ones
+  // Tumblr no longer has from the cache (a few at a time; the list is short once things are in line)
+  let dropping = false;
+  async function dropDeleted() {
+    if (dropping) return;
+    dropping = true;
+    const keys = [...new Set([...rb.missing.map(m => m.key), ...rb.diffs.flatMap(d => [d.root.key, d.copy.key])])].slice(0, 40);
+    let gone = 0;
+    try {
+      for (const k of keys) {
+        const i = k.lastIndexOf(':'), blog = k.slice(0, i), id = k.slice(i + 1);
+        try { await C.getPost(api, blog, id); } catch (e) {
+          if (e.status !== 404) continue;
+          delete cache.blogs[blog]?.posts?.[id];
+          gone++;
+        }
+        await C.sleep(200);
+      }
+    } finally { dropping = false; }
+    if (!gone) return;
+    await save();
+    rebuildIndex();
+    toast(t('rbGone', gone));
+    scanReblogs();
   }
   function renderReblogs() {
     const link = (blog, id) => `<a href="${TUMBLR}/${C.enc(blogName(blog))}/${C.enc(id)}" target="_blank" rel="noopener">${C.esc(blogName(blog))}/${C.esc(id)}</a>`;
@@ -845,33 +889,61 @@
     scanReblogs();
   }
 
-  // ---------- Collection blog ----------
-  // Liked posts reblogged onto one of my blogs (settings.collect), and a few random images from it each day.
-  // Its posts are kept in storage key `collection` (TTHCore.syncCollection); the background reblogs new likes.
-  const COLLECT = { blog: '', auto: false, tags: [], imagesOnly: true, autoPalette: true, daily: 4, from: '' };
+  // ---------- Collection page: material blogs ----------
+  // Liked posts reblogged onto one of my blogs (settings.collect.blog); today's images and sorting work on whichever
+  // material blog is picked at the top (settings.collect.view). Each material blog's posts are kept in storage key
+  // `materials` (TTHCore.syncCollection); `collection` below is the one shown. The background reblogs new likes.
+  const COLLECT = { blog: '', auto: false, tags: [], imagesOnly: true, autoPalette: true, daily: 4, from: '', view: '' };
   let collection = null;
   let colScan = { items: [], have: 0, skipped: 0 }, colScanned = false, colCtl = null;
   const colSel = new Set();
   const collectSkipList = () => (settings.collect.blog ? [settings.collect.blog] : []);
   const colBlog = () => cache.blogList.find(b => b.uuid === settings.collect.blog) || null;
+  const materialBlogs = () => cache.blogList.filter(b => C.blogRole(settings, b) === 'material');
+  // the material blog shown: the picked one while it is still material, else the collection blog
+  const viewUuid = () => {
+    const v = settings.collect.view;
+    return v && C.blogRole(settings, v, cache.blogList) === 'material' ? v : settings.collect.blog || materialBlogs()[0]?.uuid || '';
+  };
+  const viewBlog = () => cache.blogList.find(b => b.uuid === viewUuid()) || null;
+  async function saveCollection() {
+    if (!collection) return;
+    const { materials = {} } = await chrome.storage.local.get('materials');
+    materials[collection.blog] = collection;
+    await chrome.storage.local.set({ materials });
+  }
   const SKIP_REASONS = ['mine', 'closed', 'noImages', 'aiArt'];
   const today = () => new Date().toLocaleDateString('en-CA');
 
+  async function loadMaterial(uuid) {
+    const { materials = {} } = await chrome.storage.local.get('materials');
+    const m = materials[uuid] || C.emptyCollection(uuid);
+    delete m.aiSeen;
+    return m;
+  }
   async function loadCollection() {
-    const { collection: c } = await chrome.storage.local.get('collection');
-    collection = c?.blog === settings.collect.blog ? c : C.emptyCollection(settings.collect.blog);
-    delete collection.aiSeen;
+    collection = await loadMaterial(viewUuid());
     return collection;
   }
+  const readingStatus = n => { $('colStatus').textContent = $('dailyInfo').textContent = t('colReading', n); };
   async function readCollection(full) {
     await loadCollection();
-    await C.syncCollection(api, collection, full || !collection.syncedAt, colCtl, n => { $('colStatus').textContent = $('dailyInfo').textContent = t('colReading', n); });
-    await chrome.storage.local.set({ collection });
+    await C.syncCollection(api, collection, full || !collection.syncedAt, colCtl, readingStatus);
+    await saveCollection();
+  }
+  // The collection blog's posts, for matching likes; the shown blog when that is the one
+  async function readCollectTarget() {
+    if (viewUuid() === settings.collect.blog) { await readCollection(false); return collection; }
+    const m = await loadMaterial(settings.collect.blog);
+    await C.syncCollection(api, m, !m.syncedAt, colCtl, readingStatus);
+    const { materials = {} } = await chrome.storage.local.get('materials');
+    await chrome.storage.local.set({ materials: { ...materials, [m.blog]: m } });
+    return m;
   }
   // Opening the page reads what's new on the collection blog (reblogs made elsewhere, by the background, or by a
   // run that was cut short), unless it was read in the last few minutes
   async function freshenCollection() {
-    if (!settings.collect.blog || colCtl || running) return renderCollection();
+    if (!viewUuid() || colCtl || running) return renderCollection();
     await loadCollection();
     if (Date.now() - collection.syncedAt < 5 * 60 * 1000) return renderCollection();
     colCtl = { aborted: false };
@@ -885,6 +957,11 @@
     sel.innerHTML = `<option value="">${C.esc(t('colBlogNone'))}</option>`
       + cache.blogList.filter(b => !b.primary).map(b => `<option value="${C.esc(b.uuid)}">${C.esc(b.name)}</option>`).join('');
     sel.value = settings.collect.blog;
+    const mats = materialBlogs();
+    $('colView').innerHTML = mats.map(b => `<option value="${C.esc(b.uuid)}">${C.esc(b.name)}</option>`).join('');
+    $('colView').value = viewUuid();
+    $('colView').disabled = !mats.length;
+    $('colViewInfo').textContent = t(mats.length ? 'colViewHint' : 'colViewNone');
     $('colTags').value = settings.collect.tags.join(', ');
     $('colAuto').checked = settings.collect.auto;
     $('colImagesOnly').checked = settings.collect.imagesOnly;
@@ -897,14 +974,14 @@
   // Today's images: the same all day, until "another set" moves the seed on (storage key dailySeed)
   async function renderDaily() {
     const box = $('daily');
-    if (!settings.collect.blog) { box.innerHTML = `<div class="empty muted">${C.esc(t('colNeedBlog'))}</div>`; $('dailyInfo').textContent = ''; return; }
-    if (!collection || collection.blog !== settings.collect.blog) await loadCollection();
+    if (!viewUuid()) { box.innerHTML = `<div class="empty muted">${C.esc(t('colViewNone'))}</div>`; $('dailyInfo').textContent = ''; return; }
+    if (!collection || collection.blog !== viewUuid()) await loadCollection();
     const { dailySeed } = await chrome.storage.local.get('dailySeed');
     const k = dailySeed?.date === today() ? dailySeed.k : 0;
-    const name = colBlog()?.name || '';
+    const name = viewBlog()?.name || '';
     const from = settings.collect.from || '';
     const pool = { posts: Object.fromEntries(Object.entries(collection.posts).filter(([, rec]) => matchFilter(rec, from))) };
-    const picks = C.dailyPick(pool, settings.collect.daily, `${settings.collect.blog}|${today()}|${k}|${from}`);
+    const picks = C.dailyPick(pool, settings.collect.daily, `${viewUuid()}|${today()}|${k}|${from}`);
     box.innerHTML = picks.map(p => `<a href="${C.esc(p.big)}" target="_blank" rel="noopener" title="${C.esc(`${name}/${p.id}`)}"><img loading="lazy" src="${C.esc(p.big)}" alt=""></a>`).join('')
       || `<div class="empty muted">${C.esc(t('dailyEmpty'))}</div>`;
     const withImages = Object.values(collection.posts).filter(r => r[2]?.length).length;
@@ -926,10 +1003,10 @@
     colCtl = { aborted: false };
     document.querySelector('[data-act="colStop"]').hidden = false;
     try {
-      await readCollection(false);
+      const target = await readCollectTarget();
       renderCollection();
       const likes = await C.likedPosts(api, { ctl: colCtl, onProgress: (n, total) => { $('colStatus').textContent = t('colScanning', n, total); } });
-      const have = new Set(Object.values(collection.posts).map(r => r[0]));
+      const have = new Set(Object.values(target.posts).map(r => r[0]));
       const mine = new Set(cache.blogList.filter(b => b.uuid !== settings.collect.blog).map(b => b.name.toLowerCase()));
       const items = [];
       let inIt = 0, skipped = 0;
@@ -1067,7 +1144,7 @@
     const ai = aiCards.get(id);
     return `<div class="post${orgSel.has(id) ? ' sel' : ''}${ai ? (ai.busy ? ' ai-busy' : ' ai-done') : ''}" data-i="${i}" data-id="${C.esc(id)}"${ai ? ` data-ai="${C.esc(ai.text)}"` : ''}>
         <img class="thumb" loading="lazy" src="${C.esc(rec[2][0][0])}" alt=""><span class="ck"></span>
-        <div class="badges"><a href="${C.esc(`${TUMBLR}/${C.enc(colBlog()?.name || '')}/${C.enc(id)}`)}" target="_blank" rel="noopener" title="${C.esc(t('openPost'))}">↗</a></div>
+        <div class="badges"><a href="${C.esc(`${TUMBLR}/${C.enc(viewBlog()?.name || '')}/${C.enc(id)}`)}" target="_blank" rel="noopener" title="${C.esc(t('openPost'))}">↗</a></div>
         <div class="who" title="${C.esc(tags.map(refLabel).join(' · '))}">${C.esc(tags.map(refLabel).join(' · '))}</div></div>`;
   }
   const orgCard = id => $('orgList').querySelector(`.post[data-id="${CSS.escape(id)}"]`);
@@ -1123,7 +1200,7 @@
   let orgBusy = null;
   const QUEUE_WAIT = 60;
   function orgRun(title, ids, mutateFor, onProgress, quiet = false, onEach = null) {
-    if (!colBlog() || !ids.length) return;
+    if (!viewBlog() || !ids.length) return;
     orgQueue.push({ title, ids, mutateFor, onProgress, quiet, onEach });
     renderQueue();
     if (!orgBusy) drainQueue();
@@ -1138,7 +1215,7 @@
     const ctl = orgBusy = { aborted: false };
     const bar = $('orgProg'), logBox = $('orgLog');
     while (orgQueue.length && !ctl.aborted) {
-      const job = orgQueue[0], blog = colBlog();
+      const job = orgQueue[0], blog = viewBlog();
       if (!job.quiet) bar.hidden = false;
       let ok = 0, skip = 0, fail = 0;
       for (let i = 0; i < job.ids.length && !ctl.aborted && blog; i++) {
@@ -1171,7 +1248,7 @@
         await C.sleep(settings.delay);
       }
       orgQueue.shift();
-      await chrome.storage.local.set({ collection });
+      await saveCollection();
       if (!job.quiet) log(t('logDone', job.title, ctl.aborted, ok, skip, fail), false, logBox);
       if (job.quiet) { job.ids.forEach(refreshCard); renderOrgPanel(); } else renderOrganize();
       renderDailyFrom();
@@ -1201,14 +1278,7 @@
   // they are written, so "looked at" lives on the post, not in this browser.
   let aiKey = '';
   const aiSuggest = new Map(), aiLooked = new Set(), aiRedo = new Set();
-  // The AI's tags on a post: added, or for a post it looked at before, replacing that post's tags in the AI's
-  // lists (light, material, composition, subject, technique); palette and other tags stay
-  const AI_LISTS = new Set(C.REF_GROUPS.filter(g => !g.auto).map(g => g.id));
-  // note: the AI's few sentences on what it saw, kept in the post (replacing an older note); null leaves it
-  const aiWrite = (redo, tags, note = null) => n => Object.assign(n, {
-    tags: C.withTags(redo ? n.tags.filter(tag => !AI_LISTS.has(C.refGroupOf(tag))) : n.tags, [...tags, C.AI_MARK]),
-    ...(note ? { content: C.withAiNote(n.content, note) } : {}),
-  });
+  const aiWrite = C.aiWrite;
   const aiNotes = new Map();
   const aiReady = () => !!(settings.ai.base && settings.ai.model && aiKey);
   // The endpoint's origin is an optional host permission, asked for on a click (Chrome wants a user gesture)
@@ -1248,7 +1318,10 @@
         const rec = colRec(id);
         mark(id, t('aiBusy'), true);
         try {
-          const seen = await C.aiTagImage(settings.ai, aiKey, await C.imageDataUrl(rec[2][0][1] || rec[2][0][0]), undefined,
+          // every image of the post (main ones first, see postImages); the model picks the ones that matter
+          const imgs = rec[2].slice(0, C.AI_MAX_IMAGES);
+          const urls = await Promise.all(imgs.map(([small, big]) => C.imageDataUrl(big || small, C.aiImageSize(imgs.length))));
+          const seen = await C.aiTagImage(settings.ai, aiKey, urls, undefined,
             { notes: settings.ai.notes ? settings.ai.notesLang : '' });
           let tags = seen.aiArt === 'yes' ? [...seen.tags, C.AI_ART_TAG] : seen.tags;
           // the palette is worked out here for free, for posts that don't have it yet
@@ -1374,7 +1447,7 @@
     });
   }
   async function deleteRun() {
-    const blog = colBlog();
+    const blog = viewBlog();
     const ids = [...orgSel];
     if (running || !blog) return;
     if (orgBusy || aiCtl) return toast(t('orgWait'));
@@ -1408,7 +1481,7 @@
       log(C.errMsg(e), true, logBox);
     }
     running = null;
-    await chrome.storage.local.set({ collection });
+    await saveCollection();
     log(t('orgDeleted', deleted, unliked), false, logBox);
     setTimeout(() => { bar.hidden = true; bar.firstElementChild.style.width = '0'; }, 1500);
     renderCollection();
@@ -1456,7 +1529,7 @@
     log(t('logDone', t('colReblog', blog.name), ctl.aborted, ok, 0, fail), false, logBox);
     setTimeout(() => { bar.hidden = true; bar.firstElementChild.style.width = '0'; }, 1500);
     renderCollect();
-    try { await readCollection(false); $('colStatus').textContent = ''; renderCollection(); } catch { /* shown on the next check */ }
+    try { await readCollectTarget(); $('colStatus').textContent = ''; renderCollection(); } catch { /* shown on the next check */ }
   }
 
   // What the background pass did (extension/background.js writes storage key collectLog)
@@ -1478,14 +1551,22 @@
   }
   $('colBlog').addEventListener('change', async e => {
     const uuid = e.target.value;
-    saveCollect({ blog: uuid });
+    saveCollect({ blog: uuid, ...(uuid ? { view: uuid } : {}) });
     // the collection holds other people's tags: keep them out of the tag library
     if (uuid && cache.blogs[uuid]) { delete cache.blogs[uuid]; await save(); rebuildIndex(); }
     // a new collection: the background starts with likes from now on
     await chrome.storage.local.set({ collectSince: Math.floor(Date.now() / 1000) });
     colScan = { items: [], have: 0, skipped: 0 }; colScanned = false; colSel.clear();
     collection = null; orgSel.clear(); aiDiscard();
-    renderCollectSettings(); renderCollect(); renderCollection(); renderCollectLog();
+    renderRoles(); renderCollectSettings(); renderCollect(); renderCollection(); renderCollectLog();
+  });
+  // Another material blog for today's images and sorting; not while edits on the shown one are running
+  $('colView').addEventListener('change', e => {
+    if (orgBusy || aiCtl || running || colCtl) { e.target.value = viewUuid(); return toast(t('orgWait')); }
+    saveCollect({ view: e.target.value });
+    collection = null; orgSel.clear(); aiDiscard();
+    renderCollection();
+    freshenCollection();
   });
   $('colTags').addEventListener('change', e => {
     saveCollect({ tags: C.uniqTags(e.target.value.split(',').map(C.norm).filter(Boolean)) });
@@ -1510,7 +1591,7 @@
     renderDaily();
   }
   async function dailyRefresh() {
-    if (colCtl || !settings.collect.blog) return toast(t('colNeedBlog'));
+    if (colCtl || !viewUuid()) return toast(t('colViewNone'));
     colCtl = { aborted: false };
     try { await readCollection(true); $('colStatus').textContent = ''; } catch (e) { $('colStatus').textContent = C.errMsg(e); }
     colCtl = null;
@@ -1519,6 +1600,8 @@
 
   // ---------- Actions ----------
   const actions = {
+    // the banner asking for blog roles goes away until the page is opened again
+    rolesLater: () => { rolesLater = true; renderRoles(); },
     rbScan: scanReblogs,
     colScan: scanCollect,
     colStop: () => { if (colCtl) colCtl.aborted = true; },
@@ -1550,7 +1633,7 @@
       if (!confirm(t('confirmRun', t('rbFix'), rb.diffs.length))) return;
       rbRun(t('rbFix'), roots, async root => {
         const p = await C.getPost(api, root.blog, root.id);
-        await C.syncCopies(api, t, cache, root.blog, root.id, { tags: p.tags || [], state: p.state, label: C.readLabel(p), reblog: C.readReblog(p) });
+        await C.syncCopies(api, t, shared(), root.blog, root.id, { tags: p.tags || [], state: p.state, label: C.readLabel(p), reblog: C.readReblog(p) });
       });
     },
     rbReblog: () => {
@@ -1736,6 +1819,42 @@
   }
   $('useBase').addEventListener('change', e => { settings.useBase = e.target.checked; saveSettings(); renderTplCard(); });
 
+  // ---------- My blogs (roles) ----------
+  // Settings → My blogs sets each blog's role; blogs with none yet are also asked about in a banner on every page.
+  // The main blog is always sharing and the collection blog always material, so neither shows a choice.
+  function roleRow(b, banner) {
+    const role = C.blogRole(settings, b);
+    const fixed = b.primary ? t('roleMain') : b.uuid === settings.collect.blog ? t('roleCollect') : '';
+    const btn = r => `<button data-role="${r}" data-uuid="${C.esc(b.uuid)}"${role === r ? ' class="on"' : ''}>${C.esc(t(r === 'share' ? 'roleShare' : 'roleMaterial'))}</button>`;
+    return `<div class="tr"><span class="n">${C.esc(b.name)}</span>`
+      + (fixed ? `<span class="muted">${C.esc(fixed)}</span>` : btn('share') + btn('material') + (!role && !banner ? `<span class="muted">${C.esc(t('roleUnset'))}</span>` : ''))
+      + '</div>';
+  }
+  let rolesLater = false;
+  function renderRoles() {
+    $('blogRoles').innerHTML = cache.blogList.map(b => roleRow(b, false)).join('') || `<div class="tr muted">${C.esc(t('neverSynced'))}</div>`;
+    const unset = C.unsetBlogs(settings, cache.blogList);
+    $('rolesAsk').hidden = rolesLater || !unset.length;
+    $('rolesAskList').innerHTML = unset.map(b => roleRow(b, true)).join('');
+  }
+  document.addEventListener('click', e => {
+    const btn = e.target.closest('[data-role]');
+    if (!btn) return;
+    const { role, uuid } = btn.dataset;
+    const before = C.blogRole(settings, uuid, cache.blogList);
+    if (before === role) return;
+    // `at` only when a material blog becomes sharing, so its older posts (mostly other people's) aren't reblogged
+    // to main; a blog that had no role yet keeps the posts it made while waiting (autoSince applies)
+    settings.blogRoles = { ...settings.blogRoles, [uuid]: before === 'material' && role === 'share' ? { role, at: Date.now() } : { role } };
+    saveSettings();
+    rebuildIndex();
+    renderRoles();
+    renderLibrary();
+    // say what follows (nothing about posts changes)
+    if (before) toast(t(role === 'material' ? 'roleToMaterial' : 'roleToShare', cache.blogList.find(b => b.uuid === uuid)?.name || uuid));
+  });
+  $('libRole').addEventListener('change', () => { libLimit = 300; renderLibrary(); });
+
   // Closing or reloading the page stops what runs in it (edits, the AI, the write queue): ask first
   window.addEventListener('beforeunload', e => {
     if (running || aiCtl || orgBusy) { e.preventDefault(); e.returnValue = ''; }
@@ -1743,6 +1862,9 @@
 
   // ---------- Startup ----------
   async function start() {
+    // schema 2: the collection's posts move into `materials` and the collection blog becomes material
+    const mig = C.migrateMaterials(await chrome.storage.local.get(['settings', 'collection', 'materials']));
+    if (mig) { await chrome.storage.local.set(mig.set); if (mig.remove.length) await chrome.storage.local.remove(mig.remove); }
     const stored = await chrome.storage.local.get(['cache', 'settings', 'packs', 'aiKey']);
     packs = stored.packs || [];
     aiKey = stored.aiKey || '';
@@ -1768,6 +1890,7 @@
     $('syncReblogs').checked = settings.syncReblogs;
     for (const [id, k] of Object.entries(RULE_INPUTS)) $(id)[$(id).type === 'checkbox' ? 'checked' : 'value'] = settings.rules[k];
     $('useBase').checked = settings.useBase;
+    renderRoles();
     $('ruleNotesOn').checked = settings.clean.notes; $('ruleNotes').value = settings.clean.notesMax;
     renderAiSettings();
     applyStatic();
@@ -1783,6 +1906,8 @@
       if (!blogs.length) throw new Error('no blogs');
       cache.blogList = blogs;
       await save();
+      rebuildIndex();
+      renderRoles();
       renderBlogOptions();
       renderCollectSettings();
       if (location.hash === '#collect') { renderCollect(); freshenCollection(); }

@@ -1,5 +1,7 @@
 // Content script on tumblr.com: tag autocomplete in the post editor and a blog's search box, the tag template
-// panel, and upgrades to the official mass editor. Data is shared with the manager page through chrome.storage.local.
+// panel (pick and insert only; packs and rules are managed on the manager page), a "Redo AI" button on material
+// blogs' posts, and read-only upgrades to the official mass editor (selection, tile details, tag counts). Bulk edits live
+// on the manager page. Data is shared with the manager page through chrome.storage.local.
 (async () => {
   'use strict';
 
@@ -21,7 +23,7 @@
   // picks live under templates.
   const stored = await chrome.storage.local.get(['cache', 'settings', 'packs', 'templates']);
   const cache = Object.assign(C.emptyCache(), stored.cache || {});
-  const settings = Object.assign({ autoSync: true, lang: '', syncReblogs: true, rules: { ...C.TPL_RULES }, useBase: true }, stored.settings || {});
+  const settings = Object.assign({ autoSync: true, lang: '', rules: { ...C.TPL_RULES }, useBase: true }, stored.settings || {});
   // Every write carries this tab's mark (storage key writer), so the change listener can skip our own writes
   const me = Math.random().toString(36).slice(2);
   const store = obj => chrome.storage.local.set({ ...obj, writer: me + ':' + Date.now() });
@@ -66,8 +68,17 @@
   const api = C.makeApi(request);
 
   // ---------- Tag library ----------
-  let index = C.buildIndex(cache);
-  const rebuildIndex = () => { index = C.buildIndex(cache); };
+  // Two libraries: sharing blogs' tags (blogs with no role yet count as sharing) and material blogs' tags. The
+  // blog a tag box writes to picks which one suggests (libFor).
+  let index, matIndex;
+  const rebuildIndex = () => {
+    index = C.buildIndex(C.roleCache(cache, settings, 'share'));
+    matIndex = C.buildIndex(C.roleCache(cache, settings, 'material'));
+  };
+  rebuildIndex();
+  const blogByName = name => cache.blogList.find(b => b.name.toLowerCase() === String(name || '').toLowerCase());
+  const roleOf = name => { const b = blogByName(name); return b ? C.blogRole(settings, b) : null; };
+  const libFor = name => (roleOf(name) === 'material' ? matIndex : index);
 
   let syncing = null;
   async function syncAll(full, quiet) {
@@ -99,8 +110,6 @@
 .dd .it span { flex:1; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
 .dd .it small { color:var(--muted); }
 .dd .it.on { background:var(--sel); }
-.dd.menu { min-width:140px; }
-.dd.menu .it:hover { background:var(--sel); }
 .toast { position:fixed; left:50%; bottom:40px; transform:translateX(-50%); background:var(--fg); color:var(--bg); padding:8px 14px; border-radius:6px; font-size:13px; z-index:5; max-width:80vw; }
 .status { position:fixed; right:16px; bottom:16px; width:360px; max-height:50vh; overflow:auto; background:var(--bg); color:var(--fg); border:1px solid var(--line); border-radius:8px; box-shadow:0 8px 28px rgba(0,0,0,.35); font-size:13px; padding:10px 12px; z-index:5; white-space:pre-wrap; }
 .status .row { display:flex; gap:8px; align-items:center; margin-top:8px; justify-content:flex-end; }
@@ -116,7 +125,7 @@
   host.style.cssText = 'all:initial;position:fixed;top:0;left:0;width:0;height:0;z-index:2147483000;';
   document.body.appendChild(host);
   const root = host.attachShadow({ mode: 'open' });
-  root.innerHTML = `<style>${CSS}</style><div class="wrap"><div class="dd" hidden></div><div class="dd menu" hidden></div><div class="toast" hidden></div><div class="preview" hidden></div>
+  root.innerHTML = `<style>${CSS}</style><div class="wrap"><div class="dd" hidden></div><div class="toast" hidden></div><div class="preview" hidden></div>
     <div class="status" hidden><div class="msg"></div><div class="row"><button class="stop" hidden></button><button class="close">×</button></div></div></div>`;
 
   let toastTimer;
@@ -128,7 +137,7 @@
     if (!sticky) toastTimer = setTimeout(() => { el.hidden = true; }, 3000);
   }
 
-  // A small box for bulk-edit progress and results; onStop shows a stop button while running
+  // A small box for progress and results (checking tag activity); onStop shows a stop button while running
   const statusBox = root.querySelector('.status');
   function status(msg, onStop) {
     statusBox.hidden = false;
@@ -182,11 +191,12 @@
     else if (e.key === 'Escape') { stop(); hideDD(); }
   }, true);
 
-  function attachSuggest(input, { context = () => [], exclude = () => [], pool = null, onPick, placement = 'below', header = 'ddMine' }) {
+  // lib: the library to suggest from (libFor the blog being written to)
+  function attachSuggest(input, { context = () => [], exclude = () => [], pool = null, lib = () => index, onPick, placement = 'below', header = 'ddMine' }) {
     const update = () => {
       const q = input.value.split(',').pop();
       const ctx = context();
-      const items = C.suggest(index, q, ctx, exclude(), 10, pool ? pool() : null);
+      const items = C.suggest(lib(), q, ctx, exclude(), 10, pool ? pool() : null);
       if (!items.length) { if (dd.input === input) hideDD(); return; }
       showDD(input, items, t(!C.norm(q) ? (ctx.length ? 'ddRelated' : 'ddFrequent') : header), onPick, placement);
     };
@@ -250,7 +260,7 @@
   function blogTagPool(name, onUpdate) {
     const lname = String(name || '').toLowerCase();
     if (!lname) return [];
-    const own = index.byBlog.get(lname);
+    const own = index.byBlog.get(lname) || matIndex.byBlog.get(lname);
     if (own) return [...own.values()];
     let pool = otherPools.get(lname);
     if (!pool) otherPools.set(lname, pool = { tags: new Map(), posts: 0, done: false, loading: false, listeners: new Set() });
@@ -272,14 +282,14 @@
           if (o) o.count++; else pool.tags.set(k, { tag: tg, count: 1 });
         }
         pool.posts += got.length;
-        pool.listeners.forEach(fn => fn(pool));
+        [...pool.listeners].forEach(fn => fn(pool));
         path = C.nextPath(r, name, {}, pool.posts, got.length >= 20);
         await C.sleep(300);
       }
     } catch { /* suggestions just stay partial */ }
     pool.done = true;
     pool.loading = false;
-    pool.listeners.forEach(fn => fn(pool));
+    [...pool.listeners].forEach(fn => fn(pool));
   }
 
   // Infer the blog being viewed from the URL, e.g. /yuuto, /yuuto/tagged/xxx or /blog/view/yuuto
@@ -293,6 +303,15 @@
     if (seg[0] && !RESERVED_PATHS.has(seg[0].toLowerCase()) && /^[a-z0-9-]+$/i.test(seg[0])) return seg[0];
     return null;
   }
+  // The blog a post editor writes to: its blog picker (a button whose text is one of my blogs' names) near the
+  // #tags box, else the /edit/<blog>/<id> URL; null when it can't be told (the sharing library is used then)
+  function editorBlog(el) {
+    for (let n = el.parentElement; n; n = n.parentElement) {
+      const b = [...n.querySelectorAll('button[aria-label]')].find(x => blogByName(x.textContent.trim()));
+      if (b) return b.textContent.trim();
+    }
+    return location.pathname.match(/^\/edit\/([^/]+)\//)?.[1] || null;
+  }
   const taggedUrl = (blog, tag) => `https://www.tumblr.com/${C.enc(blog)}/tagged/${C.enc(tag)}`;
 
   function bindInputs() {
@@ -302,6 +321,7 @@
       attachSuggest(el, {
         context: () => readEditorTags(el),
         exclude: () => readEditorTags(el),
+        lib: () => libFor(editorBlog(el)),
         onPick: tag => commitNative(el, tag),
         placement: 'above', // Tumblr's own suggestions appear below; avoid overlapping them
       });
@@ -312,8 +332,11 @@
       const ph = el.getAttribute('placeholder') || '';
       if (ph.startsWith('#') || /tumblr/i.test(ph) || !(el.type === 'search' || /search|搜索|搜尋|検索|검색/i.test(ph))) continue;
       el.dataset.tthBound = '1';
+      // One listener per input: a new closure on every call piled up and re-ran itself without end
+      const onPool = () => { if (dd.input === el) update(); };
       const update = attachSuggest(el, {
-        pool: () => blogTagPool(currentBlogName(), () => { if (dd.input === el) update(); }),
+        pool: () => blogTagPool(currentBlogName(), onPool),
+        lib: () => libFor(currentBlogName()),
         onPick: tag => { const b = currentBlogName(); if (b) location.assign(taggedUrl(b, tag)); },
         header: 'ddBlog',
       });
@@ -321,15 +344,15 @@
   }
 
   // ---------- Tag templates ----------
-  // Packs, rules and useBase are the manager's (storage keys packs and settings); the panel's own picks, saved
-  // combos and per-tag overrides are under templates. Activity samples share cache.tagStats with the heat sort.
+  // Packs, rules and useBase are the manager's (storage keys packs and settings) and only read here; the panel's
+  // own picks, saved combos and per-tag overrides are under templates. Popularity samples share cache.tagStats
+  // with the manager.
   // A ▦ button sits at the right end of the post editor's #tags input and opens the panel.
   const tpl = Object.assign({ current: '', picks: [], favs: [], overrides: {} }, stored.templates || {},
     { packs: stored.packs || [], useBase: settings.useBase, rules: { ...C.TPL_RULES, ...settings.rules } });
   const saveTpl = () => {
     const { packs, useBase, rules, ...own } = tpl;
-    Object.assign(settings, { useBase, rules });
-    return store({ packs, settings, templates: own });
+    return store({ templates: own });
   };
   // tpl.packs = [{ raw, source }]: raw is the pack JSON as installed, source the URL it came from (or '')
   const parsed = new Map();
@@ -366,17 +389,14 @@
 .tp button.pri { background:var(--accent); border-color:var(--accent); color:#fff; }
 .tp .x { border:0; font-size:16px; padding:0 4px; }
 .tp-q { margin:8px 10px 0; padding:5px 8px; }
+.tp-empty { flex:1; display:flex; flex-direction:column; align-items:center; justify-content:center; gap:10px; padding:20px; text-align:center; color:var(--muted); }
 .tp-body { flex:1; overflow:auto; padding:4px 10px 8px; min-height:80px; }
 .tp-sh { font-size:11px; color:var(--muted); margin:8px 0 4px; }
 .tp-chips { display:flex; flex-wrap:wrap; gap:4px; }
 .tp-c { border:1px solid var(--line); border-radius:12px; padding:2px 9px; cursor:pointer; user-select:none; }
 .tp-c.on { background:var(--accent); border-color:var(--accent); color:#fff; }
 .tp-c.inc { border-color:var(--accent); color:var(--accent); }
-.tp-c.part { border-style:dashed; border-color:var(--accent); color:var(--accent); }
 .tp-c small { opacity:.75; }
-.tp-edit { margin:2px 0 4px; line-height:1.5; }
-.tp-edit.add { color:var(--accent); }
-.tp-edit.drop { color:var(--danger); }
 .tp-c .del { margin-left:4px; opacity:.6; }
 .tp-combo { margin-bottom:8px; }
 .tp-combo .who { display:block; color:var(--muted); font-size:12px; margin-bottom:3px; }
@@ -392,18 +412,6 @@
 .tp-t.forced { font-weight:600; }
 .tp-f { display:flex; gap:6px; padding:8px 10px; border-top:1px solid var(--line); flex-wrap:wrap; }
 .tp-f .sp { flex:1; }
-.tp-m h4 { margin:12px 0 6px; font-size:12px; color:var(--muted); font-weight:600; }
-.tp-pk { border:1px solid var(--line); border-radius:6px; padding:6px 8px; margin-bottom:6px; }
-.tp-pk .nm { font-weight:600; }
-.tp-pk .sub { font-size:11px; color:var(--muted); word-break:break-all; }
-.tp-pk .row, .tp-m .row { display:flex; gap:6px; align-items:center; margin-top:6px; flex-wrap:wrap; }
-.tp-m input[type=text], .tp-m textarea { flex:1; padding:4px 6px; min-width:0; }
-.tp-m textarea { width:100%; height:70px; }
-.tp-m input[type=number] { width:56px; padding:2px 4px; }
-.tp-m .hint { font-size:11px; color:var(--muted); }
-.tp-rv { display:block; margin:2px 0; }
-.tp-rv small { color:var(--muted); }
-.tp-rv.bad small { color:var(--danger); font-weight:600; }
 `;
   const tplStyle = document.createElement('style');
   tplStyle.textContent = TPL_CSS;
@@ -450,16 +458,13 @@
   tplBtn.addEventListener('mousedown', e => e.preventDefault()); // keep focus in the tags input
   tplBtn.addEventListener('click', () => (tplEl.hidden ? openTpl() : closeTpl()));
 
-  let tplView = 'pick', tplQuery = '';
-  // Pages without a post editor (the mass editor) set an anchor to open next to and an insert handler
-  let tplAnchor = null, tplInsert = null;
-  function openTpl(view) {
+  let tplQuery = '';
+  function openTpl() {
     tplEl.hidden = false;
-    tplView = view || (currentPack() ? 'pick' : 'manage');
     renderTpl();
     // Placed once per opening, on the side of the tags input with more room so the input stays visible;
     // the size is fixed while it is open, so nothing moves as picks change
-    const el = tplAnchor || tagInput();
+    const el = tagInput();
     const r = el ? el.getBoundingClientRect() : { top: innerHeight, bottom: innerHeight, left: 8, right: innerWidth - 8 };
     const w = tplEl.offsetWidth;
     const below = innerHeight - r.bottom - 16, above = r.top - 16;
@@ -469,66 +474,9 @@
     tplEl.style.top = (below >= above ? Math.min(r.bottom + 8, innerHeight - h - 8) : Math.max(8, r.top - h - 8)) + 'px';
     tplEl.querySelector('.tp-q')?.focus();
   }
-  function closeTpl() {
-    tplEl.hidden = true;
-    if (tplEdit) { tpl.picks = tplEdit.savedPicks; tplEdit = null; saveTpl(); }
-    tplUpk = null;
-  }
-
-  // Tidying the selected posts by packs (mass editor): the panel lists what would change, rule by rule, as the
-  // extension's Packs page does; only the ticked changes are applied.
-  // tplUpk = { plan: planUpkeep(...), sel: Set of rules, total, apply(allow, ids) }
-  let tplUpk = null;
-  const installedPacks = () => tpl.packs.map(p => packById(p.raw.id)).filter(Boolean);
-  function openTplUpkeep(records, anchor, apply) {
-    const plan = C.planUpkeep(records, installedPacks());
-    tplUpk = { plan, sel: new Set(plan.rules.map(r => r.rule)), total: records.length, apply };
-    tplAnchor = anchor;
-    openTpl('upkeep');
-  }
-  const upkTargets = () => tplUpk.plan.posts.filter(p => p.changes.some(c => tplUpk.sel.has(c.rule)));
-  function upkeepHtml() {
-    const { plan, sel } = tplUpk;
-    const rows = plan.rules.map(r => {
-      const what = r.type === 'add' ? `+ #${C.esc(r.to)} <small>${C.esc(t('upkAdd'))}</small>`
-        : r.to ? `#${C.esc(r.from)} → #${C.esc(r.to)}`
-        : `#${C.esc(r.from)} <small>${C.esc(t(r.why === 'dropped' ? 'upkRemoveDropped' : 'upkRemoveHas'))}</small>`;
-      return `<label class="tp-rv"><input type="checkbox" data-upk="${C.esc(r.rule)}"${sel.has(r.rule) ? ' checked' : ''}> ${what}`
-        + ` <small>${C.esc(r.item)} · ${C.esc(t('upkPosts', r.posts))}</small></label>`;
-    }).join('');
-    const n = upkTargets().length;
-    return `<div class="tp-body tp-m"><h4>${C.esc(plan.rules.length ? t('upkFound', plan.rules.length, plan.posts.length) : t('upkNone'))}</h4>${rows}</div>
-      <div class="tp-f"><span class="sp">${plan.rules.length ? C.esc(t('upkSelInfo', sel.size, n)) : ''}</span>`
-      + `<button class="pri" data-tp="applyUpkeep"${n ? '' : ' disabled'}>${C.esc(t('upkApply'))}</button></div>`;
-  }
-
-  // Editing posts with the template (mass editor): the panel starts with what the selected posts already carry
-  // ticked; items only some of them carry are shown "partly" and left alone unless clicked. Applying adds the
-  // newly ticked items' tags to every post and takes out the unticked ones' tags (and old spellings).
-  // tplEdit = { tagLists, total, counts, all, keepSome, savedPicks, apply(pack, add, drop) }
-  let tplEdit = null;
-  function openTplEdit(tagLists, anchor, apply) {
-    tplEdit = { tagLists, total: tagLists.length, apply, savedPicks: tpl.picks.slice() };
-    resetEdit();
-    tplAnchor = anchor;
-    openTpl();
-  }
-  function resetEdit() {
-    const pack = currentPack();
-    const counts = pack ? C.itemsOnPosts(tplEdit.tagLists, pack) : new Map();
-    const all = new Set([...counts].filter(([, n]) => n === tplEdit.total).map(([id]) => id));
-    Object.assign(tplEdit, { counts, all, keepSome: new Set([...counts.keys()].filter(id => !all.has(id))) });
-    tpl.picks = [...all];
-  }
-  // What applying would do: items to add to every post, items to take out of every post
-  function editPlan(pack) {
-    const on = new Set(C.expandPicks(pack, tpl.picks).filter(it => it.kind !== 'preset').map(it => it.id));
-    return {
-      add: [...on].filter(id => !tplEdit.all.has(id)),
-      drop: [...tplEdit.counts.keys()].filter(id => !on.has(id) && !tplEdit.keepSome.has(id)),
-    };
-  }
-  const editOpts = (add, drop) => ({ add, drop, stats: tplStats(), overrides: tpl.overrides, useBase: tpl.useBase, rules: tpl.rules, order: fairOpts() });
+  function closeTpl() { tplEl.hidden = true; }
+  // Packs and the rules are managed on the manager page; the service worker opens it (or brings it forward)
+  const openManager = page => chrome.runtime.sendMessage({ type: 'openManager', page });
 
   const tplStats = () => cache.tagStats || {};
   function composeNow() {
@@ -551,16 +499,14 @@
   function renderTpl() {
     if (tplEl.hidden) return;
     const pack = currentPack();
-    if (!pack) tplView = 'manage';
-    const title = tplView === 'upkeep' && tplUpk ? t('meUpkeep') : tplEdit ? t('tplEditing', tplEdit.total) : t('tplOpen');
-    const head = `<div class="tp-h"><span class="ttl">${C.esc(title)}</span>`
-      + (tplView === 'pick' && tpl.packs.length > 1 ? `<select class="tp-pack">${tpl.packs.map(p =>
-        `<option value="${C.esc(p.raw.id)}"${p.raw.id === pack?.id ? ' selected' : ''}>${C.esc(p.raw.name || p.raw.id)}</option>`).join('')}</select>` : '')
-      + `<button data-tp="${tplView === 'manage' ? 'pick' : 'manage'}">${C.esc(t(tplView === 'pick' ? 'tplManage' : 'tplBack'))}</button>`
+    const head = `<div class="tp-h"><span class="ttl">${C.esc(t('tplOpen'))}</span>`
+      + (pack && tpl.packs.length > 1 ? `<select class="tp-pack">${tpl.packs.map(p =>
+        `<option value="${C.esc(p.raw.id)}"${p.raw.id === pack.id ? ' selected' : ''}>${C.esc(p.raw.name || p.raw.id)}</option>`).join('')}</select>` : '')
+      + `<button data-tp="packs" title="${C.esc(t('tplManageHint'))}">${C.esc(t('tplManage'))} ↗</button>`
       + `<button class="x" data-tp="close">×</button></div>`;
-    tplEl.innerHTML = head + (tplView === 'upkeep' && tplUpk ? upkeepHtml() : tplView === 'review' && tplReview ? reviewHtml()
-      : tplView !== 'pick' || !pack ? manageHtml() : pickHtml(pack));
-    if (tplView === 'pick' && pack) {
+    tplEl.innerHTML = head + (pack ? pickHtml(pack)
+      : `<div class="tp-empty"><div>${C.esc(t('tplNoPack'))}</div><button class="pri" data-tp="packs">${C.esc(t('tplManage'))} ↗</button></div>`);
+    if (pack) {
       const q = tplEl.querySelector('.tp-q');
       q.value = tplQuery;
       q.addEventListener('input', () => { tplQuery = q.value; renderPickBody(pack); });
@@ -575,9 +521,8 @@
       </div>
       <div class="tp-f"><button data-tp="check">${C.esc(t('tplCheck'))}</button><button data-tp="fav">${C.esc(t('tplSaveFav'))}</button>
         <button data-tp="clear">${C.esc(t('tplClear'))}</button><span class="sp"></span>
-        ${tplEdit ? `<button class="pri" data-tp="insert">${C.esc(t('tplApplyTo', tplEdit.total))}</button></div>`
-          : `${hasInserted() ? `<button data-tp="undo">${C.esc(t('tplUndo'))}</button>` : ''}<button data-tp="copy">${C.esc(t('tplCopy'))}</button>
-        <button class="pri" data-tp="insert">${C.esc(t(hasInserted() ? 'tplUpdateTags' : 'tplInsert'))}</button></div>`}`;
+        ${hasInserted() ? `<button data-tp="undo">${C.esc(t('tplUndo'))}</button>` : ''}<button data-tp="copy">${C.esc(t('tplCopy'))}</button>
+        <button class="pri" data-tp="insert">${C.esc(t(hasInserted() ? 'tplUpdateTags' : 'tplInsert'))}</button></div>`;
   }
 
   function renderPickBody(pack) {
@@ -586,9 +531,8 @@
     const picked = new Set(tpl.picks);
     const pulled = new Map(); // item id -> name of the picked item that pulled it in
     for (const id of tpl.picks) for (const it of C.expandPicks(pack, [id])) if (!picked.has(it.id) && !pulled.has(it.id)) pulled.set(it.id, pack.items.get(id).name);
-    const part = id => !!tplEdit?.keepSome.has(id) && !picked.has(id) && !pulled.has(id);
-    const chip = it => `<span class="tp-c${picked.has(it.id) ? ' on' : pulled.has(it.id) ? ' inc' : part(it.id) ? ' part' : ''}" data-item="${C.esc(it.id)}"`
-      + ` title="${C.esc(part(it.id) ? t('tplPart', tplEdit.counts.get(it.id), tplEdit.total) : pulled.has(it.id) ? t('tplIncludedBy', pulled.get(it.id)) : it.tags.join(', '))}">${C.esc(it.name)}</span>`;
+    const chip = it => `<span class="tp-c${picked.has(it.id) ? ' on' : pulled.has(it.id) ? ' inc' : ''}" data-item="${C.esc(it.id)}"`
+      + ` title="${C.esc(pulled.has(it.id) ? t('tplIncludedBy', pulled.get(it.id)) : it.tags.join(', '))}">${C.esc(it.name)}</span>`;
     let html = '';
     const favs = tpl.favs.filter(f => f.pack === pack.id);
     if (favs.length && !tplQuery) {
@@ -615,12 +559,6 @@
       ? `<div class="tp-chips">${items.map(it => `<span class="tp-c on" data-item="${C.esc(it.id)}" title="${C.esc(it.tags.join(', '))}">${C.esc(it.name)}<span class="del">×</span></span>`).join('')}`
         + [...pulled.keys()].map(id => `<span class="tp-c inc" title="${C.esc(t('tplIncludedBy', pulled.get(id)))}">${C.esc(pack.items.get(id)?.name || id)}</span>`).join('') + '</div>'
       : `<div class="empty">${C.esc(t('tplNone'))}</div>`);
-    // editing posts: what only some of them carry, left as it is unless clicked
-    const some = tplEdit ? [...tplEdit.keepSome].filter(id => !tpl.picks.includes(id) && !pulled.has(id)).map(id => pack.items.get(id)).filter(Boolean) : [];
-    if (some.length) {
-      sel.innerHTML += `<div class="tp-sh">${C.esc(t('tplSome'))}</div><div class="tp-chips">${some.map(it =>
-        `<span class="tp-c part" data-item="${C.esc(it.id)}" title="${C.esc(t('tplPart', tplEdit.counts.get(it.id), tplEdit.total))}">${C.esc(it.name)} <small>${tplEdit.counts.get(it.id)}/${tplEdit.total}</small></span>`).join('')}</div>`;
-    }
     tplEl.querySelector('.tp-rel').innerHTML = combosHtml(pack);
     renderPreview();
   }
@@ -649,26 +587,10 @@
     return [...C.sortTagsFair(res.tags, tplStats(), fairOpts()).map(tg => byKey.get(C.key(tg))), ...res.rows.filter(r => !r.on)];
   }
 
-  // Editing posts: who will be added to / taken out of every selected post, and how many posts change
-  function renderEditSummary(prev) {
-    const pack = currentPack();
-    const { add, drop } = editPlan(pack);
-    const names = ids => ids.map(id => pack.items.get(id)?.name || id).join('、');
-    const opts = editOpts(add, drop);
-    const changed = tplEdit.tagLists.filter(tags => C.retagPost(tags, pack, opts).join('\u0001') !== tags.join('\u0001')).length;
-    prev.innerHTML = `<div class="tp-sh">${C.esc(t('tplEditPlan'))}</div>`
-      + (add.length || drop.length
-        ? (add.length ? `<div class="tp-edit add">+ ${C.esc(names(add))}</div>` : '')
-          + (drop.length ? `<div class="tp-edit drop">− ${C.esc(names(drop))}</div>` : '')
-          + `<div class="empty">${C.esc(t('tplWillChange', changed, tplEdit.total))}</div>`
-        : `<div class="empty">${C.esc(t('tplNoChange'))}</div>`);
-  }
-
   // Search reads only the first 20 (blog) / 30 (sitewide) tags; mark where those cuts fall
   function renderPreview() {
     const prev = tplEl.querySelector('.tp-prev');
     if (!prev) return;
-    if (tplEdit) return renderEditSummary(prev);
     const res = composeNow();
     // nothing picked: the picked list above already says so
     if (!res || !res.rows.length) { prev.innerHTML = ''; return; }
@@ -686,71 +608,9 @@
       + `</div>` + html;
   }
 
-  function manageHtml() {
-    const packs = tpl.packs.map(p => {
-      const pk = packById(p.raw.id);
-      return `<div class="tp-pk"><div class="nm">${C.esc(p.raw.name || p.raw.id)}</div>
-        <div class="sub">${pk ? C.esc(t('tplPackInfo', pk.items.size, C.packTags(pk).length, pk.version)) : ''}${p.edited ? ' · ' + C.esc(t('tplEdited')) : ''}${p.source ? '<br>' + C.esc(p.source) : ''}</div>
-        <div class="row">${p.source ? `<button data-tp="update" data-pack="${C.esc(p.raw.id)}">${C.esc(t('tplUpdate'))}</button>` : ''}
-          <button data-tp="checkpack" data-pack="${C.esc(p.raw.id)}">${C.esc(t('tplCheckPack'))}</button>
-          <button data-tp="review" data-pack="${C.esc(p.raw.id)}">${C.esc(t('tplReview'))}</button>
-          <button data-tp="export" data-pack="${C.esc(p.raw.id)}">${C.esc(t('tplExport'))}</button>
-          <button data-tp="remove" data-pack="${C.esc(p.raw.id)}">${C.esc(t('tplRemove'))}</button></div></div>`;
-    }).join('');
-    const r = tpl.rules;
-    return `<div class="tp-body tp-m">${packs || `<p class="hint">${C.esc(t('tplNoPack'))}</p>`}
-      <h4>${C.esc(t('tplInstallUrl'))}</h4>
-      <div class="row"><input type="text" class="tp-url" placeholder="${C.esc(t('tplPhUrl'))}"><button data-tp="installUrl">${C.esc(t('tplInstall'))}</button></div>
-      <div class="row"><button data-tp="file">${C.esc(t('tplInstallFile'))}</button><input type="file" class="tp-file" accept=".json,application/json" hidden></div>
-      <h4>${C.esc(t('tplInstallPaste'))}</h4>
-      <textarea class="tp-paste"></textarea><div class="row"><button data-tp="installPaste">${C.esc(t('tplInstall'))}</button></div>
-      <h4>${C.esc(t('tplOptions'))}</h4>
-      <div class="row"><label><input type="checkbox" data-set="useBase"${tpl.useBase ? ' checked' : ''}> ${C.esc(t('tplUseBase'))}</label></div>
-      <div class="row"><label><input type="checkbox" data-set="match"${r.match ? ' checked' : ''}> ${C.esc(t('tplRuleMatch'))}</label>
-        <input type="number" min="0" max="100" data-set="matchMin" value="${r.matchMin}">${C.esc(t('tplRuleMatchB'))}</div>
-      <div class="row"><label><input type="checkbox" data-set="cold"${r.cold ? ' checked' : ''}> ${C.esc(t('tplRuleCold'))}</label>
-        <input type="number" min="0" max="100" data-set="coldPct" value="${r.coldPct}">${C.esc(t('tplRuleColdB'))}</div>
-      <div class="row">${C.esc(t('tplManyA'))}<input type="number" min="1" max="99" data-set="manyAt" value="${r.manyAt}">${C.esc(t('tplManyB'))}
-        <input type="number" min="1" max="20" data-set="spellings" value="${r.spellings}">${C.esc(t('tplManyC'))}</div>
-    </div>`;
-  }
-
-  function installPack(text, source) {
-    try {
-      const raw = typeof text === 'string' ? JSON.parse(text) : text;
-      const pk = C.parsePack(raw);
-      const i = tpl.packs.findIndex(p => p.raw.id === pk.id);
-      const entry = { raw, source: source || (i >= 0 ? tpl.packs[i].source : '') };
-      if (i >= 0) tpl.packs[i] = entry; else tpl.packs.push(entry);
-      parsed.delete(pk.id);
-      tpl.current = pk.id;
-      // Picks that no longer exist in the new version are dropped
-      tpl.picks = tpl.picks.filter(id => pk.items.has(id));
-      saveTpl();
-      toast(t('tplInstalled', pk.name, pk.items.size));
-      return true;
-    } catch (e) {
-      toast(t('tplInstallFailed', C.errMsg(e)));
-      return false;
-    }
-  }
-
-  // Fetched by the service worker: Tumblr's page CSP doesn't apply there
-  async function fetchText(url) {
-    const r = await chrome.runtime.sendMessage({ type: 'fetchText', url });
-    if (r?.error) throw new Error(r.error);
-    return r.text;
-  }
-  async function installFromUrl(url) {
-    url = String(url || '').trim();
-    if (!url) return;
-    try { if (installPack(await fetchText(url), url)) renderTpl(); } catch (e) { toast(t('tplInstallFailed', C.errMsg(e))); }
-  }
-
   const copyText = text => navigator.clipboard?.writeText(text);
 
   async function insertTags(tags) {
-    if (tplInsert) { closeTpl(); return tplInsert(C.sortTagsFair(tags, tplStats(), fairOpts())); }
     const el = tagInput();
     if (!el) { copyText(tags.join(', ')); toast(t('tplNoInput')); return; }
     closeTpl();
@@ -779,7 +639,7 @@
 
   // Tags the panel inserted, per tags input, so a wrong pick can be undone or replaced
   const insertedBy = new WeakMap();
-  const hasInserted = () => { const el = tagInput(); return !tplInsert && !!(el && insertedBy.get(el)?.size); };
+  const hasInserted = () => { const el = tagInput(); return !!(el && insertedBy.get(el)?.size); };
   async function removeInserted(el, keys) {
     let n = 0;
     for (const c of editorChips(el)) {
@@ -820,83 +680,6 @@
     renderPreview();
   }
 
-  // ----- Pack upkeep: suggest tag changes per character / relation from fresh samples, apply what the user ticks -----
-  // Tags mostly used by another fandom (offtopic) are ticked for removal by default; nothing else is.
-  // Add candidates are sampled too and dropped when they turn out to belong to another fandom.
-  let tplReview = null;
-  const reviewCount = () => tplReview.items.reduce((n, it) => n + [...it.remove, ...it.add].filter(x => x.on).length, 0);
-  async function reviewPack(id) {
-    const pk = packById(id);
-    if (!pk || tplChecking) return;
-    const ctl = tplChecking = { aborted: false };
-    const progress = (i, n) => status(t('tplReviewing', i, n), () => { ctl.aborted = true; });
-    try {
-      await C.ensureTagStats(api, cache, C.packTags(pk), { ctl, save, onProgress: progress });
-      const stats = cache.tagStats;
-      const targets = [...pk.items.values()].filter(it => (it.kind === 'char' || it.rel) && it.tags.length);
-      const items = targets.map(it => ({ it, ...C.suggestTagChanges(it.tags, stats, { exclude: pk.base, fandom: pk.base, rules: tpl.rules }) }));
-      const candidates = [...new Set(items.flatMap(x => x.add.map(a => a.tag)))];
-      if (!ctl.aborted) await C.ensureTagStats(api, cache, candidates, { ctl, save, onProgress: progress });
-      tplReview = { packId: id, items: [] };
-      for (const x of items) {
-        const add = x.add.map(a => ({ ...a, fit: C.fandomShare(a.tag, stats[C.key(a.tag)], pk.base), on: false }))
-          .filter(a => a.fit === null || a.fit >= C.OFFTOPIC_SHARE);
-        const remove = x.remove.map(r => ({ ...r, on: r.reason === 'offtopic' }));
-        if (add.length || remove.length) tplReview.items.push({ id: x.it.id, name: x.it.name, add, remove });
-      }
-      statusBox.hidden = true;
-      tplView = 'review';
-      renderTpl();
-    } catch (e) {
-      status(C.errMsg(e));
-    } finally {
-      tplChecking = null;
-    }
-  }
-
-  function reviewHtml() {
-    const pk = packById(tplReview.packId);
-    const why = r => (r.reason === 'offtopic' ? t('why_offtopic', Math.round(r.share * 100))
-      : r.reason === 'fuzzy' ? t('why_fuzzy', r.match) : r.reason === 'dead' ? t('why_dead') : t('why_cold', r.rank, r.of));
-    const box = (i, side, j, x, label, title) => `<label class="tp-rv${x.reason === 'offtopic' ? ' bad' : ''}" title="${C.esc(title)}">`
-      + `<input type="checkbox" data-rv="${i}:${side}:${j}"${x.on ? ' checked' : ''}> #${C.esc(x.tag)} <small>${C.esc(label)}</small></label>`;
-    const body = tplReview.items.map((it, i) => `<div class="tp-pk"><div class="nm">${C.esc(it.name)}</div>`
-      + (it.remove.length ? `<div class="sub">${C.esc(t('tplRmTitle'))}</div>` + it.remove.map((r, j) => box(i, 'remove', j, r, why(r), why(r))).join('') : '')
-      + (it.add.length ? `<div class="sub">${C.esc(t('tplAddTitle'))}</div>` + it.add.map((a, j) =>
-        box(i, 'add', j, a, t('tplShare', Math.round(a.share * 100)), a.fit === null ? t('tplFitUnknown') : '')).join('') : '')
-      + '</div>').join('');
-    return `<div class="tp-body tp-m"><h4>${C.esc(t('tplReviewTitle', pk?.name || ''))}</h4>${body || `<p class="hint">${C.esc(t('tplReviewNone'))}</p>`}</div>
-      <div class="tp-f"><span class="sp"></span><button class="pri" data-tp="applyReview">${C.esc(t('tplApply', reviewCount()))}</button></div>`;
-  }
-
-  // Write ticked changes into the installed pack's raw JSON, whichever shape it uses
-  function applyReview() {
-    const entry = tpl.packs.find(p => p.raw.id === tplReview.packId);
-    if (!entry) return;
-    const raw = JSON.parse(JSON.stringify(entry.raw));
-    const all = [...(raw.characters || []), ...(Array.isArray(raw.relations) ? raw.relations : []), ...(raw.sections || []).flatMap(s => s.items || [])];
-    let n = 0;
-    for (const it of tplReview.items) {
-      const target = all.find(x => x.id === it.id);
-      if (!target) continue;
-      const drop = new Set(it.remove.filter(r => r.on).map(r => C.key(r.tag)));
-      const before = target.tags || [];
-      const kept = before.filter(tg => !drop.has(C.key(tg)));
-      target.tags = C.withTags(kept, it.add.filter(a => a.on).map(a => a.tag));
-      n += (before.length - kept.length) + (target.tags.length - kept.length);
-    }
-    if (!n) return;
-    C.parsePack(raw);
-    entry.raw = raw;
-    entry.edited = true;
-    parsed.delete(raw.id);
-    saveTpl();
-    toast(t('tplApplied', n));
-    tplReview = null;
-    tplView = 'manage';
-    renderTpl();
-  }
-
   tplEl.addEventListener('mousedown', e => {
     // Clicking chips must not steal focus from the search box or the editor
     if (e.target.closest('.tp-c, .tp-t')) e.preventDefault();
@@ -929,8 +712,6 @@
         tpl.picks = tpl.picks.filter(x => x !== id && !involves(x));
       }
       else tpl.picks = [...tpl.picks, id];
-      // editing posts: once clicked, a "partly" item is no longer left alone
-      tplEdit?.keepSome.delete(id);
       if (!item.dataset.combo) tplDismissed = new Set();
       saveTpl();
       renderPickBody(pack);
@@ -953,7 +734,7 @@
     if (!btn) return;
     const act = btn.dataset.tp;
     if (act === 'close') closeTpl();
-    else if (act === 'manage' || act === 'pick') { tplView = act; renderTpl(); }
+    else if (act === 'packs') { closeTpl(); openManager('packs'); }
     else if (act === 'undo') undoInsert();
     else if (act === 'clear') { tpl.picks = []; saveTpl(); renderPickBody(pack); }
     else if (act === 'dropFlagged') {
@@ -969,75 +750,23 @@
       if (!tpl.picks.length) return toast(t('tplPickFirst'));
       const name = prompt(t('tplFavName'), tpl.picks.map(id => pack.items.get(id)?.name).join(' + '));
       if (name) { tpl.favs.push({ pack: pack.id, name, ids: tpl.picks.slice() }); saveTpl(); renderPickBody(pack); }
-    } else if (act === 'insert' && tplEdit) {
-      const { add, drop } = editPlan(pack);
-      if (!add.length && !drop.length) return toast(t('tplNoChange'));
-      const { apply } = tplEdit, opts = editOpts(add, drop);
-      closeTpl();
-      apply(pack, opts);
     } else if (act === 'copy' || act === 'insert') {
       const res = composeNow();
       if (!res?.tags.length) return toast(t('tplPickFirst'));
       if (act === 'copy') { copyText(C.sortTagsFair(res.tags, tplStats(), fairOpts()).join(', ')); toast(t('tplCopied')); } else insertTags(res.tags);
-    } else if (act === 'installUrl') installFromUrl(tplEl.querySelector('.tp-url').value);
-    else if (act === 'file') tplEl.querySelector('.tp-file').click();
-    else if (act === 'installPaste') { if (installPack(tplEl.querySelector('.tp-paste').value)) renderTpl(); }
-    else if (act === 'update') {
-      const entry = tpl.packs.find(p => p.raw.id === btn.dataset.pack);
-      if (entry && (!entry.edited || confirm(t('tplUpdateEdited')))) installFromUrl(entry.source);
-    } else if (act === 'review') reviewPack(btn.dataset.pack);
-    else if (act === 'export') {
-      const entry = tpl.packs.find(p => p.raw.id === btn.dataset.pack);
-      if (entry) { copyText(JSON.stringify(entry.raw, null, 1)); toast(t('tplCopied')); }
-    } else if (act === 'applyReview') applyReview();
-    else if (act === 'applyUpkeep' && tplUpk) {
-      const { apply, sel } = tplUpk, ids = upkTargets().map(p => p.id);
-      closeTpl();
-      apply(new Set(sel), ids);
-    }
-    else if (act === 'checkpack') { const pk = packById(btn.dataset.pack); if (pk) checkTags(C.packTags(pk)); }
-    else if (act === 'remove') {
-      const entry = tpl.packs.find(p => p.raw.id === btn.dataset.pack);
-      if (!entry || !confirm(t('tplConfirmRemove', entry.raw.name || entry.raw.id))) return;
-      tpl.packs = tpl.packs.filter(p => p !== entry);
-      tpl.favs = tpl.favs.filter(f => f.pack !== entry.raw.id);
-      if (tpl.current === entry.raw.id) { tpl.current = tpl.packs[0]?.raw.id || ''; tpl.picks = []; }
-      parsed.delete(entry.raw.id);
-      saveTpl();
-      renderTpl();
     }
   });
   tplEl.addEventListener('change', e => {
-    if (e.target.dataset.upk && tplUpk) {
-      if (e.target.checked) tplUpk.sel.add(e.target.dataset.upk); else tplUpk.sel.delete(e.target.dataset.upk);
-      renderTpl();
-      return;
-    }
-    if (e.target.dataset.rv) {
-      const [i, side, j] = e.target.dataset.rv.split(':');
-      tplReview.items[+i][side][+j].on = e.target.checked;
-      tplEl.querySelector('[data-tp="applyReview"]').textContent = t('tplApply', reviewCount());
-      return;
-    }
-    if (e.target.classList.contains('tp-pack')) {
-      tpl.current = e.target.value; tpl.picks = []; tplQuery = '';
-      if (tplEdit) resetEdit(); // editing posts: read them again against the other pack
-      saveTpl(); renderTpl();
-    } else if (e.target.classList.contains('tp-file')) {
-      const f = e.target.files?.[0];
-      if (f) f.text().then(text => { if (installPack(text)) renderTpl(); });
-    } else if (e.target.dataset.set) {
-      const k = e.target.dataset.set, v = e.target.type === 'checkbox' ? e.target.checked : Math.max(0, +e.target.value || 0);
-      if (k === 'useBase') tpl.useBase = v;
-      else tpl.rules = { ...tpl.rules, [k]: v };
-      saveTpl();
-    }
+    if (!e.target.classList.contains('tp-pack')) return;
+    tpl.current = e.target.value; tpl.picks = []; tplQuery = '';
+    saveTpl(); renderTpl();
   });
 
   // ---------- Official mass editor (/mega-editor/<box>/<blog>) ----------
   // A legacy jQuery page. Posts are <a class="brick" id="post_<id>"> tiles whose inline onclick toggles
   // .highlighted; selecting more than 100 makes the page alert(). Its tag removal reads the checked
   // labels' HTML, so those labels must never be edited: decoded names are added beside them instead.
+  // Nothing here edits posts: the page's own buttons do, and bulk edits it lacks are on the manager page.
   const ME_MAX = 100;
   const ME_CSS = `
 /* The official popup is a fixed 348x229 box with a background image and absolutely placed parts;
@@ -1054,10 +783,8 @@
 .tth-rt-bar a { color: #529ecc; font-size: 12px; text-decoration: none; }
 .tth-rt-status { color: #888; font-size: 12px; }
 #tags .tth-count { color: #888; font-size: 11px; margin-left: 6px; }
-#tags .tth-fill { margin-left: 4px; border: 0; background: none; color: #529ecc; cursor: pointer; font-size: 14px; padding: 0 2px; }
 #tags .tth-hide { display: none; }
 #tags .tth-name { cursor: pointer; }
-.tth-labels-row { margin-top: 8px; }
 .brick .tth-tile-tags { font-size: 10px; line-height: 1.3; max-height: 5.2em; overflow: hidden; word-break: break-word; margin-top: 2px; }
 /* Multi-image posts: the official tile only shows the first image */
 .brick .tth-mosaic { position: absolute; inset: 0; display: grid; grid-template-columns: 1fr 1fr; gap: 1px; background: #fff; z-index: 1; pointer-events: none; }
@@ -1077,7 +804,7 @@
   // the tags already in the box, official the page's own suggestion list.
   function megaSuggest({ term, tokens, official }) {
     const have = tokens.map(C.norm).filter(Boolean);
-    const mine = C.suggest(index, term, have, have, 15).map(s => s.tag);
+    const mine = C.suggest(libFor(location.pathname.split('/')[3]), term, have, have, 15).map(s => s.tag);
     const q = C.key(term);
     const extra = official.filter(tg => !mine.some(m => C.key(m) === C.key(tg)) && !have.some(h => C.key(h) === C.key(tg)) && (!q || C.key(tg).includes(q)));
     return [...mine, ...extra].slice(0, 15);
@@ -1096,7 +823,7 @@
     const liveTags = new Map(); // post id -> tags read from the API during this page view
     const cachedRec = id => index.postTags.get(id)?.rec;
     // reblogs of my own posts, from the synced cache (refreshed with the tiles)
-    let copySet = C.copyKeys(cache), copyWarned = false;
+    let copySet = C.copyKeys(C.roleCache(cache, settings, 'share')), copyWarned = false;
     const isCopyId = id => !!blogUuid() && copySet.has(blogUuid() + ':' + id);
 
     // Current tags of the given posts, read from the API (6 at a time) and remembered for this page view
@@ -1114,147 +841,10 @@
       return ids.map(id => liveTags.get(id) || []);
     }
 
-    // ----- Bulk edits through the API, for what the official editor can't do -----
-    let running = null;
-    function afterEdit(id, r) {
-      liveTags.set(id, r.tags.slice());
-      const rec = cache.blogs[blogUuid()]?.posts?.[id];
-      if (rec) { rec[0] = C.uniqTags(r.tags); rec[2] = r.state; rec[6] = r.reblog; }
-      const count = document.getElementById('tag_count_' + id);
-      if (count) count.textContent = count.textContent.replace(/\d+/, String(r.tags.length));
-      const brick = document.getElementById('post_' + id);
-      if (brick) markBrick(brick, true);
-    }
-
-    async function runOnPosts(title, mutate, opts = {}) {
-      if (running) return;
-      // reblogs of my own posts are never edited directly: they follow their original
-      const ids = (opts.ids || selectedIds()).filter(id => !isCopyId(id));
-      if (!ids.length) return toast(t('needSelect'));
-      if (!confirm(t('confirmRun', title, ids.length))) return;
-      const ctl = running = { aborted: false };
-      const notes = [];
-      let ok = 0, skip = 0, fail = 0;
-      for (let i = 0; i < ids.length && !ctl.aborted; i++) {
-        status(t('progress', title, i + 1, ids.length), () => { ctl.aborted = true; });
-        try {
-          const r = await C.editPost(api, t, blogName, ids[i], mutate, opts.verifyLabel);
-          if (r.skipped) { skip++; if (!r.unchanged) notes.push(t('logSkip', ids[i], r.reason)); }
-          else {
-            ok++;
-            afterEdit(ids[i], r);
-            // the same tags, visibility and label for its reblogs (or original) on my other blogs
-            if (settings.syncReblogs && blogUuid()) {
-              const n = await C.syncCopies(api, t, cache, blogUuid(), ids[i], r);
-              if (n) notes.push(t('logSynced', ids[i], n));
-            }
-          }
-        } catch (e) {
-          fail++;
-          notes.push(t('logFail', ids[i], C.errMsg(e)));
-        }
-        await C.sleep(400);
-      }
-      running = null;
-      await save();
-      rebuildIndex();
-      status([t('logDone', title, ctl.aborted, ok, skip, fail), ...notes].join('\n'));
-      opts.onDone?.();
-    }
-
-    // ----- Toolbar buttons, styled like the official ones -----
-    function headerButton(id, label, after, onClick) {
-      const wrap = document.createElement('div');
-      wrap.className = 'header_button';
-      wrap.innerHTML = `<button type="button" id="${id}" class="chrome big_dark"><div class="chrome_button">${C.esc(label)}<div class="chrome_button_left"></div><div class="chrome_button_right"></div></div></button>`;
-      after.after(wrap);
-      wrap.querySelector('button').addEventListener('click', onClick);
-      return wrap;
-    }
-    const privateBtn = document.getElementById('make_posts_private')?.closest('.header_button');
-    if (privateBtn) {
-      // "Make public" next to the official "Make private"
-      const pub = headerButton('tth_make_public', t('setPublic'), privateBtn, () =>
-        runOnPosts(t('setPublic'), C.mutations.state(t, stateName, 'published')));
-      // Tumblr's reblog control, which the mass editor doesn't offer: one button with a small menu, so the
-      // toolbar stays on one line
-      const menu = root.querySelector('.dd.menu');
-      const rbWrap = headerButton('tth_reblog', t('reblogCtl') + ' ▾', pub, e => {
-        e.stopPropagation();
-        if (!menu.hidden) { menu.hidden = true; return; }
-        const r = e.currentTarget.getBoundingClientRect();
-        menu.innerHTML = [['noone', 'reblogDeny'], ['everyone', 'reblogAllow']]
-          .map(([mode, k]) => `<div class="it" data-mode="${mode}"><span>${C.esc(t(k))}</span></div>`).join('');
-        Object.assign(menu.style, { left: r.left + 'px', top: (r.bottom + 4) + 'px' });
-        menu.hidden = false;
-      });
-      menu.addEventListener('click', e => {
-        const it = e.target.closest('.it');
-        if (!it) return;
-        menu.hidden = true;
-        runOnPosts(t(it.dataset.mode === 'noone' ? 'reblogDeny' : 'reblogAllow'), C.mutations.reblog(it.dataset.mode));
-      });
-      document.addEventListener('click', () => { menu.hidden = true; });
-      // Reorder each selected post's tags, most popular sitewide first
-      const sortWrap = headerButton('tth_sort_heat', t('sortHeat'), rbWrap, async () => {
-        if (running) return;
-        const ids = selectedIds();
-        if (!ids.length) return toast(t('needSelect'));
-        const ctl = running = { aborted: false };
-        const stop = () => { ctl.aborted = true; };
-        status(t('meReading'), stop);
-        const tagLists = await fetchTags(ids);
-        await C.ensureTagStats(api, cache, tagLists.flat(), { ctl, save, onProgress: (i, n) => status(t('heatChecking', i, n), stop) });
-        running = null;
-        if (ctl.aborted) return status(t('logDone', t('sortHeat'), true, 0, 0, 0));
-        runOnPosts(t('sortHeat'), C.mutations.sortByHeat(cache.tagStats, fairOpts()), { ids });
-      });
-      // The tag template panel: what it inserts is added to every selected post, in the template's order
-      // The tag template panel in edit mode: it starts from what the selected posts carry; applying adds and
-      // takes out characters and relations on all of them
-      const tplWrap = headerButton('tth_templates', t('tplOpen'), sortWrap, async () => {
-        if (!tplEl.hidden) return closeTpl();
-        if (running) return;
-        const ids = selectedIds();
-        if (!ids.length) return toast(t('needSelect'));
-        status(t('meReading'));
-        const tagLists = await fetchTags(ids);
-        statusBox.hidden = true;
-        openTplEdit(tagLists, tplWrap.querySelector('button'), (pack, opts) =>
-          runOnPosts(t('actRetag'), C.mutations.retag(pack, opts, t), { ids }));
-      });
-      // insert from the panel outside edit mode (not reached from the mass editor's button, kept for safety)
-      tplInsert = tags => runOnPosts(t('actTagsAdd', tags.map(tg => '#' + tg).join(' ')), C.mutations.addTags(tags));
-      // Bring the selected posts in line with the installed packs: list the changes first, apply the ticked ones
-      const upkWrap = headerButton('tth_upkeep', t('meUpkeep'), tplWrap, async () => {
-        if (!tplEl.hidden) return closeTpl();
-        if (running) return;
-        if (!installedPacks().length) return toast(t('upkNeedPack'));
-        const ids = selectedIds().filter(id => !isCopyId(id));
-        if (!ids.length) return toast(t('needSelect'));
-        status(t('meReading'));
-        const tagLists = await fetchTags(ids);
-        statusBox.hidden = true;
-        openTplUpkeep(ids.map((id, i) => ({ key: id, id, tags: tagLists[i] })), upkWrap.querySelector('button'), (allow, targets) =>
-          runOnPosts(t('meUpkeep'), C.mutations.upkeep(installedPacks(), allow, t), { ids: targets }));
-      });
-    }
-
-    // ----- Content labels popup: the official one can only add labels -----
-    const labelsWidget = document.getElementById('add_community_labels_widget');
-    if (labelsWidget) {
-      const row = document.createElement('div');
-      row.className = 'tth-labels-row';
-      row.innerHTML = `<button type="button" id="tth_remove_labels" class="chrome"><div class="chrome_button"><div class="chrome_button_left"></div><span>${C.esc(t('labelOff'))}</span><div class="chrome_button_right"></div></div></button>`;
-      labelsWidget.querySelector('div')?.appendChild(row);
-      row.querySelector('button').addEventListener('click', () =>
-        runOnPosts(t('labelOff'), C.mutations.labels([]), { verifyLabel: true }));
-    }
-
     // Official tag edits change posts behind our back; re-read tags next time
     for (const id of ['add_tag_button', 'remove_tag_button']) document.getElementById(id)?.addEventListener('click', () => liveTags.clear());
 
-    // ----- "Edit tags" popup: wider, filterable, with counts and ⊕ fill -----
+    // ----- "Edit tags" popup: wider, filterable, with counts -----
     const rtWidget = document.getElementById('remove_tags_widget');
     const rtList = document.getElementById('tags');
     if (rtWidget && rtList) {
@@ -1317,19 +907,6 @@
           c.textContent = `${n}/${ids.length}`;
           c.title = [t('meCount', n, ids.length), C.heatText(t, cache.tagStats?.[k])].filter(Boolean).join(' · ');
           r.appendChild(c);
-          if (n > 0 && n < ids.length) {
-            const fill = document.createElement('button');
-            fill.type = 'button';
-            fill.className = 'tth-fill';
-            fill.textContent = '⊕';
-            fill.title = t('meFill');
-            fill.addEventListener('click', () => {
-              const tag = C.norm(rowTag(r));
-              const missing = ids.filter((id, j) => !tagLists[j].some(x => C.key(x) === k));
-              runOnPosts(t('actTagsAdd', '#' + tag), C.mutations.addTags([tag]), { ids: missing, onDone: enhanceRows });
-            });
-            r.appendChild(fill);
-          }
         }
         reordering = true;
         rows().sort((a, b) => (+b.dataset.count) - (+a.dataset.count)).forEach(r => rtList.appendChild(r));
@@ -1369,7 +946,7 @@
         el.textContent = C.uniqTags(tags).map(tg => '#' + tg).join(' ');
       }
     }
-    const markAll = () => { copySet = C.copyKeys(cache); document.querySelectorAll('.brick').forEach(b => markBrick(b)); };
+    const markAll = () => { copySet = C.copyKeys(C.roleCache(cache, settings, 'share')); document.querySelectorAll('.brick').forEach(b => markBrick(b)); };
     markAll();
     const content = document.querySelector('.l-content') || document.body;
     new MutationObserver(C.debounce(markAll, 200)).observe(content, { childList: true, subtree: true });
@@ -1506,6 +1083,44 @@
     });
   }
 
+  // ---------- Redo AI on material blogs' posts ----------
+  // Posts of my material blogs get a "Redo AI" button beside Tumblr's own Edit link (a[href="/edit/blog/id"],
+  // shown only on my posts). The service worker runs the AI sort (TTHCore.aiSortPost) and writes the post.
+  const aiBusy = new Set();
+  function bindAiRedo() {
+    for (const edit of document.querySelectorAll('article a[href^="/edit/"]')) {
+      const m = edit.getAttribute('href').match(/^\/edit\/([^/]+)\/(\d+)/);
+      if (!m || roleOf(m[1]) !== 'material' || edit.parentElement.querySelector('.tth-ai-redo')) continue;
+      const blog = m[1], id = m[2];
+      const btn = Object.assign(document.createElement('button'), { type: 'button', className: 'tth-ai-redo', title: t('aiRedoHint') });
+      btn.style.cssText = 'margin-right:8px;padding:2px 8px;border:1px solid currentColor;border-radius:12px;background:none;color:inherit;font:inherit;font-size:13px;cursor:pointer;opacity:.8;white-space:nowrap';
+      btn.textContent = aiBusy.has(id) ? t('aiRedoBusy') : t('aiRedo');
+      btn.disabled = aiBusy.has(id);
+      btn.addEventListener('click', e => { e.preventDefault(); e.stopPropagation(); aiRedo(blog, id, btn); });
+      edit.parentElement.insertBefore(btn, edit);
+    }
+  }
+  async function aiRedo(blog, id, btn) {
+    if (aiBusy.has(id)) return;
+    aiBusy.add(id);
+    // Tumblr may re-render the footer while the AI thinks: update whichever button is there now
+    const show = (text, busy) => {
+      for (const b of document.querySelectorAll('.tth-ai-redo')) {
+        if (b === btn || b.closest('article')?.querySelector(`a[href^="/edit/${blog}/${id}"]`)) { b.textContent = text; b.disabled = busy; }
+      }
+    };
+    show(t('aiRedoBusy'), true);
+    let res;
+    try { res = await chrome.runtime.sendMessage({ type: 'aiRedo', blog, id }); } catch (e) { res = { error: C.errMsg(e) }; }
+    aiBusy.delete(id);
+    if (!res || res.error) {
+      show(t('aiRedo'), false);
+      return status(t('aiRedoFail', res?.error || '?'));
+    }
+    show(t('aiRedoDone', res.tags.length), false);
+    status([t('aiRedoWritten'), res.tags.map(tag => '#' + tag).join(' '), res.note].filter(Boolean).join('\n\n'));
+  }
+
   // ---------- Startup ----------
   // The manager page and other tabs write the same keys; keep this tab's copy current
   chrome.storage.onChanged.addListener((ch, area) => {
@@ -1513,13 +1128,16 @@
     if (ch.cache && !syncing) { Object.assign(cache, C.emptyCache(), ch.cache.newValue || {}); rebuildIndex(); }
     if (ch.settings) {
       Object.assign(settings, ch.settings.newValue || {});
+      rebuildIndex();
+      bindAiRedo();
       Object.assign(tpl, { useBase: settings.useBase ?? true, rules: { ...C.TPL_RULES, ...settings.rules } });
     }
     if (ch.packs) { tpl.packs = ch.packs.newValue || []; parsed.clear(); }
   });
   resolveReady();
-  new MutationObserver(C.debounce(bindInputs, 300)).observe(document.body, { childList: true, subtree: true });
+  new MutationObserver(C.debounce(() => { bindInputs(); bindAiRedo(); }, 300)).observe(document.body, { childList: true, subtree: true });
   bindInputs();
+  bindAiRedo();
   if (location.pathname.startsWith('/mega-editor')) initMassEditor();
   if (settings.autoSync && Date.now() - (cache.lastAuto || 0) > AUTO_SYNC_INTERVAL) {
     setTimeout(() => syncAll(false, true), 5000);

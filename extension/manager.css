@@ -38,6 +38,9 @@ label { display: inline-flex; gap: 5px; align-items: center; cursor: pointer; }
 .tab.on { background: var(--soft); color: var(--fg); font-weight: 600; }
 .login { margin: 40px auto; padding: 24px 28px; max-width: 520px; background: var(--panel); border: 1px solid var(--line); border-radius: 10px; text-align: center; }
 .login a { color: var(--accent); font-weight: 600; }
+.ask { margin: 12px 0; padding: 12px 16px; background: var(--panel); border: 1px solid var(--accent); border-radius: 10px; }
+.ask p { margin: 0 0 8px; }
+[data-role].on { background: var(--accent); color: #fff; border-color: var(--accent); }
 
 main { flex: 1; min-height: 0; display: flex; }
 .view { flex: 1; min-height: 0; padding: 16px 20px; display: flex; flex-direction: column; gap: 10px; overflow: auto; }

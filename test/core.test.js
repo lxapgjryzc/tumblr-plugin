@@ -187,6 +187,42 @@ autoTest = async () => {
   const body = JSON.parse(calls.find(c => c.startsWith('BODY ')).slice(5));
   check(body.parent_tumblelog_uuid === 't:s' && body.parent_post_id === '10' && body.reblog_key === 'k10' && body.state === 'published' && body.tags === 'arc v,new', 'the reblog carries the original tags: ' + JSON.stringify(body));
   check(calls.some(c => c === 'PUT t:m/20 arc v,yuto arc v'), 'the drifted reblog gets its original tags');
+  // a failing reblog is reported and the pass goes on to fix the drifted reblog
+  const postFails = async (path, opts = {}) => {
+    if (opts.method === 'POST') throw Object.assign(new Error('Posting failed'), { status: 500 });
+    return api(path, opts);
+  };
+  const partly = await C.autoMaintain(postFails, k => k, now - 3600);
+  check(eq(partly.map(x => x.type + ':' + x.blog + '/' + x.id), ['fail:side/10', 'fix:main/20']) && partly[0].error === 'Posting failed',
+    'autoMaintain reports a failed reblog and carries on: ' + JSON.stringify(partly));
+  // blog roles: material blogs and blogs with no role stay out of the reblog sync; a blog that became sharing
+  // later has only its newer posts reblogged
+  const roleBlogs = [{ name: 'main', uuid: 't:m', primary: true }, { name: 'side', uuid: 't:s' }, { name: 'refs', uuid: 't:r' }];
+  const roles = { collect: { blog: 't:c' }, blogRoles: { 't:s': { role: 'share', at: (now - 5) * 1000 }, 't:r': { role: 'material' }, 't:x': { role: 'bogus' } } };
+  check(C.blogRole(roles, roleBlogs[0]) === 'share' && C.blogRole(roles, 't:c') === 'material' && C.blogRole(roles, 't:r') === 'material'
+    && C.blogRole(roles, 't:x') === null && C.libraryRole(roles, 't:x') === 'share', 'blogRole: main sharing, collection material, set roles, unknown role is unset');
+  check(eq(C.unsetBlogs({}, roleBlogs).map(b => b.uuid), ['t:s', 't:r']), 'unsetBlogs lists side blogs with no role (never the main blog)');
+  const scope = C.reblogScope(roles, roleBlogs);
+  check(eq(scope.skip, ['t:r']) && scope.after['t:s'] === now - 5, 'reblogScope skips material blogs and keeps when a blog became sharing: ' + JSON.stringify(scope));
+  check(eq(C.reblogScope({}, roleBlogs).skip, ['t:s', 't:r']), 'reblogScope skips blogs with no role yet');
+  calls.length = 0;
+  const late = await C.autoMaintain(api, k => k, now - 3600, scope);
+  check(!late.some(x => x.type === 'reblog'), 'a side post older than the blog becoming sharing is not reblogged: ' + JSON.stringify(late));
+  const none = await C.autoMaintain(api, k => k, now - 3600, C.reblogScope({ blogRoles: { 't:s': { role: 'material' } } }, roleBlogs));
+  check(none.length === 0 && !calls.some(c => c.startsWith('POST')), 'a material side blog takes no part in the reblog sync');
+  const rc = { blogs: { 't:m': { name: 'main', posts: { 1: [['x'], 1, 'published', 0, 'refs/5'] } }, 't:r': { name: 'refs', posts: { 5: [['light'], 1, 'published'] } } },
+    blogList: roleBlogs, tagStats: {}, custom: [], hidden: [] };
+  const shareView = C.roleCache(rc, roles, 'share'), matView = C.roleCache(rc, roles, 'material');
+  check(eq(Object.keys(shareView.blogs), ['t:m']) && eq(Object.keys(matView.blogs), ['t:r']) && shareView.blogs['t:m'] === rc.blogs['t:m'], 'roleCache splits the blogs and shares the records');
+  check(C.copyKeys(shareView).size === 0, 'a reblog from a material blog is not a copy on the sharing side');
+  check(C.buildIndex(matView).tags.has('light') && !C.buildIndex(shareView).tags.has('light'), 'the material library has its own tags');
+  // schema 2: the 0.9.3 collection moves into materials and its blog becomes material; done once
+  const old093 = { settings: { collect: { blog: 't:c' }, lang: 'zh' }, collection: { blog: 't:c', syncedAt: 5, posts: { 1: ['a/1', 1, [], ['light']] } } };
+  const mig = C.migrateMaterials(old093);
+  check(mig && mig.set.materials['t:c'] === old093.collection && eq(mig.remove, ['collection']) && mig.set.settings.schema === 2
+    && mig.set.settings.blogRoles['t:c'].role === 'material' && mig.set.settings.lang === 'zh', 'migrateMaterials moves the 0.9.3 collection into materials');
+  check(C.migrateMaterials(mig.set) === null, 'migrateMaterials runs once');
+  check(eq(C.migrateMaterials({}).set.materials, {}) && eq(C.migrateMaterials({}).remove, []), 'migrateMaterials on empty storage only sets the schema');
   let posts = 0;
   const failing = C.makeApi(async (p, { method }) => { if (method === 'POST') { posts++; throw Object.assign(new Error('boom'), { status: 503 }); } return {}; });
   await failing('/v2/blog/x/posts', { method: 'POST', body: {} }).catch(() => {});
@@ -306,6 +342,14 @@ autoTest = async () => {
   let aiErr = '';
   await C.aiTagImage({ base: 'https://ai.example/v1', model: 'm' }, 'k', 'x', async () => ({ ok: true, json: async () => ({ choices: [{ finish_reason: 'length', message: { content: '' } }] }) })).catch(e => { aiErr = e.message; });
   check(/tokens/.test(aiErr), 'aiTagImage says when the reply ran out of tokens');
+  let multi;
+  await C.aiTagImage({ base: 'https://ai.example/v1', model: 'm' }, 'k', Array.from({ length: 12 }, (_, i) => 'img' + i), async (u, init) => {
+    multi = JSON.parse(init.body).messages[0].content;
+    return { ok: true, json: async () => ({ choices: [{ message: { content: '{"light": []}' } }] }) };
+  });
+  check(multi.filter(c => c.type === 'image_url').length === C.AI_MAX_IMAGES && multi[0].text.includes(`These ${C.AI_MAX_IMAGES} images are all from one post`),
+    'aiTagImage sends a post\'s images in one request, at most AI_MAX_IMAGES, and says they are one post');
+  check(!C.aiPrompt('', 1).includes('one post') && C.aiImageSize(1) === 768 && C.aiImageSize(4) === 384 && C.aiImageSize(10) === 384, 'one image: plain prompt; more images: smaller each');
 
   // AI-made images: clues from tags and replies, "not ai" never counts for, one voice is not enough
   check(eq(['ai art', 'AI-generated', 'midjourney', 'stable diffusion', 'made with ai'].map(x => C.aiArtSignal(x)), ['yes', 'yes', 'yes', 'yes', 'yes']), 'aiArtSignal: AI-art tags');
@@ -355,6 +399,12 @@ autoTest = async () => {
   sent.length = 0;
   await C.editPost(napi, k => k, 't:c', '5', n => n);
   check(sent.length === 0, 'editPost leaves a post alone when nothing changed');
+  const lightTag = C.REF_GROUPS.find(g => g.id === 'light').tags[0], lightTag2 = C.REF_GROUPS.find(g => g.id === 'light').tags[1];
+  const redone = C.aiWrite(true, [lightTag2], 'new')({ tags: ['mine', lightTag, C.AI_MARK], content: [{ type: 'text', text: C.AI_NOTE_MARK + 'old' }] });
+  check(eq(redone.tags, ['mine', C.AI_MARK, lightTag2]) || eq(redone.tags.slice().sort(), ['mine', C.AI_MARK, lightTag2].sort()), 'aiWrite redo replaces tags in the AI lists, keeps others: ' + JSON.stringify(redone.tags));
+  check(eq(redone.content, [{ type: 'text', text: C.AI_NOTE_MARK + 'new' }]), 'aiWrite redo replaces the note');
+  const first = C.aiWrite(false, [lightTag2])({ tags: [lightTag], content: [] });
+  check(first.tags.includes(lightTag) && first.tags.includes(lightTag2) && first.tags.includes(C.AI_MARK), 'aiWrite first time keeps hand tags');
   const store2 = { posts: { a: ['x', 1, [['s1', 'b1']]], b: ['y', 1, [['s2', 'b2'], ['s3', 'b3']]], c: ['z', 1, []], d: ['w', 1, [['s4', 'b4']]] } };
   const p1 = C.dailyPick(store2, 2, 'day|0'), p2 = C.dailyPick(store2, 2, 'day|0');
   check(eq(p1, p2) && p1.length === 2 && new Set(p1.map(p => p.id)).size === 2 && !p1.some(p => p.id === 'c'), 'dailyPick: same seed, same picks; distinct posts with images: ' + JSON.stringify(p1));
@@ -363,5 +413,11 @@ autoTest = async () => {
   check(seeds.size >= 2, 'dailyPick changes with the seed');
 };
 check(C.statFresh(stats['yuto arc v']) && !C.statFresh({ match: 1, followers: 1, at: now }), 'statFresh requires co');
+{
+  const img = (name, width, height) => ({ type: 'image', media: [{ url: name, width, height }] });
+  const p = { content: [], trail: [{ content: [img('strip', 2048, 142), img('forest', 1280, 1920), img('strip2', 2048, 142)] }] };
+  check(eq(C.postImages(p).map(i => i.small), ['forest', 'strip', 'strip2']), 'postImages: decorative strips go after the real image');
+  check(C.postImages({ content: [img('strip', 2048, 142)] })[0].small === 'strip', 'postImages: a strip alone is still returned');
+}
 
 autoTest().then(() => { console.log(failures ? `${failures} FAILED` : 'all passed'); process.exit(failures ? 1 : 0); });

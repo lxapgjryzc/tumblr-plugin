@@ -78,9 +78,10 @@ function setupWindow(url, html, server, store) {
       },
       onChanged: { addListener: fn => listeners.push(fn) },
     },
-    runtime: { sendMessage: async msg => (msg.type === 'fetchText' ? w.fetchText(msg.url) : undefined) },
+    runtime: { sendMessage: async msg => { w.sent.push(msg); return msg.type === 'aiRedo' ? w.aiReply(msg) : undefined; } },
   };
-  w.fetchText = async () => ({ error: 'offline' });
+  w.sent = [];
+  w.aiReply = async () => ({ error: 'not set up' });
   w.clip = null;
   Object.defineProperty(w.navigator, 'clipboard', { value: { writeText: async v => { w.clip = v; } } });
   w.HTMLElement.prototype.scrollIntoView = () => {};
@@ -154,9 +155,7 @@ function fakeJQuery(w) {
   const clickTile = async (el, opts) => { mouse(el, 'mousedown', opts); mouse(el, 'mouseup', opts); mouse(el, 'click', opts); await sleep(5); };
   const selected = () => [...d.querySelectorAll('.brick.highlighted')].map(x => x.id.replace('post_', ''));
 
-  check(!!d.getElementById('tth_make_public'), 'toolbar: "Make public" button added');
-  check(d.getElementById('tth_make_public').closest('.header_button').previousElementSibling.querySelector('#make_posts_private'), 'placed right after "Make private"');
-  check(!!d.getElementById('tth_remove_labels'), 'labels popup: "Remove community labels" button added');
+  check(!['tth_make_public', 'tth_remove_labels', 'tth_sort_heat', 'tth_upkeep', 'tth_templates'].some(id => d.getElementById(id)), 'mass editor: no extension edit buttons');
   check(b(2).querySelector('.tth-badge')?.textContent === 'Private', 'private badge on post 2');
   check(b(1).querySelector('.tth-tile-tags')?.textContent === '#yuuto (arc v) #ygo', 'tag names in tile overlay');
   await sleep(300);
@@ -201,7 +200,7 @@ function fakeJQuery(w) {
   const rows = [...tags.children];
   const rowOf = tg => rows.find(r => r.querySelector('label').textContent === tg);
   check(rowOf('ygo').querySelector('.tth-count')?.textContent === '2/2', 'count 2/2 for ygo');
-  check(rowOf('rare').querySelector('.tth-count')?.textContent === '1/2' && !!rowOf('rare').querySelector('.tth-fill'), 'count 1/2 with ⊕ for rare');
+  check(rowOf('rare').querySelector('.tth-count')?.textContent === '1/2' && !rowOf('rare').querySelector('.tth-fill'), 'count 1/2 for rare, no ⊕ fill');
   const enc = rowOf('yuuto%20%28arc%20v%29');
   check(enc.querySelector('label').textContent === 'yuuto%20%28arc%20v%29' && enc.querySelector('label').classList.contains('tth-hide')
     && enc.querySelector('.tth-name')?.textContent === 'yuuto (arc v)', 'encoded label untouched, decoded name shown beside it');
@@ -210,66 +209,7 @@ function fakeJQuery(w) {
   filter.value = 'yu'; filter.dispatchEvent(new w.Event('input'));
   check(rows.filter(r => r.style.display !== 'none').length === 1, 'filter box narrows the list');
   filter.value = ''; filter.dispatchEvent(new w.Event('input'));
-
-  rowOf('rare').querySelector('.tth-fill').click();
-  await sleep(1500);
-  check(server.puts.length === 1 && server.puts[0].id === '1' && server.puts[0].body.tags === 'yuuto (arc v),ygo,rare', 'fill adds "rare" to post 1 only: ' + JSON.stringify(server.puts));
-  check(d.getElementById('tag_count_1').textContent === '3个标签', 'tile tag count updated');
-
-  // Make public: only the private post changes
-  for (const id of selected()) b(id).click();
-  await clickTile(b(1)); await clickTile(b(2));
-  d.getElementById('tth_make_public').click();
-  await sleep(1500);
-  const pub = server.puts.slice(1);
-  check(pub.length === 1 && pub[0].id === '2' && pub[0].body.state === 'published' && pub[0].body.tags === 'ygo', 'make public edits only the private post: ' + JSON.stringify(pub));
-  check(!b(2).querySelector('.tth-badge'), 'private badge removed');
-
-  // Sort tags by popularity: post 1 has yuuto (arc v), ygo, rare
-  for (const id of selected()) b(id).click();
-  await clickTile(b(1));
-  const before = server.puts.length;
-  d.getElementById('tth_sort_heat').click();
-  await sleep(3000);
-  const sorted = server.puts.slice(before);
-  check(sorted.length === 1 && sorted[0].id === '1' && sorted[0].body.tags === 'ygo,yuuto (arc v),rare', 'sort by popularity reorders post 1: ' + JSON.stringify(sorted.map(p => p.body.tags)));
-
-  // Tidy by packs: post 1's retired spelling is replaced in place
-  for (const id of selected()) b(id).click();
-  await clickTile(b(1)); await clickTile(b(3));
-  const n1 = server.puts.length;
-  d.getElementById('tth_upkeep').click();
-  await sleep(300);
-  const usr = [...d.querySelectorAll('*')].find(n => n.shadowRoot).shadowRoot;
-  check(!usr.querySelector('.tp').hidden && usr.querySelectorAll('[data-upk]').length === 1 && usr.querySelector('[data-upk]').checked && n1 === server.puts.length,
-    'mass editor: tidy by packs lists the change first, ticked, and edits nothing yet: ' + usr.querySelector('.tp').textContent.replace(/s+/g, ' '));
-  usr.querySelector('[data-tp="applyUpkeep"]').click();
-  await sleep(1500);
-  const tidy = server.puts.slice(n1);
-  check(tidy.length === 1 && tidy[0].id === '1' && tidy[0].body.tags === 'ygo,yuto arc v,rare', 'mass editor: tidy by packs replaces the old spelling, other posts untouched: ' + JSON.stringify(tidy.map(p => [p.id, p.body.tags])));
-
-  // Tag templates on the mass editor edit the selected posts: Yuto is on post 1 only, so he shows "partly"
-  d.getElementById('tth_templates').click();
-  await sleep(300);
-  const sr = [...d.querySelectorAll('*')].find(n => n.shadowRoot).shadowRoot;
-  const yutoChip = () => [...sr.querySelectorAll('.tp-body .tp-c')].find(c => c.textContent === 'Yuto');
-  check(!sr.querySelector('.tp').hidden && /Edit 2 post/.test(sr.querySelector('.tp-h .ttl').textContent), 'mass editor: "Tag templates" opens the panel in edit mode');
-  check(yutoChip().classList.contains('part'), 'mass editor: an item on some of the posts is shown partly');
-  yutoChip().click(); // put him on all
-  const n0 = server.puts.length;
-  sr.querySelector('[data-tp="insert"]').click();
-  await sleep(1500);
-  const added = server.puts.slice(n0);
-  check(added.length === 1 && added[0].id === '3' && added[0].body.tags === 'ygo,rare,yuto arc v', 'mass editor: ticking Yuto adds him only where he is missing (post 1 keeps its order): ' + JSON.stringify(added.map(p => [p.id, p.body.tags])));
-  d.getElementById('tth_templates').click();
-  await sleep(300);
-  check(yutoChip().classList.contains('on'), 'mass editor: now Yuto is on all selected posts');
-  yutoChip().click(); // take him off all
-  const n2 = server.puts.length;
-  sr.querySelector('[data-tp="insert"]').click();
-  await sleep(1500);
-  const dropped = server.puts.slice(n2);
-  check(dropped.length === 2 && dropped.every(p => p.body.tags === 'ygo,rare'), 'mass editor: unticking Yuto takes his tags off every selected post: ' + JSON.stringify(dropped.map(p => [p.id, p.body.tags])));
+  check(server.puts.length === 0, 'the mass editor helpers write nothing');
   check(errors.length === 0, 'no runtime errors on the mass editor' + (errors.length ? ': ' + errors.map(e => e.stack || e).join('\n') : ''));
 
   // ===== Post editor on a normal page =====
@@ -286,6 +226,51 @@ function fakeJQuery(w) {
   check(!ed.w.document.getElementById('tth_make_public'), 'no mass-editor buttons on other pages');
   check(ed.errors.length === 0, 'no runtime errors on the post editor page');
 
+  // ===== Blog roles: the editor suggests from the library of the blog it posts to =====
+  const roleStore = () => {
+    const r = preset();
+    r.settings.blogRoles = { 't:2': { role: 'material', at: 1 } };
+    r.cache.blogList.push({ uuid: 't:2', name: 'refs' });
+    r.cache.blogs['t:2'] = { name: 'refs', posts: { 7: [['backlight', 'yuuto study'], now, 'published', 0] } };
+    return r;
+  };
+  const editorFor = async blog => {
+    const e = setupWindow('https://www.tumblr.com/new/photo', `<!doctype html><body><div><button aria-label="Choose a blog">${blog}</button><div><div><input placeholder="#add tags"></div></div></div></body>`, makeServer(), roleStore());
+    e.w.eval(src);
+    await sleep(50);
+    const i = e.w.document.querySelector('input');
+    i.value = 'y'; i.dispatchEvent(new e.w.Event('input', { bubbles: true }));
+    return { e, text: e.w.document.getElementById('tth-host').shadowRoot.querySelector('.dd').textContent };
+  };
+  const onMat = await editorFor('refs'), onShare = await editorFor('me');
+  check(onMat.text.includes('#yuuto study') && !onMat.text.includes('#yuuto (arc v)'), 'roles: posting to a material blog suggests the material library: ' + onMat.text);
+  check(onShare.text.includes('#yuuto (arc v)') && !onShare.text.includes('#yuuto study'), 'roles: posting to a sharing blog suggests the sharing library: ' + onShare.text);
+  check(onMat.e.errors.length === 0 && onShare.e.errors.length === 0, 'no runtime errors with blog roles');
+
+  // ===== Redo AI: only on my material blogs' posts; the service worker does the work =====
+  const feed = setupWindow('https://www.tumblr.com/dashboard', '<!doctype html><body><article id="pm"><footer><span><a href="/edit/refs/77">Edit</a></span></footer></article>'
+    + '<article id="ps"><footer><span><a href="/edit/me/5">Edit</a></span></footer></article><article id="po"><footer><a href="/reblog/other/9/k">Reblog</a></footer></article></body>', makeServer(), roleStore());
+  feed.w.eval(src);
+  await sleep(50);
+  const fd = feed.w.document;
+  check(!!fd.querySelector('#pm .tth-ai-redo') && !fd.querySelector('#ps .tth-ai-redo') && !fd.querySelector('#po .tth-ai-redo'), 'Redo AI: shown on the material blog\'s post only');
+  let release;
+  feed.w.aiReply = () => new Promise(r => { release = () => r({ tags: ['backlight', 'ai sorted'], note: 'warm light from behind' }); });
+  const redo = fd.querySelector('#pm .tth-ai-redo');
+  redo.click();
+  await sleep(10);
+  check(redo.disabled && redo.textContent.includes('Thinking'), 'Redo AI: busy while the AI thinks');
+  check(JSON.stringify(feed.w.sent.find(m => m.type === 'aiRedo')) === JSON.stringify({ type: 'aiRedo', blog: 'refs', id: '77' }), 'Redo AI: asks the service worker with blog and id only');
+  release();
+  await sleep(20);
+  const fstatus = fd.getElementById('tth-host').shadowRoot.querySelector('.status');
+  check(!redo.disabled && !fstatus.hidden && fstatus.textContent.includes('#backlight') && fstatus.textContent.includes('warm light'), 'Redo AI: shows the tags and note written: ' + fstatus.textContent);
+  feed.w.aiReply = async () => ({ error: 'no permission' });
+  redo.click();
+  await sleep(20);
+  check(fstatus.textContent.includes('no permission') && !redo.disabled, 'Redo AI: an error is shown and the button works again');
+  check(feed.errors.length === 0, 'no runtime errors with Redo AI');
+
   // ===== Auto language on the legacy mass editor: <html lang> says "en", the page's own buttons are Chinese =====
   const autoGm = preset();
   autoGm.settings = { autoSync: false, lang: '' };
@@ -294,7 +279,7 @@ function fakeJQuery(w) {
   auto.w.eval(src);
   auto.w.eval(megaMain);
   await sleep(50);
-  check(auto.w.document.getElementById('tth_make_public')?.textContent === '设为公开', 'auto language follows the Chinese Tumblr UI: ' + auto.w.document.getElementById('tth_make_public')?.textContent);
+  check(/[\u4e00-\u9fff]/.test(auto.w.document.getElementById('post_2').querySelector('.tth-badge')?.textContent || ''), 'auto language follows the Chinese Tumblr UI: ' + auto.w.document.getElementById('post_2').querySelector('.tth-badge')?.textContent);
 
   // ===== Mass editor: a reblog of my own post is locked =====
   const lockGm = preset();
@@ -422,19 +407,11 @@ function fakeJQuery(w) {
   check(!!chipOf('ab') && !chipOf('c'), 'templates: search also finds relations by kw');
   q.value = ''; q.dispatchEvent(new te.w.Event('input'));
 
-  // packs: update from the source URL, install by paste, reject bad JSON
-  panel.querySelector('[data-tp="manage"]').click();
-  panel.querySelector('[data-tp="update"]').click();
-  await sleep(50);
-  check(tg.packs[0].raw.version === '2', 'templates: update re-reads the pack from its URL');
-  panel.querySelector('.tp-paste').value = JSON.stringify({ ...PACK, id: 'second', name: 'Second' });
-  panel.querySelector('[data-tp="installPaste"]').click();
-  check(tg.packs.length === 2 && tg.templates.current === 'second', 'templates: paste installs a second pack');
-  panel.querySelector('.tp-paste').value = '{"format":"nope"}';
-  panel.querySelector('[data-tp="installPaste"]').click();
-  check(troot.querySelector('.toast').textContent.includes('not a template pack'), 'templates: a bad pack is rejected with a message');
+  // packs are managed on the manager page: the panel's link opens it there
+  panel.querySelector('[data-tp="packs"]').click();
+  check(te.w.sent.some(m => m.type === 'openManager' && m.page === 'packs') && panel.hidden, 'templates: "Manage" opens the manager on Packs');
 
-  // ===== Template pack upkeep: offtopic tags, review and apply =====
+  // ===== Offtopic tags in the panel (the review itself lives on the manager's Packs page) =====
   // Every tag sampled and fresh, so nothing is refetched: carol (y) is mostly another fandom's,
   // alice x's posts often carry "alice art" (on topic) and "wrong art" (another fandom's)
   const f = (rate, co, sample = 10) => ({ rate, match: 90, notes: 1, followers: 10, posts: 100, trending: false, sample, co, at: Date.now() });
@@ -464,20 +441,6 @@ function fakeJQuery(w) {
   const uprev = () => [...up.querySelectorAll('.tp-prev .tp-t')].map(n => n.textContent.slice(1) + (n.classList.contains('off') ? '-' : ''));
   check(uprev().includes('carol (y)-') && uprev().includes('carol x'), 'upkeep: a tag mostly used by another fandom starts off: ' + uprev());
   check(up.querySelector('.tp-prev [data-tag="carol (y)"]').title.includes('another fandom'), 'upkeep: and says why');
-  up.querySelector('[data-tp="manage"]').click();
-  up.querySelector('[data-tp="review"]').click();
-  await sleep(1500); // "other show" (co-occurring with carol (y)) is sampled first
-  const rv = () => [...up.querySelectorAll('.tp-rv')].map(n => n.textContent.trim().split(' ')[0] + ' ' + n.textContent.trim().split(' ').slice(1, 2) + (n.querySelector('input').checked ? '*' : ''));
-  const rvText = up.textContent;
-  check(rvText.includes('#carol (y)') && up.querySelector('.tp-rv.bad input').checked, 'upkeep: review lists the offtopic tag for removal, ticked: ' + rv());
-  check(rvText.includes('#alice art') && !rvText.includes('#wrong art'), 'upkeep: add suggestions skip tags of another fandom');
-  const addBox = [...up.querySelectorAll('.tp-rv')].find(n => n.textContent.includes('#alice art')).querySelector('input');
-  check(!addBox.checked, 'upkeep: add suggestions start unticked');
-  addBox.checked = true; addBox.dispatchEvent(new ue.w.Event('change', { bubbles: true }));
-  up.querySelector('[data-tp="applyReview"]').click();
-  const saved = ug.packs[0];
-  check(saved.edited && saved.raw.characters[2].tags.join() === 'carol x' && saved.raw.characters[0].tags.includes('alice art'),
-    'upkeep: applying writes the ticked changes into the pack: ' + JSON.stringify(saved.raw.characters.map(c => c.tags)));
   check(ue.errors.length === 0, 'no runtime errors in pack upkeep' + (ue.errors.length ? ': ' + ue.errors.map(e => e.stack || e).join('\n') : ''));
 
   // straight against core: relative cold flags, spelling cut with many characters, 20/30 markers, old pack shape
