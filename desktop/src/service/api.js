@@ -34,6 +34,7 @@ function makeApi(svc, { creds, openUrl = () => {}, importStage0 = null, extra = 
         automation: db.getMeta('automation', {}),
         capabilities: Object.fromEntries(db.all('SELECT key, status FROM capabilities').map(r => [r.key, r.status])),
         budget: svc.ctx.tumblr?.budget?.stats?.() || null,
+        relay: svc.ctx.tumblr?.relay?.stats?.() || null,
         settings: db.getMeta('settings', {}),
       };
     },
@@ -178,6 +179,15 @@ function makeApi(svc, { creds, openUrl = () => {}, importStage0 = null, extra = 
         if (p) (p.kind === 'reblog' ? out.snapshots : out.edit).push(p);
       }
       return out;
+    },
+    selectionTags({ targets }) {
+      const { edit, snapshots } = api.tagsPreview({ targets });
+      const counts = new Map();
+      for (const p of edit) {
+        const row = db.get('SELECT tags FROM posts WHERE blog = ? AND id = ?', p.blog, String(p.id));
+        for (const tg of new Set(P(row?.tags, []))) { const k = C.key(tg); const c = counts.get(k); if (c) c.n++; else counts.set(k, { tag: tg, n: 1 }); }
+      }
+      return { originals: edit.length, snapshots: snapshots.length, tags: [...counts.values()].sort((a, b) => b.n - a.n || a.tag.localeCompare(b.tag)) };
     },
     applyTags({ targets, add = [], remove = [] }) {
       const { edit, snapshots } = api.tagsPreview({ targets });

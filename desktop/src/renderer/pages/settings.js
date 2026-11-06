@@ -19,6 +19,12 @@ const SettingsPage = {
         s.auth !== 'connected' ? h('button', { onclick: async e => { e.target.disabled = true; try { await call('importStage0'); toast(t('connStatus_connected'), 'ok'); } finally { this.render(root); } } }, t('importStage0')) : null,
         s.auth !== 'no_app' ? h('button', { class: 'ghost danger', onclick: async () => { const ok = await modal(t('disconnect'), h('p', {}, t('disconnect') + '?'), [{ label: t('cancel'), value: false }, { label: t('disconnect'), value: true, class: 'danger' }]); if (ok) { await call('disconnect'); this.render(root); } } }, t('disconnect')) : null),
       s.budget?.perHour ? h('p', { class: 'muted small' }, t('budget', s.budget.hour, s.budget.perHour, s.budget.day, s.budget.perDay)) : null,
+      s.relay ? h('div', {},
+        h('label', { class: 'check-label' }, h('input', { type: 'checkbox', checked: s.settings.browserRelay !== false, onchange: async e => { await call('setSettings', { browserRelay: e.target.checked }); this.render(root); } }), t('relayUse')),
+        h('p', { class: 'muted small' }, t('relayHint')),
+        s.relay.enabled ? h('p', { class: 'muted small' }, s.relay.coolWhy ? t('relayCool_' + (['signed_out', 'other_account', 'limited'].includes(s.relay.coolWhy) ? s.relay.coolWhy : 'other'))
+          : s.relay.connected ? t('relayOn', s.relay.hour) : t('relayOff'))
+          : s.settings.browserRelay !== false ? h('p', { class: 'muted small' }, t('relayUnpaired')) : null) : null,
       h('h3', {}, t('labelsTitle')),
       h('p', { class: 'muted' }, t('labelsHint')),
       chips([{ value: 'unverified', label: t('labelsUnverified') }, { value: 'not_used', label: t('labelsNotUsed') }, { value: 'pass', label: t('labelsPass') }],

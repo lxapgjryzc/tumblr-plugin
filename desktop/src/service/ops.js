@@ -82,8 +82,30 @@ function finish(ctx, job, row, status = 'succeeded') {
   return { status, result: { state: row.state, at: ctx.now() } };
 }
 
+// General categories come first on every original, in their configured group and option order (spec 6.2–6.3:
+// categories → template tags → extras; heat sorting never pushes them back). Every other tag keeps its place.
+function categoryFirst(db, tags) {
+  const rank = new Map();
+  db.all(`SELECT c.tag FROM categories c LEFT JOIN category_groups g ON g.id = c.group_id
+    ORDER BY c.group_id IS NULL, g.ord, g.id, c.ord, c.id`).forEach((c, i) => { if (!rank.has(C.key(c.tag))) rank.set(C.key(c.tag), i); });
+  const cats = tags.filter(t => rank.has(C.key(t))).sort((a, b) => rank.get(C.key(a)) - rank.get(C.key(b)));
+  return [...cats, ...tags.filter(t => !rank.has(C.key(t)))];
+}
+// Originals whose category tags aren't in front (with nothing else to change): one tags job each
+function queueCategoryFirst(db, jobs) {
+  let n = 0;
+  for (const p of db.all(`SELECT blog, id, tags FROM posts WHERE kind = 'original' AND state IN ('published', 'private', 'queue', 'draft')`)) {
+    const cur = JSON.parse(p.tags || '[]');
+    if (JSON.stringify(categoryFirst(db, cur)) === JSON.stringify(cur)) continue;
+    const scope = `post:${p.blog}:${p.id}`;
+    if (db.get(`SELECT 1 FROM jobs WHERE scope = ? AND status IN ('pending', 'running', 'verifying', 'waiting', 'unknown')`, scope)) continue;
+    jobs.add('post.tags', { blog: p.blog, id: String(p.id), add: [] }, { priority: 4, scope }); n++;
+  }
+  return n;
+}
+
 // Tags: payload { blog, id, add?: [], remove?: [], set?: [], upkeep?: [rule ids] }. Other tags stay exactly as
-// stored. `upkeep` applies those pack-upkeep rules (core upkeepTags) to the post's tags as read now, with the
+// stored, except that general categories are moved to the front (categoryFirst). `upkeep` applies those pack-upkeep rules (core upkeepTags) to the post's tags as read now, with the
 // packs as they are now (ctx.packs, see tidy.js). Originals only.
 const tags = {
   async run(job, ctx) {
@@ -103,13 +125,15 @@ const tags = {
     };
     if (job.payload.phase === 'verify') {
       const { row } = await fresh(ctx, blog, id);
-      return verifyStep(ctx, job, JSON.stringify(row.tags) === JSON.stringify(job.payload.expect), { status: 'succeeded', result: { tags: row.tags } });
+      const ok = JSON.stringify(row.tags) === JSON.stringify(job.payload.expect);
+      if (ok) ctx.afterTags?.(blog, id); // my reblogs of this original take its new tags (copytags.js)
+      return verifyStep(ctx, job, ok, { status: 'succeeded', result: { tags: row.tags } });
     }
     const { p, row } = await fresh(ctx, blog, id);
     if (row.legacy) throw new UnsupportedError('legacy-format post');
     // A reblog is a frozen snapshot (docs/REBLOG_POLICY.md): its tags and body are never edited
-    if (row.kind === 'reblog') return { status: 'skipped', error: 'a reblog is a historical snapshot and stays as it is' };
-    const next = want(row.tags);
+    if (row.kind === 'reblog') return { status: 'skipped', error: 'a reblog takes its tags from its original; edit the original' };
+    const next = categoryFirst(ctx.db, want(row.tags));
     if (JSON.stringify(next) === JSON.stringify(row.tags)) return { status: 'unchanged' };
     labelGate(ctx);
     await ctx.tumblr.putPost(blog, id, editBody(p, { tags: next }));
@@ -117,4 +141,4 @@ const tags = {
   },
 };
 
-module.exports = { visibility, tags, fresh, labelGate, verifyStep };
+module.exports = { visibility, tags, fresh, labelGate, verifyStep, categoryFirst, queueCategoryFirst };

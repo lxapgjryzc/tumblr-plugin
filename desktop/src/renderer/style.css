@@ -266,3 +266,9 @@ details summary { cursor: pointer; color: var(--accent); }
 .versions-dlg .card.inset { margin: 8px 0; }
 .versions-dlg .actions.sticky { position: sticky; bottom: -16px; background: var(--panel, var(--bg)); padding: 8px 0; border-top: 1px solid var(--line); }
 .versions-dlg input { min-width: 8em; }
+
+/* Posts grid: open-details corner button, no text selection while drag-selecting */
+.pcard { position: relative; user-select: none; }
+.pcard .open { position: absolute; top: 6px; right: 6px; z-index: 2; opacity: .75; }
+.pcard .open:hover { opacity: 1; }
+.chip-pair { display: inline-flex; gap: 2px; margin: 2px; }

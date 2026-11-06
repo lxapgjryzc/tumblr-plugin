@@ -41,7 +41,7 @@ async function withRoute(o = {}) {
   return s;
 }
 
-test('R01 R02 R10: a new body gets its own reblog with the tags of that moment; tags-only changes send nothing; A → B → A is three versions', async () => {
+test('R01 R02 R10: a new body gets its own reblog; tags-only changes make no reblog or version, the reblogs just take the tags; A → B → A is three versions', async () => {
   const s = await withRoute();
   const A = s.fake.addPost('t:art', { content: body('version A'), tags: ['art', 'sketch'], timestamp: ts(s.clock.t) });
   await s.pass();
@@ -49,21 +49,22 @@ test('R01 R02 R10: a new body gets its own reblog with the tags of that moment; 
   const R1 = s.copies(A.id_string)[0];
   assert.deepEqual(R1.tags, ['art', 'sketch']);
 
-  // tags only, including order: no version, no reblog, R1 untouched
+  // tags only, including order: no version, no reblog; R1 takes the original's tags (user revision 2026-11-06)
   s.fake.posts.get(A.id_string).tags = ['art', 'finished'];
-  await s.pass();
+  await s.pass(); await s.run();
   s.fake.posts.get(A.id_string).tags = ['finished', 'art'];
-  await s.pass();
+  await s.pass(); await s.run();
   assert.equal(s.copies(A.id_string).length, 1, 'tags-only changes do not reblog');
-  assert.equal(s.db.get('SELECT COUNT(*) n FROM source_revisions WHERE id = ?', A.id_string).n, 1);
-  assert.ok(!s.fake.calls.includes('put:' + R1.id_string), 'R1 was never edited');
+  assert.equal(s.db.get('SELECT COUNT(*) n FROM source_revisions WHERE id = ?', A.id_string).n, 1, 'and make no version');
+  assert.deepEqual(s.fake.posts.get(R1.id_string).tags, ['finished', 'art'], 'R1 follows the original’s tags, in order');
+  assert.equal(s.text(s.fake.posts.get(R1.id_string)), 'version A', 'R1 keeps its body');
 
-  // body B: R2 with the tags current then; R1 keeps body A and its old tags
+  // body B: R2 is made; both reblogs carry the original's tags, each keeps its own body
   s.fake.posts.get(A.id_string).content = body('version B');
   await s.pass();
   const [r1, r2] = s.copies(A.id_string);
   assert.equal(s.copies(A.id_string).length, 2);
-  assert.equal(s.text(r1), 'version A'); assert.deepEqual(r1.tags, ['art', 'sketch']);
+  assert.equal(s.text(r1), 'version A'); assert.deepEqual(r1.tags, ['finished', 'art']);
   assert.equal(s.text(r2), 'version B'); assert.deepEqual(r2.tags, ['finished', 'art']);
 
   // back to A: a third observed revision, delivered once; rescans and restarts don't add more
@@ -79,7 +80,7 @@ test('R01 R02 R10: a new body gets its own reblog with the tags of that moment; 
   const it = s.api.item({ id: s.db.get('SELECT item_id FROM posts WHERE id = ?', A.id_string).item_id });
   assert.equal(it.versions.latest, 3);
   assert.deepEqual(it.versions.dests[0].copies.map(c => c.rev), [1, 2, 3]);
-  assert.ok(!s.fake.calls.some(c => c.startsWith('put:')), 'no edit of any snapshot or original');
+  assert.ok(!s.fake.calls.some(c => c.startsWith('put:' + A.id_string)), 'the original is never edited by this');
 });
 
 test('R03 R04: a lost reblog response finds this version\'s copy, never an older one; later versions wait for it', async () => {
@@ -225,4 +226,20 @@ test('version discovery: an edit to an older delivered original is seen without 
   s.clock.t += 7 * 3600e3;
   await s.pass();
   assert.equal(s.copies(A.id_string).length, 2);
+});
+
+test('tag sync: an edit of the original in the app reaches its reblogs at once; never with route automation off', async () => {
+  const s = await withRoute();
+  const A = s.fake.addPost('t:art', { content: body('piece'), tags: ['art'], timestamp: ts(s.clock.t) });
+  await s.pass();
+  const [R] = s.copies(A.id_string);
+  s.api.applyTags({ targets: [{ blog: 't:art', id: A.id_string }], add: ['general tag'] });
+  await s.run();
+  assert.deepEqual(s.fake.posts.get(A.id_string).tags, ['art', 'general tag']);
+  assert.deepEqual(s.fake.posts.get(R.id_string).tags, ['art', 'general tag'], 'the reblog follows without waiting for a pass');
+  assert.equal(s.copies(A.id_string).length, 1, 'no new reblog');
+  s.db.setMeta('automation', { routes: false });
+  s.api.applyTags({ targets: [{ blog: 't:art', id: A.id_string }], add: ['later'] });
+  await s.run(); await s.pass();
+  assert.deepEqual(s.fake.posts.get(R.id_string).tags, ['art', 'general tag'], 'off means nothing is written to reblogs');
 });

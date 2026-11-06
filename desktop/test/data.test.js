@@ -35,7 +35,8 @@ test('extension import: idempotent, no remote changes, recentOnly becomes an ima
   assert.equal(rules[0].scope, 'images');
   assert.equal(rules[0].enabled, 0);
   // auto-hiding keeps originals from filling tag search; reblogs never show there, so they are never hidden by it
-  assert.deepEqual(rules[0].kinds, ['original'], 'only the blog’s own originals');
+  assert.equal(rules[0].mode, 'linked', 'the originals of the works the blog manages, wherever they are posted');
+  assert.deepEqual(rules[0].targets, [], 'no reblogs');
   assert.equal(svc.db.get(`SELECT role FROM blogs WHERE uuid = 't:art'`).role, 'share');
   assert.equal(svc.db.get(`SELECT role FROM blogs WHERE uuid = 't:ref'`).role, 'material');
   assert.equal(svc.db.getMeta('packs').length, 1);
@@ -66,4 +67,29 @@ test('backup and restore: checksums, restore at startup keeps the old data aside
   // a damaged backup is refused
   fs.writeFileSync(path.join(b.dir, 'studio.db'), 'garbage');
   assert.throws(() => verifyBackup(b.dir), /damaged/);
+});
+
+test('migration 11 removes ads stored as posts, with their items and revisions', () => {
+  const { DatabaseSync } = require('node:sqlite');
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'studio-ads-'));
+  const file = path.join(dir, 'studio.db');
+  openDb(file).close?.();
+  const raw = new DatabaseSync(file);
+  raw.exec('UPDATE schema_version SET v = 10');
+  const add = (id, payload) => {
+    const item = raw.prepare("INSERT INTO items (origin_blog, origin_id) VALUES ('t:b', ?)").run(id).lastInsertRowid;
+    raw.prepare("INSERT INTO posts (blog, id, kind, state, payload, item_id) VALUES ('t:b', ?, 'original', 'published', ?, ?)").run(id, JSON.stringify(payload), item);
+    raw.prepare("INSERT INTO source_revisions (blog, id, rev, fingerprint) VALUES ('t:b', ?, 1, 'f')").run(id);
+  };
+  add('1', { object_type: 'post', id_string: '1' });
+  add('2', { id_string: '2' });
+  add('ad-1', { object_type: 'backfill_ad' });
+  add('google_native_1', { object_type: 'client_side_ad_waterfall' });
+  raw.close();
+  const db = openDb(file);
+  assert.deepEqual(db.all('SELECT id FROM posts ORDER BY id').map(r => r.id), ['1', '2']);
+  assert.deepEqual(db.all('SELECT id FROM source_revisions ORDER BY id').map(r => r.id), ['1', '2']);
+  assert.deepEqual(db.all('SELECT origin_id FROM items ORDER BY origin_id').map(r => r.origin_id), ['1', '2']);
+  db.close?.();
+  fs.rmSync(dir, { recursive: true, force: true });
 });

@@ -97,7 +97,7 @@ test('R14 R15: preview lists exact instances; hiding old public versions keeps t
   assert.equal(s.fake.posts.get(c2.id_string).state, 'published');
   assert.equal(s.fake.posts.get(c3.id_string).state, 'published');
   assert.equal(s.fake.posts.get(A.id_string).state, 'published', 'the original is untouched');
-  assert.deepEqual(s.fake.posts.get(c1.id_string).tags, ['art', 'wip'], 'hiding keeps the snapshot’s tags');
+  assert.deepEqual(s.fake.posts.get(c1.id_string).tags, s.fake.posts.get(A.id_string).tags, 'reblogs carry the original’s tags; hiding changes nothing else');
 
   // a fourth version arrives: nothing old is hidden on its own (no standing rule)
   s.fake.posts.get(A.id_string).content = [{ type: 'text', text: 'version D' }];

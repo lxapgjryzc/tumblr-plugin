@@ -4,6 +4,8 @@
 // becomes an uncertain NetError and the caller reconciles before anything is sent again.
 
 const { safeJson, errText, AuthError, NetError, RateError, HttpError } = require('./errors');
+const { relayable, RelayMiss } = require('./relay');
+const { isPost } = require('./core');
 
 const API = 'https://api.tumblr.com';
 const UA = 'tumblr-studio/0.1';
@@ -33,8 +35,39 @@ class Budget {
   }
 }
 
-function makeTumblr({ creds, budget = new Budget(), fetchFn = fetch, timeoutMs = 30_000, onRequest = () => {} }) {
+// relay: the browser relay (relay.js). Requests it allows go through the browser while it is connected and
+// don't count against the budget; whatever it can't take goes the official way below.
+function makeTumblr({ creds, budget = new Budget(), relay = null, fetchFn = fetch, timeoutMs = 30_000, onRequest = () => {} }) {
+  async function viaBrowser(pathname, { method, query, json }) {
+    const q = {};
+    for (const [k, v] of Object.entries(query || {})) if (v != null) q[k] = String(v);
+    let r;
+    try { r = await relay.send({ method, path: pathname, query: q, json: json ?? null }); }
+    catch (e) {
+      if (e instanceof RelayMiss) { relay.noteFallback?.(); return null; }
+      // taken but never answered: an edit may have landed (verification decides), a read is just retried
+      throw new NetError(`${method} ${pathname} (browser): ${e.message}`, { uncertain: method !== 'GET' });
+    }
+    onRequest({ method, path: pathname, status: r.status, via: 'browser' });
+    // signed out or limited in the browser: nothing was done, so the official API takes this one
+    if (r.status === 401 || r.status === 429 || r.status === 0) { relay.noteFallback?.(); return null; }
+    const j = safeJson(r.text);
+    if (r.status >= 500) throw new NetError(`HTTP ${r.status} on ${method} ${pathname} (browser)`, { uncertain: method !== 'GET', status: r.status });
+    if (r.status < 200 || r.status >= 300) throw new HttpError(`HTTP ${r.status}: ${errText(j ?? r.text.slice(0, 200))}`, { status: r.status, body: j });
+    return { out: j?.response ?? j };
+  }
+
   async function request(pathname, { method = 'GET', query, json, form, body, bearer = true, retries } = {}) {
+    // core.js builds paths with the query string attached; split it off so the relay sees the bare path
+    const qi = pathname.indexOf('?');
+    if (qi >= 0) {
+      query = { ...Object.fromEntries(new URLSearchParams(pathname.slice(qi + 1))), ...(query || {}) };
+      pathname = pathname.slice(0, qi);
+    }
+    if (relay && bearer && !form && !body && relay.available() && relayable(method, pathname)) {
+      const r = await viaBrowser(pathname, { method, query, json });
+      if (r) return r.out;
+    }
     const url = new URL(API + pathname);
     for (const [k, v] of Object.entries(query || {})) if (v != null) url.searchParams.set(k, String(v));
     if (!bearer) url.searchParams.set('api_key', creds.clientId());
@@ -94,7 +127,10 @@ function makeTumblr({ creds, budget = new Budget(), fetchFn = fetch, timeoutMs =
       const query = { npf: true, limit, ...(next || {}) };
       const r = await request(base, { query });
       const qp = r?._links?.next?.query_params || null;
-      return { posts: r.posts || [], next: qp && (r.posts || []).length ? qp : null };
+      // The web API (browser relay) mixes ads (backfill_ad, client_side_ad_waterfall…) into post lists: keep posts only.
+      // Paging still follows the raw page, so a page of nothing but ads doesn't end the walk.
+      const raw = r?.posts || [];
+      return { posts: raw.filter(isPost), next: qp && raw.length ? qp : null };
     },
     getPost: (blog, id) => request(`/v2/blog/${enc(blog)}/posts/${enc(id)}`, { query: { post_format: 'npf' } }),
     putPost: (blog, id, body) => request(`/v2/blog/${enc(blog)}/posts/${enc(id)}`, { method: 'PUT', json: body }),
@@ -122,6 +158,7 @@ function makeTumblr({ creds, budget = new Budget(), fetchFn = fetch, timeoutMs =
     publicInfo: name => request(`/v2/blog/${enc(name)}/info`, { bearer: false }),
     publicPosts: (name, limit = 10) => request(`/v2/blog/${enc(name)}/posts`, { bearer: false, query: { npf: true, limit } }),
     budget,
+    relay,
   };
   return T;
 }

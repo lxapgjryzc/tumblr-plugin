@@ -84,12 +84,14 @@ function applyImport(db, exp, { dataDir, now = Date.now() } = {}) {
         autoPalette: s.collect.autoPalette !== false, daily: s.collect.daily || 4, auto: false, since: 0, ...note });
       else db.setMeta('collect', { ...cur, ...note });
     }
-    // show only recent → image-only per-blog rules for that blog's own originals, OFF until the user turns them on.
-    // (The extension hid every image post on the blog, reblogs too; a reblog there is another work's copy.)
+    // show only recent → an image-only LINKED rule on that blog, OFF until the user turns it on: it covers the
+    // originals of the works this blog manages, wherever they are posted (often the main blog), and no reblogs
+    // (targets []). Auto-hiding keeps originals out of tag search; reblogs never show there. (The extension hid
+    // every image post physically on the blog, reblogs too.)
     for (const r of plan.recent) {
-      const ex = db.get(`SELECT id FROM expiry_rules WHERE mode = 'independent' AND blog = ? AND scope = 'images'`, r.uuid);
+      const ex = db.get(`SELECT id FROM expiry_rules WHERE blog = ? AND scope = 'images'`, r.uuid);
       if (ex) db.run('UPDATE expiry_rules SET days = ? WHERE id = ?', r.days, ex.id);
-      else db.run(`INSERT INTO expiry_rules (mode, blog, enabled, days, scope, kinds, updated_at) VALUES ('independent', ?, 0, ?, 'images', '["original"]', ?)`, r.uuid, r.days, now);
+      else db.run(`INSERT INTO expiry_rules (mode, blog, enabled, days, scope, kinds, targets, updated_at) VALUES ('linked', ?, 0, ?, 'images', '["original"]', '[]', ?)`, r.uuid, r.days, now);
     }
     // posts the extension hid: remembered with that provenance (unverified), never published here by import
     for (const [uuid, v] of Object.entries(d.recentHidden || {})) {

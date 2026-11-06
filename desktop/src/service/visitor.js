@@ -27,6 +27,9 @@ function addVisitor(svc, api) {
   svc.handlers['post.publicCheck'] = {
     async run(job, ctx) {
       const { blog, id, expect, n = 0 } = job.payload;
+      // the least urgent requests: when the hour's budget is mostly used, wait for room instead of taking it
+      const st = ctx.tumblr.budget?.stats?.();
+      if (st && st.hour > st.perHour * 0.7) return { status: 'pending', nextAt: ctx.now() + 15 * 60e3 };
       const name = db.get('SELECT name FROM blogs WHERE uuid = ?', blog)?.name || blog;
       let seen;
       try {

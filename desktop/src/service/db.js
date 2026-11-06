@@ -199,6 +199,17 @@ const MIGRATIONS = [
     PRIMARY KEY (blog, id)
   );
   `,
+  // 11: ads the browser relay's web API mixed into post lists were stored as posts (with an item and a source
+  // revision each). Nothing was ever delivered or queued for them; remove the rows. Real posts have object_type
+  // 'post' or none (official API).
+  `
+  CREATE TEMP TABLE ad_rows AS SELECT blog, id, item_id FROM posts
+    WHERE json_valid(payload) AND json_extract(payload, '$.object_type') IS NOT NULL AND json_extract(payload, '$.object_type') != 'post';
+  DELETE FROM source_revisions WHERE (blog, id) IN (SELECT blog, id FROM ad_rows);
+  DELETE FROM posts WHERE (blog, id) IN (SELECT blog, id FROM ad_rows);
+  DELETE FROM items WHERE id IN (SELECT item_id FROM ad_rows) AND NOT EXISTS (SELECT 1 FROM posts p WHERE p.item_id = items.id);
+  DROP TABLE ad_rows;
+  `,
 ];
 
 function openDb(file) {

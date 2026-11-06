@@ -38,6 +38,7 @@ Development aids: `STUDIO_FAKE=1` runs against a made-up demo account (no networ
   - `db.js`: schema and additive migrations.
   - `auth.js`: OAuth2 with rotating refresh tokens, a single refresh writer and atomic credential replacement.
   - `tumblr.js`: the official API adapter with a request budget.
+  - `relay.js`: the browser relay, which sends allowed requests through the paired extension's tumblr.com session.
   - `jobs.js`: the single durable mutation queue.
   - `sync.js`: post sync with resumable coverage.
   - `groups.js`: works and management blogs.
@@ -141,7 +142,13 @@ These describe the implementation's choices and limitations. Optional mechanism 
    - Automatic blocking is shown as unavailable. The brief itself requires an evaluated pattern set first, and none exists yet.
    - Reporting has no API, so the app opens the blog and records your confirmation. It never claims a report was submitted.
 7. **Editing an already published post's body** isn't in the editor. A published draft becomes read-only, and tags and visibility are changed from Posts. Body edits stay on Tumblr for now, so a newer Tumblr version is never overwritten.
-8. **Layout presets:** rows of 2–3 adjacent images. Other NPF layouts found on imported posts are kept as they are (edits always send the stored layout back).
+8. **Browser relay for reads and edits (user request, 2026-11-06).**
+   - A new app's official quota (1000 requests an hour) ran out during bulk tag and visibility work, because each verified edit costs a read, a PUT and at least one verify read. While the paired extension polls the bridge, reads of the account's own posts, full-post edits (PUT), follower lists, the account's likes (material scans) and public tag search (`/v2/tagged`, tag heat) go through the browser's tumblr.com session instead, and they don't count against the budget.
+   - The app still builds every request, owns the job and verifies the result. The extension checks each request against a fixed list, the pairing account and the account's blogs, sends it, and returns the raw answer.
+   - Paths built with the query string attached (as `core.js` does) are split before the relay check, so those reads are relayed too.
+   - Creates and deletes stay official, because their reconciliation is written for it. Visitor checks stay official too, because they need a logged-out view.
+   - If the browser is not connected, signed out, logged into another account, limited (429) or never picks the request up, that request goes the official way, and the browser is left alone for a while. Settings → Tumblr connection can turn the relay off.
+9. **Layout presets:** rows of 2–3 adjacent images. Other NPF layouts found on imported posts are kept as they are (edits always send the stored layout back).
 
 ## Open gates
 

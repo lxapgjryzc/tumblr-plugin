@@ -8,6 +8,7 @@ const PostsPage = {
   rows: [], total: 0, limit: 60,
 
   async render(root, params = {}) {
+    this.bindKeys();
     this.root = root;
     if (params && Object.keys(params).length) {
       this.f = { ...this.f, expiring: false, review: false, state: '', ...params };
@@ -97,8 +98,21 @@ const PostsPage = {
       if (r.legacy) badges.push(h('span', { class: 'badge' }, t('legacy')));
       if (ex && ex.action === 'hide') badges.push(h('span', { class: 'badge accent' }, t('dueNow')));
       else if (ex && ex.action === 'none' && ex.reason === 'not_due' && ex.due) { const d = inDays(ex.due); if (d <= 14) badges.push(h('span', { class: 'badge accent' }, t('dueIn', d))); }
-      return h('div', { class: 'pcard' + (on ? ' sel' : ''), onclick: e => { if (e.target.closest('.check')) return; onOpen?.(r); } },
-        selectable ? h('label', { class: 'check', onclick: e => e.stopPropagation() }, h('input', { type: 'checkbox', checked: on, onchange: e => { this.toggleSel(r, e.target.checked); e.target.closest('.pcard').classList.toggle('sel', e.target.checked); } })) : null,
+      const card = h('div', { class: 'pcard' + (on ? ' sel' : ''), 'data-k': k,
+        onclick: e => {
+          if (e.target.closest('.check') || e.target.closest('.open')) return;
+          if (!selectable) return onOpen?.(r);
+          if (this.dragMoved) { this.dragMoved = false; return; }
+          // with a selection (or a modifier) a click selects, as in the old manager; otherwise it opens
+          if (e.shiftKey && this.anchor) return this.selectRange(this.anchor, k);
+          if (e.ctrlKey || e.metaKey || this.sel.size) return this.toggleKey(k);
+          onOpen?.(r);
+        },
+        ondblclick: e => { if (selectable && !e.target.closest('.check')) onOpen?.(r); },
+        onmousedown: e => { if (selectable && e.button === 0 && !e.target.closest('.check, .open, a, button, input')) this.dragStart(k, e); },
+        onmouseenter: () => { if (this.drag) this.dragOver(k); } },
+        selectable ? h('label', { class: 'check', onclick: e => e.stopPropagation() }, h('input', { type: 'checkbox', checked: on, onclick: e => { if (e.shiftKey && this.anchor) { e.preventDefault(); this.selectRange(this.anchor, k); } }, onchange: e => { this.setKey(k, e.target.checked); } })) : null,
+        selectable ? h('button', { class: 'open ghost icon', title: t('openDetail'), onclick: e => { e.stopPropagation(); onOpen?.(r); } }, '↗') : null,
         r.thumb ? h('div', { class: 'thumb' }, h('img', { src: r.thumb, loading: 'lazy', alt: '' })) : h('div', { class: 'thumb text' }, (r.summary || '').slice(0, 160)),
         h('div', { class: 'meta' },
           h('div', { class: 'row1' }, h('span', { class: 'blog' }, r.blog_name || blogName(r.blog)), h('span', { class: 'muted' }, fmtDate(r.published_at))),
@@ -109,31 +123,130 @@ const PostsPage = {
             r.copies > 1 ? h('span', {}, t('copies', r.copies)) : null,
             r.kind === 'reblog' && r.external ? h('span', {}, t('kind_reblog')) : null,
             r.notes != null ? h('span', {}, '♥ ' + r.notes) : null)));
+      return card;
     }));
   },
 
-  toggleSel(r, on) {
-    const k = r.blog + '/' + r.id;
-    if (on) this.sel.set(k, { blog: r.blog, id: r.id, item_id: r.item_id }); else this.sel.delete(k);
+  // ----- selection: one key per physical post (blog/id), in page order -----
+  rowOf(k) { return this.rows.find(r => r.blog + '/' + r.id === k); },
+  setKey(k, on) {
+    const r = this.rowOf(k);
+    if (!r) return;
+    if (on) this.sel.set(k, { blog: r.blog, id: r.id, item_id: r.item_id, kind: r.kind }); else this.sel.delete(k);
+    this.anchor = k;
+    this.paintSel();
+  },
+  toggleKey(k) { this.setKey(k, !this.sel.has(k)); },
+  selectRange(a, b) {
+    const keys = this.rows.map(r => r.blog + '/' + r.id);
+    let i = keys.indexOf(a), j = keys.indexOf(b);
+    if (i < 0 || j < 0) return this.toggleKey(b);
+    if (i > j) [i, j] = [j, i];
+    for (const k of keys.slice(i, j + 1)) { const r = this.rowOf(k); this.sel.set(k, { blog: r.blog, id: r.id, item_id: r.item_id, kind: r.kind }); }
+    this.anchor = b;
+    this.paintSel();
+  },
+  // drag across cards: everything between the first card and the one under the pointer takes the first card's new state
+  dragStart(k, e) {
+    this.drag = { start: k, value: !this.sel.has(k), base: new Map(this.sel) };
+    this.dragMoved = false;
+    const up = () => { this.drag = null; window.removeEventListener('mouseup', up); };
+    window.addEventListener('mouseup', up);
+    void e;
+  },
+  dragOver(k) {
+    const d = this.drag;
+    if (!d || k === d.last) return;
+    d.last = k;
+    this.dragMoved = true;
+    const keys = this.rows.map(r => r.blog + '/' + r.id);
+    let i = keys.indexOf(d.start), j = keys.indexOf(k);
+    if (i > j) [i, j] = [j, i];
+    this.sel = new Map(d.base);
+    for (const key of keys.slice(i, j + 1)) {
+      const r = this.rowOf(key);
+      if (d.value) this.sel.set(key, { blog: r.blog, id: r.id, item_id: r.item_id, kind: r.kind }); else this.sel.delete(key);
+    }
+    this.anchor = k;
+    this.paintSel();
+  },
+  // repaint the cards' state without reloading the list
+  paintSel() {
+    for (const c of this.root.querySelectorAll('.pcard[data-k]')) {
+      const on = this.sel.has(c.dataset.k);
+      c.classList.toggle('sel', on);
+      const box = c.querySelector('.check input');
+      if (box) box.checked = on;
+    }
     this.selbar();
   },
+
+  toggleSel(r, on) { this.setKey(r.blog + '/' + r.id, on); },
 
   selbar() {
     const bar = this.root.querySelector('#selbar');
     if (!bar) return;
     const n = this.sel.size;
     bar.replaceChildren(n || this.rows.length ? h('div', { class: 'selbar' + (n ? ' active' : '') },
-      h('button', { class: 'ghost', onclick: () => { for (const r of this.rows) this.sel.set(r.blog + '/' + r.id, { blog: r.blog, id: r.id, item_id: r.item_id }); this.load(true); } }, t('selectPage')),
+      h('button', { class: 'ghost', onclick: () => this.selectAll() }, t('selectPage')),
+      n ? null : h('span', { class: 'muted small' }, t('selHint')),
       n ? [
         h('b', {}, t('selected', n)),
         h('button', { class: 'ghost', onclick: () => { this.sel.clear(); this.load(true); } }, t('clearSel')),
         h('span', { class: 'sep' }),
+        h('button', { class: 'primary', onclick: () => this.bulkTags() }, t('bulkTags')),
         h('button', { onclick: () => this.includeLinked() }, t('includeLinked')),
         h('button', { onclick: () => this.bulk('published') }, t('makePublic')),
         h('button', { onclick: () => this.bulk('private') }, t('makePrivate')),
         h('button', { onclick: () => this.keep() }, t('keepVisible')),
         h('button', { class: 'ghost', onclick: async () => { await call('followRule', { targets: [...this.sel.values()] }); toast('✓'); this.load(true); } }, t('followRule')),
       ] : null) : '');
+  },
+
+  selectAll() {
+    for (const r of this.rows) this.sel.set(r.blog + '/' + r.id, { blog: r.blog, id: r.id, item_id: r.item_id, kind: r.kind });
+    this.paintSel();
+  },
+  // keyboard: Ctrl+A selects what is loaded, Esc clears (not while typing)
+  bindKeys() {
+    if (this.keysBound) return;
+    this.keysBound = true;
+    window.addEventListener('keydown', e => {
+      if (App.page !== PostsPage || document.querySelector('.modal-back')) return;
+      if (e.target.closest?.('input, textarea, select, [contenteditable]')) return;
+      if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 'a') { e.preventDefault(); this.selectAll(); }
+      else if (e.key === 'Escape' && this.sel.size) { this.sel.clear(); this.paintSel(); }
+    });
+  },
+
+  // Tags on the selection, as the old manager's Tags card: counts per tag, click to take a tag off, + to put it on
+  // the chosen posts that lack it, a box for new tags. Originals only; reblogs keep the tags they were made with.
+  async bulkTags() {
+    const targets = [...this.sel.values()].map(({ blog, id }) => ({ blog, id }));
+    const [info, cats, groups] = await Promise.all([call('selectionTags', { targets }), call('categories'), call('categoryGroups')]);
+    if (!info.originals) return toast(t('bulkTagsNoOriginals'));
+    const countOf = tag => info.tags.find(x => x.tag.toLowerCase() === tag.toLowerCase())?.n || 0;
+    const remove = new Set(), add = [];
+    const box = h('div', {});
+    const draw = () => box.replaceChildren(
+      h('p', { class: 'muted small' }, t('bulkTagsHint', info.originals, info.snapshots)),
+      // general categories: one tap puts the category's tag on the selected originals that lack it
+      cats.length ? h('div', { class: 'cat-pick' }, h('div', { class: 'muted small' }, t('bulkTagsCats')),
+        catSections(groups, cats).map(([g, list]) => list.length ? h('div', { class: 'form-row wrap' }, h('span', { class: 'muted small' }, groupName(g)),
+          list.map(c => { const have = countOf(c.tag), all = have >= info.originals, on = add.includes(c.tag);
+            return h('button', { class: 'chip' + (on || all ? ' on' : ''), disabled: all, title: '#' + c.tag + ' · ' + have + '/' + info.originals,
+              onclick: () => { on ? add.splice(add.indexOf(c.tag), 1) : add.push(c.tag); remove.delete(c.tag); draw(); } }, c.name, all ? ' ✓' : have ? ` ${have}/${info.originals}` : ''); })) : null)) : null,
+      h('div', { class: 'chips' }, info.tags.map(x => h('span', { class: 'chip-pair' },
+        h('button', { class: 'chip' + (remove.has(x.tag) ? ' struck' : ''), title: t('bulkTagsRemove'), onclick: () => { remove.has(x.tag) ? remove.delete(x.tag) : remove.add(x.tag); add.splice(0, add.length, ...add.filter(a => a !== x.tag)); draw(); } }, '#' + x.tag, ' ', h('span', { class: 'muted small' }, `${x.n}/${info.originals}`)),
+        x.n < info.originals && !remove.has(x.tag) ? h('button', { class: 'chip' + (add.includes(x.tag) ? ' on' : ''), title: t('bulkTagsFill'), onclick: () => { add.includes(x.tag) ? add.splice(add.indexOf(x.tag), 1) : add.push(x.tag); draw(); } }, '⊕') : null))),
+      add.filter(a => !info.tags.some(x => x.tag === a)).length ? h('div', { class: 'chips' }, add.filter(a => !info.tags.some(x => x.tag === a)).map(a => h('button', { class: 'chip on', onclick: () => { add.splice(add.indexOf(a), 1); draw(); } }, '+#' + a, ' ✕'))) : null,
+      h('input', { placeholder: t('extraHint'), onkeydown: e => { if (e.key === 'Enter') { const v = e.target.value.split(',').map(x => x.trim().replace(/^#/, '')).filter(Boolean); add.push(...v.filter(x => !add.includes(x))); e.target.value = ''; draw(); } } }),
+      h('p', { class: 'small' }, remove.size || add.length ? t('bulkTagsWill', remove.size, add.length) : t('bulkTagsNothing')));
+    draw();
+    const ok = await modal(t('bulkTags'), box, [{ label: t('cancel'), value: false }, { label: t('apply'), value: true, class: 'primary' }], { wide: true });
+    if (!ok || (!remove.size && !add.length)) return;
+    const r = await call('applyTags', { targets, add, remove: [...remove] });
+    toast(t('queuedN', r.queued) + (r.snapshots ? ' · ' + t('snapshotsKept', r.snapshots) : '') + (r.labelsOk === false ? ' · ' + t('heldForLabels') : ''), 'ok');
   },
 
   async includeLinked() {

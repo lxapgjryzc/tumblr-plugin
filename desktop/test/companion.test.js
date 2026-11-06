@@ -20,7 +20,7 @@ const BLOGS = [{ uuid: 't:main', name: 'mainblog', primary: true }, { uuid: 't:a
 const EXT = 'chrome-extension://abcdefghijklmnopabcdefghijklmnop';
 const IMG = url => ({ type: 'image', media: [{ url, width: 1280, height: 960 }] });
 
-function setup({ approve = true, media = null } = {}) {
+function setup({ approve = true, media = null, relay = null } = {}) {
   const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'studio-c-'));
   const clock = { t: Date.UTC(2026, 10, 3) };
   const now = () => clock.t;
@@ -33,7 +33,7 @@ function setup({ approve = true, media = null } = {}) {
   addMaterial(svc, extra, { media: media || { pixels: async () => new Uint8ClampedArray(Array.from({ length: 64 * 4 }, (_, i) => [230, 40, 30, 255][i % 4])), dataUrl: async () => 'data:image/jpeg;base64,AAAA' }, aiKey: () => 'k' });
   const api = makeApi(svc, { extra });
   const opened = [];
-  const bridge = makeBridge(svc, api, { version: 'test', approve: async () => approve, onOpen: o => opened.push(o) });
+  const bridge = makeBridge(svc, api, { version: 'test', relay, approve: async () => approve, onOpen: o => opened.push(o) });
   const run = async () => { for (let i = 0; i < 25; i++) { await svc.jobs.drain(svc.ctx); clock.t += 70e3; } };
   const call = (p, body = {}, { origin = EXT, host = '127.0.0.1:47823', auth = '' } = {}) => bridge.handle({ origin, host, auth, path: p, body: { v: 1, ...body } });
   return { dir, fake, svc, db: svc.db, api, bridge, run, call, clock, opened };
@@ -181,4 +181,27 @@ test('companion page: the app serves the extension page files from a fixed list,
     assert.equal((await get('/companion/../manifest.json')).status, 404);
     assert.equal((await get('/companion/', 'evil.example:' + port)).status, 403, 'no DNS rebinding');
   } finally { server.close(); }
+});
+
+test('bridge: the browser relay is for the paired extension only and lists the account blogs', async () => {
+  const { makeRelay } = require('../src/service/relay');
+  const relay = makeRelay();
+  const s = setup({ relay });
+  s.svc.pass(); await s.run();
+  assert.equal((await s.call('/relay/next', { wait: 0 })).status, 401, 'nothing before pairing');
+  const { token } = (await s.call('/pair', { primary: 'mainblog' })).json;
+  const auth = 'Bearer ' + token;
+  // the same extension id in another Chrome profile, with an older token, isn't the paired browser
+  assert.equal((await s.call('/hello', {}, { auth: 'Bearer stale' })).json.paired, false);
+  assert.equal((await s.call('/hello', {}, { auth })).json.paired, true);
+  const empty = await s.call('/relay/next', { wait: 0, primary: 'mainblog' }, { auth });
+  assert.equal(empty.status, 200);
+  assert.deepEqual(empty.json.items, []);
+  assert.ok(empty.json.blogs.includes('t:art') && empty.json.blogs.includes('artside'));
+  assert.ok(relay.available(), 'a poll makes the browser count as connected');
+  const p = relay.send({ method: 'GET', path: '/v2/blog/artside/posts/1', query: {} });
+  const got = await s.call('/relay/next', { wait: 0, primary: 'mainblog' }, { auth });
+  assert.equal(got.json.items.length, 1);
+  await s.call('/relay/done', { answers: [{ rid: got.json.items[0].rid, status: 200, text: '{"response":{}}' }], primary: 'mainblog' }, { auth });
+  assert.equal((await p).status, 200);
 });

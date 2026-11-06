@@ -26,8 +26,9 @@ function makeStudio() {
   D('src/service/material').addMaterial(svc, extra, { media: { pixels: async () => new Uint8ClampedArray(64 * 4).fill(128) } });
   const api = D('src/service/api').makeApi(svc, { extra });
   const opened = [];
-  const bridge = D('src/service/bridge').makeBridge(svc, api, { version: 't', approve: async () => true, onOpen: o => opened.push(o) });
-  return { fake, svc, api, bridge, opened, running: true };
+  const relay = D('src/service/relay').makeRelay({ enabled: () => !!svc.db.getMeta('companion', null) });
+  const bridge = D('src/service/bridge').makeBridge(svc, api, { version: 't', relay, approve: async () => true, onOpen: o => opened.push(o) });
+  return { fake, svc, api, bridge, relay, opened, running: true };
 }
 
 // ----- fake Chrome -----
@@ -55,15 +56,20 @@ function makeChrome(store, studio, tumblrCalls) {
   // fetch: the loopback goes to the bridge (Chrome adds the extension's Origin), tumblr.com is a fake
   const fetch = async (url, init = {}) => {
     const u = new URL(url);
-    const res = (status, body) => ({ ok: status < 400, status, json: async () => body, text: async () => (typeof body === 'string' ? body : JSON.stringify(body)) });
+    const res = (status, body) => ({ ok: status < 400, status, headers: new Map(), json: async () => body, text: async () => (typeof body === 'string' ? body : JSON.stringify(body)) });
     if (u.hostname === '127.0.0.1') {
       if (!studio.running || u.port !== '47823') throw new TypeError('Failed to fetch');
       const out = await studio.bridge.handle({ origin: 'chrome-extension://' + EXT_ID, host: u.host, auth: init.headers?.Authorization || '', path: u.pathname, body: JSON.parse(init.body || '{}') });
       return res(out.status, out.json);
     }
-    tumblrCalls.push((init.method || 'GET') + ' ' + u.pathname);
+    tumblrCalls.push(Object.assign(new String((init.method || 'GET') + ' ' + u.pathname), {}));
     if (u.pathname === '/dashboard') return res(200, '<script>{"API_TOKEN":"tok","csrfToken":"c"}</script>');
-    if (u.pathname === '/api/v2/user/info') return res(200, { response: { user: { blogs: [{ name: 'mainblog', primary: true }] } } });
+    if (u.pathname === '/api/v2/user/info') return res(200, { response: { user: { blogs: [{ uuid: 't:main', name: 'mainblog', primary: true }, { uuid: 't:ref', name: 'refside' }] } } });
+    if (/^\/api\/v2\/blog\/[^/]+\/posts\/\d+$/.test(u.pathname)) {
+      tumblrCalls.at(-1).headers = init.headers;
+      return res(200, { response: { id_string: u.pathname.split('/').pop(), via: 'browser', body: init.body ? JSON.parse(init.body) : null } });
+    }
+    if (u.pathname === '/api/v2/tagged' || u.pathname === '/api/v2/user/likes' || /^\/api\/v2\/blog\/[^/]+\/notes$/.test(u.pathname)) { tumblrCalls.at(-1).search = u.search; return res(200, { response: [] }); }
     return res(404, {});
   };
   return { chrome, fetch, alarms, menus, toasts };
@@ -91,7 +97,7 @@ function makeChrome(store, studio, tumblrCalls) {
   // A55: the old background passes are gone and can't come back
   for (const f of fx.chrome.runtime.onInstalled.fns) await f({ reason: 'update' });
   check(!fx.alarms.has('tth-maintain'), 'update removes the old maintenance alarm');
-  check([...fx.alarms.keys()].every(n => n === 'tth-studio-snapshot'), 'the only alarm left refreshes the app snapshot: ' + [...fx.alarms.keys()]);
+  check([...fx.alarms.keys()].sort().join() === 'tth-relay,tth-studio-snapshot', 'the alarms left refresh the app snapshot and look for relay work: ' + [...fx.alarms.keys()]);
   check(fx.menus.some(m => m.id === 'tth-collect') && fx.menus.some(m => m.id === 'tth-open'), 'context menu entries for Open / Collect');
 
   // pairing, then the snapshot arrives for the pages
@@ -193,8 +199,39 @@ function makeChrome(store, studio, tumblrCalls) {
   studio.running = true;
   check(fx.chrome.tabs.created[0] === 'http://127.0.0.1:47823/companion/' && fx.chrome.tabs.created[1] === `chrome-extension://${EXT_ID}/companion.html`, 'toolbar icon: app page when running, own page otherwise: ' + JSON.stringify(fx.chrome.tabs.created));
 
-  // the companion never writes to Tumblr itself
-  check(tumblrCalls.every(c => c.startsWith('GET ')), 'only reads from tumblr.com: ' + JSON.stringify(tumblrCalls));
+  // the companion never writes to Tumblr on its own
+  check(tumblrCalls.every(c => c.startsWith('GET ')), 'only reads from tumblr.com: ' + JSON.stringify(tumblrCalls.map(String)));
+
+  // Browser relay: the app hands over a read and an edit of its own posts; the browser carries them out in its
+  // session and answers. A post on a blog that isn't the account's is refused before anything is sent.
+  for (const f of fx.chrome.alarms.onAlarm.fns) f({ name: 'tth-relay' });
+  await sleep(50);
+  const r1 = studio.relay.send({ method: 'GET', path: '/v2/blog/t%3Amain/posts/11', query: { post_format: 'npf' } });
+  const r2 = studio.relay.send({ method: 'PUT', path: '/v2/blog/mainblog/posts/12', query: {}, json: { tags: 'a,b' } });
+  const [a1, a2] = await Promise.all([r1, r2]);
+  check(a1.status === 200 && JSON.parse(a1.text).response.via === 'browser', 'a read goes through the browser session: ' + JSON.stringify(a1).slice(0, 200));
+  check(a2.status === 200 && JSON.parse(a2.text).response.body.tags === 'a,b', 'an edit carries the body from the app unchanged');
+  const put = tumblrCalls.find(c => String(c) === 'PUT /api/v2/blog/mainblog/posts/12');
+  check(put && put.headers['X-CSRF'] === 'c' && put.headers.Authorization === 'Bearer tok', 'the edit is sent with the web session token and CSRF header');
+  // tag search and the account's likes have no blog in the path; they go through with their query
+  const n0 = tumblrCalls.length;
+  const a4 = await studio.relay.send({ method: 'GET', path: '/v2/tagged', query: { tag: 'a b', limit: '20' } });
+  check(a4.status === 200 && tumblrCalls.some(c => String(c) === 'GET /api/v2/tagged' && c.search === '?tag=a+b&limit=20'), 'tag search goes through the browser with its query: ' + tumblrCalls.slice(n0).map(String));
+  const a5 = await studio.relay.send({ method: 'GET', path: '/v2/user/likes', query: { npf: 'true' } });
+  check(a5.status === 200, 'the account\'s likes go through the browser');
+  const r6 = await studio.relay.send({ method: 'POST', path: '/v2/user/unlike', query: {}, json: { id: '1' } }).then(() => 'sent', e => e.message);
+  check(r6 !== 'sent', 'unlike is never relayed: ' + r6);
+
+  // one post and its notes on someone else's blog may be read (material checks); writes and post lists may not
+  const a7 = await studio.relay.send({ method: 'GET', path: '/v2/blog/someoneelse/posts/13', query: { post_format: 'npf' } });
+  check(a7.status === 200, 'one post on another blog is read through the browser');
+  const a8 = await studio.relay.send({ method: 'GET', path: '/v2/blog/someoneelse/notes', query: { id: '13', mode: 'conversation' } });
+  check(a8.status === 200 && tumblrCalls.some(c => String(c) === 'GET /api/v2/blog/someoneelse/notes' && c.search === '?id=13&mode=conversation'), 'notes on another blog are read through the browser');
+  const n = tumblrCalls.length;
+  const r3 = await studio.relay.send({ method: 'PUT', path: '/v2/blog/someoneelse/posts/13', query: {}, json: { tags: 'x' } }).then(() => 'sent', e => e.message);
+  check(/not_own_blog/.test(r3) && tumblrCalls.length === n, 'an edit on a blog outside the account is refused without a request: ' + r3);
+  const r4 = await studio.relay.send({ method: 'GET', path: '/v2/blog/someoneelse/posts', query: {} }).then(() => 'sent', e => e.message);
+  check(/not_own_blog/.test(r4) && tumblrCalls.length === n, 'another blog's post list is refused, and one refusal doesn't pause the relay: ' + r4);
   console.log(failures ? `${failures} FAILED` : 'all passed');
   process.exit(failures ? 1 : 0);
 })().catch(e => { console.log('TEST CRASH', e.stack || e); process.exit(1); });

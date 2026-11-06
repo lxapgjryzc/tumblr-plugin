@@ -4,6 +4,7 @@
 //  - turns the ad-network ruleset on and off with the browser-local "Hide ads" preference,
 //  - talks to the running app over its loopback endpoint (pairing, a read-only data snapshot for the pages,
 //    typed requests such as "Open in Tumblr Studio" and "Collect with Tumblr Studio"),
+//  - carries single API requests the app hands over in this browser's tumblr.com session (browser relay below),
 //  - on update, removes the alarms older versions used for their own background passes.
 // When the app isn't running, page helpers keep working from the last snapshot and app actions say so; nothing
 // is queued here to be sent later.
@@ -84,6 +85,7 @@ async function pair() {
   if (r.status !== 200) return { error: r.json.error || 'failed', primary: r.json.primary };
   await chrome.storage.local.set({ bridge: { ...(await chrome.storage.local.get('bridge')).bridge, token: r.json.token, primary: r.json.primary, at: Date.now() } });
   await refreshSnapshot(true);
+  relayLoop();
   return { ok: true, primary: r.json.primary };
 }
 
@@ -114,6 +116,86 @@ async function request(kind, req) {
   await chrome.storage.local.set({ studioOps: [{ op, kind, req, at: Date.now(), state: r.json }, ...studioOps].slice(0, 30) });
   return { ok: true, op, state: r.json };
 }
+
+// ---------- Browser relay (desktop service/relay.js) ----------
+// While paired, the app may hand over single Tumblr API requests (reads and full-post edits of the account's own
+// posts, follower lists, the account's likes, public tag search, and single posts and notes on any blog, read
+// only) to carry out in this browser's tumblr.com session, which has no hourly app quota. This
+// is an adapter, not business work: the app builds every request, owns the job and verifies the outcome; this
+// only checks the request against a fixed list and the logged-in account, sends it and returns the raw answer.
+// Nothing is queued here: when the app isn't running the loop just stops, and the alarm looks again later.
+// The third field marks reads that may be about any blog (one post, its notes); everything else with a blog in
+// the path must be one of the account's own blogs. Writes are always own-blog only.
+const RELAY_OK = [
+  ['GET', /^\/v2\/blog\/([\w%:.-]{1,80})\/posts(\/draft|\/queue)?$/],
+  ['GET', /^\/v2\/blog\/([\w%:.-]{1,80})\/posts\/\d{1,25}$/, 'anyBlog'],
+  ['GET', /^\/v2\/blog\/([\w%:.-]{1,80})\/notes$/, 'anyBlog'],
+  ['PUT', /^\/v2\/blog\/([\w%:.-]{1,80})\/posts\/\d{1,25}$/],
+  ['GET', /^\/v2\/blog\/([\w%:.-]{1,80})\/followers$/],
+  ['GET', /^\/v2\/user\/following$/],
+  ['GET', /^\/v2\/user\/likes$/],
+  ['GET', /^\/v2\/tagged$/], // public tag search, used for tag heat
+];
+let web = null; // { token, csrf, primary, own: Set of lowercased uuids and names, at }
+async function webAuth(force = false) {
+  if (web && !force && Date.now() - web.at < 10 * 60e3) return web;
+  web = null;
+  const { token, csrf } = C.parseAuth(await (await fetch(TUMBLR + '/dashboard', { credentials: 'include' })).text());
+  if (!token) return null;
+  const r = await fetch(TUMBLR + '/api/v2/user/info', { headers: { Authorization: 'Bearer ' + token, Accept: 'application/json' }, credentials: 'include' });
+  if (!r.ok) return null;
+  const blogs = (await r.json().catch(() => ({})))?.response?.user?.blogs || [];
+  web = { token, csrf, primary: blogs.find(b => b.primary)?.name || null, own: new Set(blogs.flatMap(b => [b.uuid, b.name]).filter(Boolean).map(x => x.toLowerCase())), at: Date.now() };
+  return web;
+}
+
+async function carry(item, appBlogs, bridge) {
+  const rid = item.rid;
+  const rule = RELAY_OK.find(([m, re]) => m === item.method && re.test(item.path));
+  if (!rule) return { rid, refused: 'not_allowed' };
+  let a = await webAuth().catch(() => null);
+  if (!a) return { rid, refused: 'signed_out' };
+  if (!bridge.primary || String(a.primary || '').toLowerCase() !== bridge.primary.toLowerCase()) return { rid, refused: 'other_account' };
+  const blog = rule[1].exec(item.path)[1];
+  if (blog && rule[2] !== 'anyBlog') {
+    const b = decodeURIComponent(blog).toLowerCase();
+    if (!a.own.has(b) || !appBlogs.has(b)) return { rid, refused: 'not_own_blog' };
+  }
+  const qs = new URLSearchParams(Object.entries(item.query || {}).map(([k, v]) => [k, String(v)])).toString();
+  const url = TUMBLR + '/api' + item.path + (qs ? '?' + qs : '');
+  for (let retry = 0; ; retry++) {
+    const headers = { Authorization: 'Bearer ' + a.token, Accept: 'application/json' };
+    if (item.method !== 'GET') { headers['Content-Type'] = 'application/json'; if (a.csrf) headers['X-CSRF'] = a.csrf; }
+    let res;
+    try { res = await fetch(url, { method: item.method, headers, credentials: 'include', body: item.method === 'GET' ? undefined : JSON.stringify(item.json ?? {}) }); }
+    catch { return { rid, status: 0 }; } // the app sends it the official way (an edit is a full, repeatable PUT)
+    if (res.status === 401 && retry === 0) { a = await webAuth(true).catch(() => null); if (!a) return { rid, refused: 'signed_out' }; continue; }
+    return { rid, status: res.status, text: await res.text(), retryAfter: Number(res.headers.get('retry-after')) || 0 };
+  }
+}
+
+let relayRunning = false;
+async function relayLoop() {
+  if (relayRunning) return;
+  relayRunning = true;
+  try {
+    for (;;) {
+      const { bridge = {} } = await chrome.storage.local.get('bridge'); // an extension call: keeps the worker alive
+      if (!bridge.token) break;
+      const r = await studio('/relay/next', { wait: 20000 }, { timeout: 26000 });
+      if (r.status !== 200 || !r.json.enabled) break;
+      const items = r.json.items || [];
+      if (!items.length) continue;
+      const appBlogs = new Set((r.json.blogs || []).map(x => String(x).toLowerCase()));
+      const answers = await Promise.all(items.map(it => carry(it, appBlogs, bridge).catch(() => ({ rid: it.rid, status: 0 }))));
+      await studio('/relay/done', { answers });
+    }
+  } finally { relayRunning = false; }
+}
+const RELAY = 'tth-relay';
+chrome.alarms.get(RELAY).then(a => { if (!a) chrome.alarms.create(RELAY, { periodInMinutes: 1 }); });
+chrome.alarms.onAlarm.addListener(a => { if (a.name === RELAY) relayLoop(); });
+relayLoop();
 
 // ---------- Contextual entry points ----------
 // A post link (or the post page itself): www.tumblr.com/<blog>/<id>[/slug] or <blog>.tumblr.com/post/<id>

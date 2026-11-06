@@ -17,7 +17,7 @@ const PROTOCOL = 1;
 const PORTS = [47823, 47824, 47825];
 const sha = s => crypto.createHash('sha256').update(String(s)).digest('hex');
 
-function makeBridge(svc, api, { version = '0', approve = async () => false, onOpen = () => {}, getPost = null } = {}) {
+function makeBridge(svc, api, { version = '0', relay = null, approve = async () => false, onOpen = () => {}, getPost = null } = {}) {
   const { db, jobs } = svc;
   const now = svc.ctx.now;
   const paired = () => db.getMeta('companion', null); // { extId, tokenHash, account, at }
@@ -111,7 +111,10 @@ function makeBridge(svc, api, { version = '0', approve = async () => false, onOp
     if (body?.v !== PROTOCOL) return { status: 400, json: { error: 'protocol', want: PROTOCOL } };
     if (path === '/hello') {
       const pr = paired();
-      return { status: 200, json: { v: PROTOCOL, app: 'tumblr-studio', version, paired: !!pr && pr.extId === ext[1], account: account(), primary: primaryName() } };
+      // The same unpacked extension has the same id in every Chrome profile, so the id alone can't say which
+      // browser is paired: only the one holding the current token is (pairing another profile replaces it).
+      const tokenOk = !!pr && !!auth && sha(String(auth).replace(/^Bearer\s+/i, '')) === pr.tokenHash;
+      return { status: 200, json: { v: PROTOCOL, app: 'tumblr-studio', version, paired: !!pr && pr.extId === ext[1] && tokenOk, account: account(), primary: primaryName() } };
     }
     if (path === '/pair') {
       // the extension says which account its browser is logged into; a different account is refused
@@ -138,6 +141,20 @@ function makeBridge(svc, api, { version = '0', approve = async () => false, onOp
     if (path === '/result') {
       const rec = db.get('SELECT * FROM companion_ops WHERE op = ?', String(body.op || ''));
       return rec ? { status: 200, json: { op: rec.op, ...stateOf(rec) } } : { status: 404, json: { error: 'unknown_op' } };
+    }
+    // The browser relay (relay.js): the extension takes requests to carry out in its tumblr.com session and
+    // answers each one. It is told the account's blogs so it can refuse when the browser is logged in elsewhere.
+    if (path === '/relay/next') {
+      if (!relay) return { status: 404, json: { error: 'path' } };
+      if (!relay.stats().enabled) return { status: 200, json: { items: [], enabled: false } };
+      const items = await relay.next(Math.min(Math.max(Number(body.wait) || 0, 0), 25e3));
+      const blogs = db.all('SELECT uuid, name FROM blogs');
+      return { status: 200, json: { items, blogs: blogs.flatMap(b => [b.uuid, b.name]), enabled: relay.stats().enabled } };
+    }
+    if (path === '/relay/done') {
+      if (!relay) return { status: 404, json: { error: 'path' } };
+      for (const a of [].concat(body.answers || [])) relay.done(a);
+      return { status: 200, json: { ok: true } };
     }
     if (path === '/unpair') { db.setMeta('companion', null); return { status: 200, json: { ok: true } }; }
     return { status: 404, json: { error: 'path' } };

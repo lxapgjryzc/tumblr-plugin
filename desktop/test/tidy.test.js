@@ -119,3 +119,24 @@ test('tidy: pack review suggests changes and writes them into the pack, never le
   assert.deepEqual(pack.raw.characters.find(c => c.id === 'bo').tags, ['bo fandom x']);
   assert.ok(pack.raw.characters.find(c => c.id === 'ann').tags.includes('ann x'));
 });
+
+test('tags: general categories always go first, in their configured order; other tags keep their place', async () => {
+  const s = setup();
+  const g1 = Number(s.db.run("INSERT INTO category_groups (key, ord) VALUES ('subject', 0)").lastInsertRowid);
+  const g2 = Number(s.db.run("INSERT INTO category_groups (key, ord) VALUES ('role', 1)").lastInsertRowid);
+  s.db.run("INSERT INTO categories (name, tag, ord, group_id) VALUES ('Study', 'art study', 0, ?)", g2);
+  s.db.run("INSERT INTO categories (name, tag, ord, group_id) VALUES ('Fanart', 'fanart', 0, ?)", g1);
+  const a = s.fake.addPost('t:main', { tags: ['fandom x', 'ann fx'] });
+  const b = s.fake.addPost('t:main', { tags: ['fandom x', 'art study', 'bo fx', 'Fanart'] });
+  s.svc.pass(); await s.run();
+  // a bulk add puts the category first, not at the end
+  s.svc.jobs.add('post.tags', { blog: 't:main', id: a.id_string, add: ['art study'] });
+  await s.run();
+  assert.deepEqual(s.fake.posts.get(a.id_string).tags, ['art study', 'fandom x', 'ann fx']);
+  // the one-off fix moves categories already on a post to the front, nothing else
+  const { queueCategoryFirst } = require('../src/service/ops');
+  assert.equal(queueCategoryFirst(s.db, s.svc.jobs), 1);
+  await s.run();
+  assert.deepEqual(s.fake.posts.get(b.id_string).tags, ['Fanart', 'art study', 'fandom x', 'bo fx']);
+  assert.equal(queueCategoryFirst(s.db, s.svc.jobs), 0, 'nothing left to move');
+});

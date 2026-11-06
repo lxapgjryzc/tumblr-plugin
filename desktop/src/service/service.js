@@ -114,6 +114,7 @@ function createService({ dataDir, db: givenDb, tumblr, creds = null, now = Date.
 
   const svc = { db, jobs, ctx, handlers, pass, passSoon, start, stop, emit, hooks };
   ctx.service = svc;
+  require('./copytags').addCopyTags(svc);
   return svc;
 }
 

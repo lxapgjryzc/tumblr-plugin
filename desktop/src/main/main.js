@@ -21,6 +21,8 @@ const { addVersions } = require('../service/versions');
 const { addVisitor } = require('../service/visitor');
 const { addTakeover } = require('../service/takeover');
 const { makeBridge, PORTS } = require('../service/bridge');
+const { makeRelay } = require('../service/relay');
+let relay = null;
 const { makeCompanionPage } = require('../service/companion-page');
 const http = require('node:http');
 
@@ -58,14 +60,27 @@ function boot() {
   if (restored) { db.setMeta('paused', true); db.log('info', 'data', 'restored from backup; automation paused', restored); }
   const creds = new Credentials(path.join(dataDir, 'credentials.bin'), vault);
   const budget = new Budget({ load: () => db.getMeta('budget', []), save: t => db.setMeta('budget', t) });
-  let tumblr = makeTumblr({ creds, budget });
+  // the paired browser carries reads and edits while it is connected (service/relay.js); Settings can turn it off
+  relay = makeRelay({
+    enabled: () => !!db.getMeta('companion', null) && db.getMeta('settings', {}).browserRelay !== false,
+    onConnect: () => { db.log('info', 'relay', 'browser connected: reads and edits go through it'); svc?.jobs.wake('rate:'); }, // parked jobs go through the browser now
+    onCool: (why, ms) => db.log('warn', 'relay', `browser set aside for ${Math.round(ms / 60e3)} min (${why}): using the official API`),
+  });
+  let tumblr = makeTumblr({ creds, budget, relay });
   if (process.env.STUDIO_FAKE) {
     // Demo account for UI checks: no network, made-up blogs (see test/demo.js)
     tumblr = require('../../test/demo').demoFake();
+    tumblr.relay = relay; // shows the browser-relay section (never connected in the demo)
     creds.status = () => 'connected';
     db.capability('edit.labels', 'not_used');
   }
   svc = createService({ db, tumblr, creds, onEvent: (type, data) => send('event', { type, data }) });
+  // once: originals edited before categories were kept in front get them moved there (their reblogs follow)
+  if (!db.getMeta('categoryFirstFixed')) {
+    const n = require('../service/ops').queueCategoryFirst(db, svc.jobs);
+    db.setMeta('categoryFirstFixed', Date.now());
+    if (n) db.log('info', 'post.tags', `general categories moved to the front of ${n} originals`, { n });
+  }
   const extra = {};
   addWriting(svc, extra, { dataDir });
   const data = addData(svc, extra, { dataDir, vault, openPath: p => shell.openPath(p), relaunch: () => { quitting = true; app.relaunch(); app.exit(0); } });
@@ -115,6 +130,7 @@ function startBridge() {
   if (process.env.STUDIO_SNAP) return;
   const bridge = makeBridge(svc, api, {
     version: app.getVersion(),
+    relay,
     approve: async extId => {
       if (win) { win.show(); win.focus(); }
       const r = await dialog.showMessageBox(win, { type: 'question', buttons: ['Allow / 允许', 'Deny / 拒绝'], defaultId: 1, cancelId: 1,
