@@ -1,10 +1,12 @@
 # Tumblr Tag Helper: product spec
 
-Status: **agreed** (2026-10-28), revised after three outside reviews. It lists every feature the extension has as of
-0.9.3, says where each one lives after the reorganisation, and sets the rules the code must follow. §12 lists the
-decisions taken. Added since: Redo AI on tumblr.com (T12) and blog roles (§3.9), 2026-10-28.
+Status: **historical standalone-extension specification**, originally agreed 2026-10-28. The confirmed 2026-11-06 application/companion split in [DESKTOP_PRODUCT_SPEC.md section 4.3](DESKTOP_PRODUCT_SPEC.md#43-companion-responsibilities) supersedes its standalone manager, admin, AI and background-business architecture. The inventory below is retained to account for existing capabilities/data during migration; “Keep” in that historical inventory does not mean keep a second plugin implementation.
 
-From here on, a new feature is added to this file first, then built.
+New product requirements belong in DESKTOP_PRODUCT_SPEC.md and PRODUCT_WORKFLOWS_ZH.md first. The application owns all business functionality and authoritative data; the extension retains only necessary or convenient browser-local assistance and thin contextual entry points. No duplicate full manager, pack/category administration, classifier, business queue or scheduler remains in the target companion. See A52–A55 for acceptance; a write guard alone is not this migration.
+
+**Global reblog revision (2026-11-06):** [REBLOG_POLICY.md](REBLOG_POLICY.md) takes precedence throughout this extension spec, desktop and materials. Reblogs freeze their creation-time content/layout and ordered tags. Source content changes produce a new reblog; tag-only edits do not create a version or trigger reblogging. Existing snapshots are never repaired from the original. Any remaining feature inventory that rewrites a reblog's tags/body (including Collection and Redo AI) describes legacy behaviour pending migration, not an exception. Visibility remains separately managed with the snapshot payload preserved.
+
+The current application and companion contract is [DESKTOP_PRODUCT_SPEC.md](DESKTOP_PRODUCT_SPEC.md), with delivery gaps in [DESKTOP_IMPLEMENTATION_STATUS.md](DESKTOP_IMPLEMENTATION_STATUS.md). This historical file is a migration inventory, not a competing contract. Browser-local hiding/input helpers may work without the app; app-dependent work never falls back to legacy plugin execution when disconnected.
 
 Two different things are called "queue" in this file:
 - the **Tumblr queue** is a blog's post queue (publish later);
@@ -36,7 +38,7 @@ Two different things are called "queue" in this file:
 - **Compatible storage.** Keys and record shapes stay as they are (§9), so an upgrade keeps the library, packs and
   settings.
 
-## 2. Surfaces after the reorganisation
+## 2. Historical standalone surfaces (superseded)
 
 ```
 tumblr.com pages              manager page (toolbar icon, one tab)           background (chrome.alarms, 10 min)
@@ -54,7 +56,7 @@ tumblr.com pages              manager page (toolbar icon, one tab)           bac
    blogs' posts
 ```
 
-## 3. Feature inventory
+## 3. Historical feature inventory for migration
 
 Legend: **Keep** as is · **Move** to another surface · **Merge** with another feature · **Drop** (§4 says what
 replaces it).
@@ -89,6 +91,7 @@ replaces it).
   reliably. Settings → Appearance is for the manager only.
 
 **Redo AI (T12)**:
+- Reblog-policy eligibility is checked first. Existing reblogs may be analysed, but receive no remote body/tag writes; results are local suggestions. The legacy write workflow below applies only to editable originals, not historical reblog snapshots.
 - It shows on every post of a material blog that carries Tumblr's Edit link (`a[href^="/edit/<blog>/<id>"]`, which
   Tumblr shows only on my own posts): blog pages, the dashboard, search, a single post. The blog is matched by name
   through `cache.blogList`.
@@ -126,7 +129,7 @@ The blog picker sits at the top of the sidebar. It picks the blog for Posts and 
 |---|---|---|
 | P1 | Box: published / drafts / Tumblr queue; tag filter; Load, More, All, "Stop loading" | **Keep** |
 | P2 | Text search; state filter (public, private, labelled, unlabelled, reblogs off); card size | **Keep** |
-| P3 | Grid multi-select: click, drag, Shift+click, Ctrl+A, invert, none. Own reblogs are marked "Synced" and can't be selected | **Keep**, one shared grid component (also used by Collection) |
+| P3 | Grid multi-select: click, drag, Shift+click, Ctrl+A, invert, none. Reblogs are marked historical snapshots and selectable by action: inspect/visibility allowed, body/tag edits excluded | **Keep**, one shared grid component (also used by Collection) |
 | P4 | Tags card: tags on the selection with `n/total`; click to mark for removal, then "Remove N marked"; ⊕ adds a tag to the selected posts that lack it; add box with suggestions; "Reorder tags" | **Keep** |
 | P5 | Characters card (was "Edit by template") | **Keep**, rules below |
 | P6 | Visibility, reblog control, community labels (three cards) | **Merge** into one "Post settings" card, rules below |
@@ -136,8 +139,7 @@ The page has two rows:
 - a sticky toolbar with P1 and P2;
 - the grid, with the side panel on its right (below the grid under 900 px).
 
-The shared grid takes `selectable(record)` from its page. Posts passes "not a copy"; Collection passes "any post"
-(material blogs are outside the reblog sync, so they have no copies).
+The shared grid takes action-aware eligibility. Both Posts and Collection exclude all existing reblogs from body/tag writes and list them as frozen snapshots in previews. Visibility actions may select their exact instances; being a material blog does not exempt a reblog from the global policy.
 
 **Reorder tags** (was "Sort tags by popularity"; the button's tooltip says "template order, then by heat") first
 samples the selection's tags that lack fresh stats. Then it rewrites each post's tag order with `sortTagsFair`: the
@@ -254,6 +256,8 @@ review.
 
 ### 3.6 Manager → Collection
 
+The global snapshot rule applies here too. First-create tags/AI commentary can be chosen before reblogging; later analysis or classification stays local for existing reblogs. The Sort and AI controls below must not enqueue remote body/tag edits for snapshots. The old practice of storing every later classification in remote reblog tags/notes is superseded.
+
 Three sub-tabs and a ⚙ setup button. With no collection blog chosen, the page opens on the setup.
 
 The page works on **material blogs** (§3.9). A picker at its top chooses which one Today and Sort show (default: the
@@ -277,11 +281,10 @@ the setup says to mark one in Settings → My blogs (or picks a blog and marks i
 - **AI sort**:
   - It reads each selected post's images (two posts at a time) and shows each card's state: thinking, waiting to be
     written, written or failed.
-  - Its writes go into one "AI tags" job, which grows as results come in.
+  - Existing reblogs show analysed/local-suggestion state, never "written" to imply a remote snapshot edit. Only eligible original-post writes go into an "AI tags" job; proposed tags for a new reblog are part of its creation plan.
 - Tags in the collection are plain English; the page shows them in the UI language through `STRINGS.*.refNames`
   (English tag → shown name). Unknown tags show as they are.
-- Category, palette and "looked at by the AI" are worked out from each post's tags (`REF_GROUPS`, `AI_MARK`); AI
-  notes live in the post itself. None of them is stored locally.
+- Creation-time remote category/palette/AI tags and notes remain readable. Subsequent classification of existing reblogs is stored locally and distinguished from the frozen remote tags and body; it does not create a source content revision or a new automatic reblog.
 - Each material blog's posts are kept in `materials[uuid]` (§9), read the first time the blog is picked and
   refreshed like the collection is today (at most every 5 minutes when shown).
 
@@ -319,6 +322,7 @@ One card per section:
 | Templates | `useBase` add the pack's base tags | on | panel, Characters card |
 | | `rules.manyAt`, `rules.spellings`: with N or more characters picked, keep each one's best M spellings by heat | 4, 2; each 1–20 | |
 | My blogs | `blogRoles` (§3.9): sharing or material per blog | none set; the manager asks | everything |
+| | `recentOnly` = `{ uuid: days }`: "Shows" everything or the last 7 / 30 / 90 / 180 / 365 days (§3.8) | everything | background, reblog sync |
 | Reblogs between my blogs | `syncReblogs` | on | queue (copies), background |
 | AI | `ai.base`, `ai.model`; key in `aiKey` (§10) | empty | Collection |
 | | `ai.autoApply` write suggestions at once (else review first) | on | |
@@ -333,13 +337,10 @@ collection blog. A change saves at once and says what follows from it (§3.9).
 
 `TAG_RULES` / `TPL_RULES` in core are only the defaults that `settings.rules` overrides.
 
-The Reblogs card is titled "Reblogs between my blogs: setting and check" and has three parts:
-1. **Setting**: the sync switch.
-2. **Check**: "Check reblogs" compares my synced posts locally (no requests). Beside it: the library's sync time and
-   Sync, because the check is only as fresh as the library.
-3. **Results**, below the card's fields with their own loading, empty ("all in step") and error states: drifted
-   reblogs (fix all) and side-blog posts my main blog lacks (reblog now or into the Tumblr queue), each listed with
-   links. Both actions confirm and go through the job queue. The background's past work is in Activity.
+The Reblogs card is titled "Reblogs between my blogs: versions and delivery" and has three parts:
+1. **Setting**: enable delivery of new source content revisions to the selected destination.
+2. **Check**: show the last source-content scan and refresh action; tag-only changes are not content revisions.
+3. **Results**: historical snapshots and eligible undelivered content revisions, linked separately. "Reblog new version" or queue delivery creates a new instance and preserves old ones. There is no "Fix all" for differences from the original. Show unknown outcomes, exclusions and incomplete scan coverage; jobs and Activity retain per-version results.
 
 The AI card says what is sent: each sorted post's images (at most `AI_MAX_IMAGES` = 10, main ones first, each
 downscaled more the more there are: `aiImageSize`) go to the endpoint in one request, and nothing else. The model
@@ -351,14 +352,19 @@ The card also says that Redo AI on tumblr.com (T12) uses the same endpoint and k
 
 ### 3.8 Background (`background.js`)
 
-The work is the same as today, without `fetchText` (T11):
+Required background behaviour after the reblog-policy migration:
 - the toolbar icon opens or focuses the manager;
 - the ad ruleset follows `settings.hideAds`;
-- a `chrome.alarms` alarm every 10 minutes runs `autoMaintain` (reblog sync, only posts newer than `autoSince`),
+- a `chrome.alarms` alarm every 10 minutes runs `autoMaintain` (new posts plus observed content revisions of previously routed sources),
   then `autoCollect` (only likes newer than `collectSince`).
-- Only the sharing blogs (§3.9) take part in `autoMaintain`: material blogs and blogs with no role yet are left out,
-  and a side blog's posts are reblogged only when newer than both `autoSince` and the time it became sharing.
+- Only sharing blogs (§3.9) take part in these routes. Material/unclassified blogs remain outside them. Activation and role changes establish a baseline; do not flood main with history. Continue checking previously delivered sources for content changes, rather than filtering only by original publication time.
 - It answers `aiRedo` from tumblr.com (T12).
+- After `autoMaintain`, and 5 s after `settings.recentOnly` changes, `autoRecent` keeps each blog with a "Shows"
+  period in line: published posts with images older than the period are made private (pinned posts are left), at
+  most 40 edits per pass; when the period gets longer or is switched off, the posts it hid (and only those, from
+  `recentHidden`) are made public again. A hidden post made public by hand is let go. Shortening the period asks
+  first. The reblog sync, Check reblogs and copies in jobs leave the visibility of hidden posts alone. Done and
+  failed edits go to `autoLog`.
 
 The alarm survives the service worker going to sleep. A pass that is still running makes the next alarm a no-op.
 A missed alarm just runs at the next one.
@@ -369,10 +375,8 @@ Changes:
 - `autoMaintain` and `autoCollect` are independent: an error in one doesn't keep the other from running.
 - Errors (offline, logged out, throttled) end that pass. They are logged once to `autoLog` / `collectLog`, and the
   next alarm tries again.
-- The daily post limit (`isPostLimit`) ends that pass's reblogging the same way, logged once with Tumblr's message.
-  Fixing drifted copies (edits, not new posts) still runs.
-- `autoSince` is set once, when the switch first goes on, and never moves: a side-blog post already reblogged is
-  found on main and left out, so a pass cut short just goes on next time.
+- The daily post limit (`isPostLimit`) defers remaining version deliveries, logged once with Tumblr's message. No drift-repair writes run.
+- `autoSince` records activation, not permanent exclusion of older source IDs. Durable source/content-revision/destination records resume interrupted work without duplicating the same version; an old reblog does not block a changed content revision. Tag-only edits do not create another delivery.
 - `collectSince` moves only past likes that were handled (collected, or skipped for good, such as an AI-made like
   or a 4xx refusal), so whatever an error or the limit cut off is tried again next time.
 
@@ -384,7 +388,7 @@ Each of my blogs has a role, set by hand in Settings → My blogs (`settings.blo
 
 | | Sharing blogs | Material blogs |
 |---|---|---|
-| Reblog sync (§3.8, Check reblogs, copies in jobs) | new side-blog posts go to main; copies follow their originals | left out entirely: their posts are neither reblogged to main nor treated as copies or originals |
+| Version reblog routes (§3.8) | eligible new posts and content revisions go to main as new snapshots; old versions remain | outside sharing routes; explicit collection reblogs obey the same snapshot rule |
 | Tag library, autocomplete (T1, T2, M3) | the sharing library | a separate material library; the collection blog stays out of it (its tags are reblogged ones) |
 | Tags → Tidy (Weak, Pack updates), popularity sampling | yes | no |
 | Collection page (Today, Sort, AI sort, palette), Redo AI (T12) | no | yes; likes are collected only into `collect.blog` |
@@ -401,12 +405,10 @@ Each of my blogs has a role, set by hand in Settings → My blogs (`settings.blo
   a blog's search box by that blog, the mass editor by its blog. A blog with no role uses the sharing library. When
   the blog can't be told, the sharing library is used.
 - **Changing a role** (in My blogs) changes no post. The card says what follows:
-  - sharing → material: its posts leave the reblog sync; copies of them already on main stay as they are and are
-    no longer kept in step; its tags move to the material library;
+  - sharing → material: its posts leave sharing routes; existing snapshots on main remain unchanged as always; its tags move to the material library;
   - material → sharing: only posts newer than the change are reblogged to main by the background (Check reblogs
     lists older ones, to reblog by hand); its tags move to the sharing library.
-- Reblogs of my own posts across roles (a sharing post reblogged onto a material blog, or the other way) are plain
-  reblogs, not copies: nothing syncs them.
+- Reblogs across roles follow the same frozen-content/tag rule. Roles select routes and libraries, not whether historical snapshots may be rewritten.
 
 ## 4. What replaces each dropped or moved feature
 
@@ -444,14 +446,7 @@ run one after another, and each job runs one post at a time, with `settings.dela
   - A job of the same `group` that is still waiting can take more items (the AI's "AI tags" job grows this way).
 - **Confirmation** happens before a job is queued (§1). Items added to a growing job were confirmed with the run
   that produces them.
-- **Copies.** Reblogs of my own posts are never edited directly. While the reblog sync switch is on, writing an
-  original also gives its copies the same tags, visibility, label and reblog control (`syncCopies`), in the same
-  step.
-  - Each copy gets its own outcome and its own line ("copy of …"), counted apart from the originals in the job's
-    counts ("12 written · copies: 3 written, 1 failed").
-  - A copy that fails doesn't change its original's outcome. Running the job again leaves the original unchanged
-    and writes the copy again, because the step syncs copies even when the original needs no change.
-  - With the switch off, copies are not touched at all; Check reblogs lists them as drifted later.
+- **Snapshots.** Original edits never call `syncCopies` to rewrite existing reblog content/tags. A content-changing edit can plan a separate new-version delivery under an enabled route; a tag-only edit cannot. Each delivery has its own source revision, target ID and outcome. A failed/unknown delivery does not undo the original edit or mutate old snapshots. Disabled routes show undelivered revisions without sending them. Explicit visibility jobs use each selected snapshot's own payload and do not propagate original state implicitly.
 - **Stop** lets the current post finish, then ends the current job. "Stop all" also drops every waiting job, whose
   items become not reached.
 - **Run next**: the job bar lists waiting jobs; "Run next" moves one to the front, so a small edit needn't wait for
@@ -462,8 +457,7 @@ run one after another, and each job runs one post at a time, with `settings.dela
   posts as not reached, and "Select these" opens them selected in Posts.
 - **Running a job again**:
   - Tag edits, visibility, labels, reblog control and sorting: safe, because a post already as wanted is `unchanged`.
-  - Reblog to main: the missing list is worked out again from the synced library, so done posts drop out.
-  - Collect: likes are matched by their original post (`rootKey`) against the collection, so collected ones drop out.
+  - Reblog to main or collect: dedupe by actual source identity, content revision and destination. Tag-only changes remain the same revision; a root-only existing-copy check cannot distinguish new content revisions. Reconcile any lost receipt before another create.
   - Delete and unlike: deleted posts leave the collection at once. Unliking a post that isn't liked is harmless.
     A run cut short lists what was done.
 
@@ -592,7 +586,7 @@ All surfaces read the same `chrome.storage.local` keys and listen to `chrome.sto
 | preset | a pack entry that picks several characters and relations at once |
 | heat / popularity | a tag's followers, then the typical notes of its recent posts, then posts per day (`tagStats`, cached 7 days) |
 | post notes | likes + reblogs + replies on a post |
-| AI notes | the short text the AI writes into a collection post ("🤖 …") |
+| AI notes | analysis text; may be included at creation, but later analysis of a reblog stays local and cannot replace its frozen body |
 | weak | `judgeTags` says offtopic, dead, fuzzy or cold |
 | offtopic | few of the tag's recent posts carry the pack's base tags (below `OFFTOPIC_SHARE`): another fandom's tag |
 | dead | no recent posts and no followers |
@@ -601,11 +595,11 @@ All surfaces read the same `chrome.storage.local` keys and listen to `chrome.sto
 | few notes | my posts with this tag average fewer post notes than the notes rule |
 | retired spelling | an old tag a pack lists under `retired`: it identifies an item on old posts and is never inserted |
 | pack updates (upkeep) | replacing retired spellings and adding missing search spellings on old posts |
-| copy, synced reblog | my reblog of my own post on another of my sharing blogs; it follows its original |
+| reblog snapshot (formerly copy / synced reblog) | independent post retaining creation-time content/layout and tags; updated source content is delivered in a new reblog, never copied over it |
 | sharing blog | one of my blogs for posts meant for others; the main blog is one (§3.9) |
 | material blog | one of my blogs for reference material; the collection blog is one (§3.9) |
 | Redo AI | the 🤖 button on a material blog's post on tumblr.com that runs the AI sort again on it (T12) |
-| drifted | a copy whose tags, visibility, label or reblog control differ from its original |
+| source updated / historical version | source content has a later observed revision; old snapshot differences are expected, not drift to repair; tag-only edits do not create a new revision |
 | 20/30 cutoffs | blog search reads a post's first 20 tags, sitewide search its first 30 |
 | category | one of the collection's reference groups (`REF_GROUPS`: light, material, composition, subject, technique, palette); each has its own English tags |
 | palette | the category of colour tags, worked out from an image's pixels |
@@ -630,6 +624,7 @@ reads the post). Writing NPF to it would damage its formatting, so every edit sk
 | `collection` (old) | one entry of the `materials` shape, for the collection blog; moved into `materials` by the schema 2 migration and then removed | — |
 | `dailySeed` | `{ date, k }` | manager |
 | `autoSince`, `collectSince` | first post / newest like time the background handles (seconds) | background, manager (when switched on) |
+| `recentHidden` (new) | `{ uuid: { ids: { postId: ts }, done } }`: posts made private by "Shows"; `done` = posts older than this (seconds) were looked at | background |
 | `autoLog`, `collectLog` | `[{ at, done, skipped, error }]`, 30 kept | background |
 | `jobLog` (new) | `[{ id, at, title, group, state: running / done / stopped / interrupted, counts, lines, todo: [{ blog, id }] }]`, 30 kept; a `running` entry whose tab holds no lease is shown as interrupted | manager |
 | `jobLease`, `bgLease` (new) | §5.3 | manager, background |
@@ -702,8 +697,8 @@ Automated (jsdom smoke tests against a fake API) unless marked *manual*.
   - Make public writes only private posts;
   - labels are added, removed and verified;
   - Reorder tags changes only the order;
-  - a reblog of my own post can't be selected and follows its original;
-  - a copy that fails is its own failed line, and its original stays written;
+  - existing reblogs are excluded from body/tag changes, retain old content/tags after original edits, and remain selectable for explicit visibility actions;
+  - a failed new-version delivery has its own outcome, while the original edit and old snapshots remain intact; tag-only edits create no new delivery;
   - removing a pack's tag from the selection works.
 - **Characters card**: untick a character on two posts and apply; add them back from search; a pack edited while
   the job runs doesn't change it.
@@ -735,14 +730,11 @@ Automated (jsdom smoke tests against a fake API) unless marked *manual*.
   - a running job sets `jobLease`;
   - a held `bgLease` makes a job wait; a held `jobLease` of another tab disables the job buttons.
 - **Background**:
-  - the daily post limit ends the reblogging with one log line, fixes still run, and the next pass reblogs the
-    rest;
+  - the daily post limit defers remaining content-version deliveries with one log line; the next pass resumes without duplicate snapshots or drift-repair writes;
   - an error in `autoMaintain` doesn't stop `autoCollect`;
   - with `unlikeAi` off, an AI-made like is skipped and not unliked.
 - **AI**: a refused permission, a 402 and a timeout each give their message; a 402 stops the run and keeps results.
-- **Redo AI**: the button shows on a material blog's own post and not on a sharing blog's; a click writes the AI's
-  tags and note (replacing an older note and the AI lists' tags, keeping others); a missing permission and a held
-  manager lease each give their message and write nothing.
+- **Redo AI**: existing material reblog snapshots receive no tag/body writes. Analysis may be stored locally; any original-post edits retain their own capability and confirmation checks. Missing permission or a held manager lease writes nothing. Also pass R01–R11 in REBLOG_POLICY.md.
 - **Blog roles**:
   - an upgrade from 0.9.3 moves `collection` into `materials` and marks the collection blog material;
   - a blog with no role makes the manager ask; "Later" leaves it out of the background reblog sync;

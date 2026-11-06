@@ -1,0 +1,17 @@
+{
+  "name": "tumblr-studio",
+  "version": "0.3.0",
+  "private": true,
+  "description": "Tumblr Studio: local desktop publishing and management for Tumblr",
+  "license": "MIT",
+  "main": "src/main/main.js",
+  "scripts": {
+    "start": "electron .",
+    "test": "node --test test/*.test.js",
+    "pack": "node tools/pack.js"
+  },
+  "devDependencies": {
+    "@electron/packager": "^18.3.6",
+    "electron": "45.2.3"
+  }
+}

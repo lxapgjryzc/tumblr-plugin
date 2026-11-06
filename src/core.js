@@ -66,7 +66,7 @@ const TTHCore = (() => {
       meFilter: 'Filter tags', meAll: 'All', meNone: 'None', meReading: 'Reading tags of the selected posts…',
       meCount: (n, total) => `On ${n} of ${total} selected posts`, meFill: 'Add to the selected posts that lack it',
       meLimit: 'The official editor can select at most 100 posts', meUpkeep: 'Tidy tags by packs',
-      meCopyLocked: 'This is a reblog of your own post: it follows the original automatically, so it can\'t be selected here',
+      meCopyLocked: 'This is a reblog of your own post: a snapshot that keeps the body and tags it was made with, so it can\'t be selected for edits here',
       tplEditing: n => `Edit ${n} post(s) by template`, tplSome: 'On some of the posts (left as is unless clicked)',
       tplCard: 'Edit by template', tplAddPh: 'Add a character or relation…', tplNothingOn: 'No character of this pack on the selected posts yet',
       tplPart: (n, total) => `On ${n} of ${total} posts. Click to put it on all, click again to take it off all`,
@@ -98,7 +98,7 @@ const TTHCore = (() => {
       tplCheck: 'Check activity', tplChecking: (i, n) => `Checking tag activity: ${i} / ${n}`,
       tplCheckDone: (n, cold, failed) => `Checked ${n} tags, ${cold} look cold` + (failed ? ` (${failed} failed)` : ''),
       tplAllFresh: 'These tags were checked recently', tplCopied: 'Copied', tplInserted: n => `Inserted ${n} tags`,
-      tplUpdateTags: 'Update tags', tplUndo: 'Undo insert', tplUpdated: (removed, added) => `Removed ${removed}, added ${added}`,
+      tplUpdateTags: 'Update tags', tplUndo: 'Undo insert', tplCats: 'Categories', tplCatFirst: 'Arrange category first', tplCatFirstHint: 'Moves the chosen categories’ tags ahead of the tags already in the editor; every other tag is kept in its order.', tplCatFirstDone: 'Category first ({0}); the other tags kept their order.', tplCatFirstMissing: 'Could not put these back, add them by hand: {0}', tplUpdated: (removed, added) => `Removed ${removed}, added ${added}`,
       tplUndone: n => `Removed the ${n} inserted tag(s)`, tplNotRemoved: n => `${n} tag(s) could not be removed; remove them by hand`,
       tplNoInput: 'Open the post editor first; the tags were copied instead', tplPickFirst: 'Pick something first',
       tplManage: 'Packs & settings', tplBack: 'Back', tplNoPack: 'No template pack installed. Install one in "Packs & settings".',
@@ -152,18 +152,21 @@ const TTHCore = (() => {
       phCustom: 'Add a tag to the library manually', addCustom: 'Add',
       autoSync: 'Auto-sync every 6 hours', hideAds: 'Hide ads on Tumblr', hideRecs: 'Hide Tumblr\'s recommendations (Radar, recommended blogs, "check out these" carousels)', delay: 'Delay between edits (ms)',
       syncReblogs: 'Reblogs between my blogs follow their original (tags, visibility, community label), and posts I publish on a side blog are reblogged to my main blog',
-      copyBadge: '🔁 Synced', copyTitle: src => `A reblog of ${src}: it follows the original automatically and can't be edited here`,
-      logSynced: (id, n) => `${id}: the same change went to ${n} post(s) on my other blogs`,
+      copyBadge: '📌 Snapshot', copyTitle: src => `A reblog of ${src}: it keeps the body and tags it was made with, so it can't be edited here`,
+      skipSnapshot: 'a reblog keeps the body and tags it was made with; it is not edited',
+      logSnapshots: n => `${n} reblog(s) left as they are: a reblog is a snapshot of the moment it was made, so its tags and body are never edited`,
+      orgSnapshot: 'Collected posts are reblogs: their tags were fixed when they were collected and are not changed afterwards. Nothing was written.',
       rbTitle: 'Reblogs between my blogs', rbScan: 'Check reblogs',
       rbIntro: 'Reblogs of my own posts follow the original. This finds reblogs whose tags, visibility or community label differ from their original, and published posts on my side blogs that my main blog hasn\'t reblogged yet (for example ones posted on tumblr.com or queued). Sync the tag library first.',
-      rbFound: (d, m) => `${d} reblog(s) differ from their original · ${m} post(s) not on the main blog yet`,
-      rbNone: 'Everything is in line', rbHint: 'Check to see what is out of line',
+      rbFound: m => `${m} post(s) not on the main blog yet (existing reblogs are snapshots and stay as they are)`,
+      rbNone: 'Nothing waiting', rbHint: 'Check to see which posts the main blog hasn\'t reblogged',
       rbDiff_tags: 'tags', rbDiff_state: 'visibility', rbDiff_label: 'community label', rbDiff_reblog: 'reblog control', rbMissing: name => `${name} hasn't reblogged it yet`,
-      rbFix: 'Make reblogs match their original', rbReblog: 'Reblog these to my main blog', rbQueue: 'into the main blog\'s queue', rbNow: 'publish now',
+      rbReblog: 'Reblog these to my main blog', rbQueue: 'into the main blog\'s queue', rbNow: 'publish now',
       rbConfirmReblog: (n, name, when) => `Reblog ${n} post(s) to ${name} (${when})?`,
       autoTitle: 'Done in the background (every 10 minutes, posts published after this was turned on)',
       autoNone: 'Nothing yet', autoError: e => `Couldn't check: ${e}`,
       autoReblogged: (post, to) => `reblogged ${post} to ${to}`, autoFixed: (post, src) => `${post} brought in line with ${src}`,
+      autoHidden: post => `made ${post} private (older than the blog shows)`, autoShown: post => `made ${post} public again`,
       autoFailed: (post, e) => `${post} failed: ${e}`, autoRepeat: n => ` (${n} times, last shown)`,
       rbGone: n => `${n} deleted post(s) dropped from the list`,
       navCollect: 'Collection',
@@ -201,6 +204,11 @@ const TTHCore = (() => {
       aiTest: 'Test', aiTesting: 'Sending a test image…', aiOk: tags => `It works${tags ? ' · it said: ' + tags : ''}`, aiFail: e => `Didn't work: ${e}`,
       aiNeedSetup: 'Set up AI image sorting in Settings first', aiNoAccess: 'Chrome wasn\'t allowed to reach this address',
       myBlogs: 'My blogs', myBlogsIntro: 'Sharing blogs (fan works, original work: posts for others) take part in the reblog sync to the main blog and in tag tidying. Material blogs (reference images) are left out of both, have their own tag library and get the collection tools and Redo AI.',
+      recentIntro: '"Shows" keeps only a blog\'s recent posts with images public: older ones are made private (only you see them) in the background, every 10 minutes, at most 40 at a time. A longer period or "everything" makes them public again. Pinned posts, posts without images and posts you made public again by hand are left alone.',
+      recentLabel: 'Shows', recentAll: 'everything', recentOpt: d => ({ 7: 'last week', 30: 'last month', 90: 'last 3 months', 180: 'last 6 months', 365: 'last year' })[d],
+      recentCount: n => `${n} hidden`,
+      recentConfirm: (blog, span) => `${blog} will show only posts with images from the ${span}. Older ones are made private in the background, a few at a time, and made public again when you pick a longer period or "everything". Go ahead?`,
+      recentShowAgain: blog => `Posts this made private on ${blog} are made public again in the background`,
       roleShare: 'Sharing', roleMaterial: 'Material', roleMain: 'main blog · always sharing', roleCollect: 'collection blog · always material', roleUnset: 'not set yet',
       roleToMaterial: name => `${name} is a material blog now: its posts leave the reblog sync (its copies on main stay as they are) and its tags move to the material library`,
       roleToShare: name => `${name} is a sharing blog now: only its posts from now on are reblogged to main (Check reblogs lists older ones); its tags move to the sharing library`,
@@ -220,6 +228,31 @@ const TTHCore = (() => {
       orgDelete: 'Delete reblogs and unlike', orgDeleteConfirm: n => `Delete ${n} reblog(s) from the collection and take back their likes? Deleted reblogs can't be restored (the originals stay).`,
       orgDeleted: (n, u) => `deleted ${n} reblog(s) · ${u} like(s) taken back`, orgDeleting: (i, n) => `Deleting… ${i} / ${n}`,
       colUnliked: n => `${n} like(s) of AI-tagged posts taken back`,
+      studioTitle: 'Tumblr Studio (desktop app)',
+      studioIntro: 'The desktop app can take over the background jobs that edit posts. Export this extension’s data (settings, roles, packs, tag statistics; never the AI key) and import the file in the app under Settings → Data.',
+      studioManaged: 'Tumblr Studio makes all changes to posts (desktop app): this extension stops its background passes and every edit, reblog and delete',
+      studioOwnsWrites: 'This extension is the browser companion of Tumblr Studio and makes no changes on Tumblr itself; edits are made in the app.',
+      cpTitle: 'Tumblr Tag Helper', cpIntro: 'The browser companion of Tumblr Studio: tag suggestions and template insertion on tumblr.com, tidier pages, and shortcuts into the app. Writing, post management, categories, templates, reblogs, collecting and AI are in the app.',
+      cpConnTitle: 'Tumblr Studio', cpNotRunning: 'Tumblr Studio isn’t running. Page helpers keep working from the last data; actions need the app.', cpNoExtension: 'This page isn’t connected to the Tag Helper extension. Install it or reload it in chrome://extensions, then refresh this page.',
+      cpNotPaired: n => `Tumblr Studio is running (${n}) but this browser isn’t connected yet.`, cpPaired: n => `Connected to Tumblr Studio (${n}).`,
+      cpPair: 'Connect', cpPairing: 'Confirm the connection in Tumblr Studio…', cpUnpair: 'Disconnect', cpOpenStudio: 'Open Tumblr Studio',
+      cpOtherAccount: n => `Tumblr Studio is connected to another account (${n}). Log into that account in this browser, or connect the app to this one.`,
+      cpSnapshot: (at, blogs, packs) => `Data from the app: ${at} · ${blogs} blog(s) · ${packs} template pack(s)`, cpNoSnapshot: 'No data from the app yet: suggestions use what this extension stored before.',
+      cpMoveTitle: 'Move older data into the app', cpMoveHint: 'Blog roles, template packs, tag statistics, rules, “show only recent”, collecting settings and material records go to Tumblr Studio once. Nothing on Tumblr changes and nothing is deleted here. The AI key is not sent: enter it in the app.',
+      cpMove: 'Send to Tumblr Studio', cpExport: 'Download as a file', cpMoving: 'Sending…', cpMoved: at => `Moved to Tumblr Studio on ${at}. Sending again is harmless.`,
+      cpBrowseTitle: 'While browsing (this browser only)', cpHideAds: 'Hide ads', cpHideRecs: 'Hide recommended posts and blogs', cpHideAiArt: 'Hide AI-made images (going by the poster’s tags and others’ remarks)',
+      cpLang: 'Language', cpLangAuto: 'Like Tumblr',
+      cpWhereTitle: 'Where things are now', cpWhereHint: 'Features of the old manager page and where to find them.',
+      wPosts: 'Browsing and selecting posts', wTags: 'Bulk tag edits', wVisibility: 'Public / private, community labels', wRecent: 'Show only recent posts', wReblogs: 'Reblogs between my blogs',
+      wPacks: 'Template packs, rules, general categories', wCollect: 'Collecting liked posts', wStudy: 'Today’s quick study', wAi: 'AI model settings and AI tags (before collecting)',
+      wCleanup: 'Weak-tag cleanup', wUpkeep: 'Pack upkeep and “Suggest changes”', wAiArtCheck: 'Checking collected posts for AI-made images',
+      wAiResort: 'Re-sorting already collected posts (reblogs keep their tags)',
+      wSuggest: 'Tag suggestions in the post editor and blog search', wTemplates: 'Template panel (▦) in the post editor', wMega: 'Mass editor upgrades', wHide: 'Hiding ads, recommendations, AI-made images',
+      wStudio: 'in Tumblr Studio', wPending: 'not in the app yet', wRetired: 'retired', wBrowser: 'in the browser',
+      ctxOpen: 'Open in Tumblr Studio', ctxCollect: 'Collect with Tumblr Studio', ctxNoPost: 'That isn’t a Tumblr post.', ctxOpened: 'Opened in Tumblr Studio.',
+      ctxQueued: 'Tumblr Studio is collecting it (see Activity in the app).', ctxAlready: 'Already collected.',
+      studioNotRunning: 'Tumblr Studio isn’t running, so nothing was done. Start the app and try again.', studioRefused: e => `Tumblr Studio didn’t accept it: ${e}`,
+      studioExport: 'Export for Tumblr Studio',
       hideAiArt: 'Hide posts tagged as AI-made while browsing Tumblr (tags like "ai art", "midjourney"; "not ai" tags are left alone)',
       orgAiGroup: 'AI sorting', orgAiNo: 'Not looked at by the AI yet', orgAiYes: 'Looked at by the AI',
       orgAi: 'AI sort', orgAiHint: 'Selected posts only; each image goes to your AI service. The palette is worked out too, here and for free',
@@ -274,7 +307,7 @@ const TTHCore = (() => {
       meFilter: '筛选标签', meAll: '全选', meNone: '全不选', meReading: '正在读取所选帖子的标签…',
       meCount: (n, total) => `所选 ${total} 篇中有 ${n} 篇带此标签`, meFill: '补到所选帖子中缺少它的帖子上',
       meLimit: '官方编辑器最多只能选 100 篇', meUpkeep: '按模板包整理标签',
-      meCopyLocked: '这是转自你自己博客的帖子，会自动跟原帖保持一致，所以这里不能选',
+      meCopyLocked: '这是转自你自己博客的帖子：它是转发时的快照，正文和标签保持原样，所以这里不能选来修改',
       tplEditing: n => `按模板修改 ${n} 条帖子`, tplSome: '部分帖子有（不点就保持原样）',
       tplCard: '按模板修改', tplAddPh: '添加角色或关系……', tplNothingOn: '选中的帖子上还没有这个模板包里的角色',
       tplPart: (n, total) => `${total} 条里有 ${n} 条有。点一下加到全部，再点一下从全部去掉`,
@@ -305,7 +338,7 @@ const TTHCore = (() => {
       tplCheck: '检查热度', tplChecking: (i, n) => `正在检查标签热度：${i} / ${n}`,
       tplCheckDone: (n, cold, failed) => `检查了 ${n} 个标签，${cold} 个看起来冷门` + (failed ? `（${failed} 个检查失败）` : ''),
       tplAllFresh: '这些标签最近已经检查过', tplCopied: '已复制', tplInserted: n => `已插入 ${n} 个标签`,
-      tplUpdateTags: '更新标签', tplUndo: '撤销插入', tplUpdated: (removed, added) => `删掉 ${removed} 个，新加 ${added} 个`,
+      tplUpdateTags: '更新标签', tplUndo: '撤销插入', tplCats: '分类', tplCatFirst: '分类排在最前', tplCatFirstHint: '把选中分类的标签移到编辑器里已有标签前面；其他标签保持原来的顺序。', tplCatFirstDone: '分类已排在最前（{0}），其他标签顺序不变。', tplCatFirstMissing: '这些标签没能放回去，请手动添加：{0}', tplUpdated: (removed, added) => `删掉 ${removed} 个，新加 ${added} 个`,
       tplUndone: n => `已删掉插入的 ${n} 个标签`, tplNotRemoved: n => `有 ${n} 个标签没删掉，请手动删除`,
       tplNoInput: '请先打开发帖编辑器；标签已复制到剪贴板', tplPickFirst: '请先选择',
       tplManage: '模板包与设置', tplBack: '返回', tplNoPack: '还没有安装模板包。到「模板包与设置」里安装。',
@@ -356,18 +389,21 @@ const TTHCore = (() => {
       phCustom: '手动把标签加入标签库', addCustom: '加入',
       autoSync: '每 6 小时自动同步', hideAds: '隐藏 Tumblr 上的广告', hideRecs: '隐藏 Tumblr 的推荐（雷达、推荐博客、“查看这些……”推荐条）', delay: '批量操作间隔（毫秒）',
       syncReblogs: '主博客和子博客之间的转发自动跟原帖保持一致（tag、可见性、内容标签），子博客发布的新帖自动转发到主博客',
-      copyBadge: '🔁 自动同步', copyTitle: src => `转自 ${src}：自动跟原帖保持一致，这里不能改`,
-      logSynced: (id, n) => `${id}：同样的改动已同步到其他博客上的 ${n} 条`,
+      copyBadge: '📌 快照', copyTitle: src => `转自 ${src}：保留转发时的正文和标签，这里不能改`,
+      skipSnapshot: '转发保留创建时的正文和标签，不会被修改',
+      logSnapshots: n => `${n} 条转发保持原样：转发是创建时的快照，标签和正文都不会再改`,
+      orgSnapshot: '收集的帖子是转发：标签在收集时就定下了，之后不再修改。这次没有写入任何内容。',
       rbTitle: '博客间的转发', rbScan: '检查转发',
       rbIntro: '转自自己博客的帖子会自动跟原帖保持一致。这里检查两件事：tag、可见性或内容标签和原帖不一致的转发；子博客上已发布、但主博客还没转发的帖子（比如在 Tumblr 网页上直接发的，或排队后才发出的）。请先同步标签库。',
-      rbFound: (d, m) => `${d} 条转发和原帖不一致 · ${m} 条帖子还没转到主博客`,
-      rbNone: '全部一致', rbHint: '点“检查转发”查看哪里不一致',
+      rbFound: m => `${m} 条帖子还没转到主博客（已有的转发是快照，保持原样）`,
+      rbNone: '没有待转发的帖子', rbHint: '点“检查转发”查看主博客还没转发哪些帖子',
       rbDiff_tags: 'tag', rbDiff_state: '可见性', rbDiff_label: '内容标签', rbDiff_reblog: '转发控制', rbMissing: name => `${name} 还没转发`,
-      rbFix: '按原帖修正转发', rbReblog: '转发到主博客', rbQueue: '加入主博客的队列', rbNow: '立即发布',
+      rbReblog: '转发到主博客', rbQueue: '加入主博客的队列', rbNow: '立即发布',
       rbConfirmReblog: (n, name, when) => `把 ${n} 条帖子转发到 ${name}（${when}）？`,
       autoTitle: '后台自动处理记录（每 10 分钟一次，只管开启之后发布的帖子）',
       autoNone: '还没有记录', autoError: e => `检查失败：${e}`,
       autoReblogged: (post, to) => `已把 ${post} 转发到 ${to}`, autoFixed: (post, src) => `已按 ${src} 修正 ${post}`,
+      autoHidden: post => `已把 ${post} 设为私密（超出博客的显示时间）`, autoShown: post => `已重新公开 ${post}`,
       autoFailed: (post, e) => `${post} 失败：${e}`, autoRepeat: n => `（共 ${n} 次，显示最近一次）`,
       rbGone: n => `${n} 个已删除的帖子已从列表移除`,
       navCollect: '素材',
@@ -424,6 +460,11 @@ const TTHCore = (() => {
       aiTest: '测试', aiTesting: '正在发送测试图片…', aiOk: tags => `可以用${tags ? ' · 它的回答：' + tags : ''}`, aiFail: e => `不能用：${e}`,
       aiNeedSetup: '请先在设置里配置 AI 识图', aiNoAccess: 'Chrome 没有允许访问这个地址',
       myBlogs: '我的博客', myBlogsIntro: '分享型博客（同人、原创等给别人看的帖子）参与转发到主博客的同步和 tag 整理。素材型博客（参考图）不参与这两项，有自己的 tag 库，可以用素材库工具和“重新 AI”。',
+      recentIntro: '“显示”让博客只公开最近一段时间的图片帖：更早的会在后台设为私密（只有你看得到），每 10 分钟一次，每次最多 40 篇。改成更长的时间或“全部”会重新公开它们。置顶帖、没有图片的帖子、以及你手动重新公开的帖子不受影响。',
+      recentLabel: '显示', recentAll: '全部', recentOpt: d => ({ 7: '最近一周', 30: '最近一个月', 90: '最近三个月', 180: '最近半年', 365: '最近一年' })[d],
+      recentCount: n => `已隐藏 ${n} 篇`,
+      recentConfirm: (blog, span) => `${blog} 将只公开${span}的图片帖。更早的会在后台分批设为私密；改成更长的时间或“全部”时会重新公开。继续吗？`,
+      recentShowAgain: blog => `${blog} 上被设为私密的帖子会在后台重新公开`,
       roleShare: '分享', roleMaterial: '素材', roleMain: '主博客 · 总是分享型', roleCollect: '收藏博客 · 总是素材型', roleUnset: '还没设置',
       roleToMaterial: name => `${name} 现在是素材博客：它的帖子不再参与转发同步（已经转到主博客的保持原样），它的 tag 移到素材 tag 库`,
       roleToShare: name => `${name} 现在是分享博客：只有从现在起的新帖会转到主博客（更早的在“检查转发”里列出）；它的 tag 移到分享 tag 库`,
@@ -443,6 +484,31 @@ const TTHCore = (() => {
       orgDelete: '删除转发并取消喜欢', orgDeleteConfirm: n => `从素材库删除 ${n} 条转发，并取消对应的喜欢？删掉的转发无法恢复（原帖还在）。`,
       orgDeleted: (n, u) => `已删除 ${n} 条转发 · 取消了 ${u} 个喜欢`, orgDeleting: (i, n) => `正在删除… ${i} / ${n}`,
       colUnliked: n => `已取消 ${n} 条标了 AI 的帖子的喜欢`,
+      studioTitle: 'Tumblr Studio（桌面软件）',
+      studioIntro: '桌面软件可以接管会修改帖子的后台任务。导出本插件的数据（设置、博客用途、模板包、标签统计；不含 AI 密钥），再在软件的“设置 → 数据”里导入。',
+      studioManaged: '由桌面软件 Tumblr Studio 负责所有帖子修改：本插件停止后台任务，也不再编辑、转发或删除',
+      studioOwnsWrites: '本插件是 Tumblr Studio 的浏览器助手，不会自己修改 Tumblr 上的内容；修改都在 App 里进行。',
+      cpTitle: 'Tumblr Tag Helper', cpIntro: 'Tumblr Studio 的浏览器助手：在 tumblr.com 上提示标签、插入模板、整理页面，以及跳转到 App。写帖、管理帖子、分类、模板、转发、收集和 AI 都在 App 里。',
+      cpConnTitle: 'Tumblr Studio', cpNotRunning: 'Tumblr Studio 没有运行。网页上的提示功能用上次的数据继续工作；需要 App 的操作要先打开 App。', cpNoExtension: '这个页面没有连上 Tag Helper 插件。请安装或在 chrome://extensions 里重新加载插件，然后刷新本页。',
+      cpNotPaired: n => `Tumblr Studio 正在运行（${n}），但这个浏览器还没有连接。`, cpPaired: n => `已连接 Tumblr Studio（${n}）。`,
+      cpPair: '连接', cpPairing: '请在 Tumblr Studio 里确认连接…', cpUnpair: '断开', cpOpenStudio: '打开 Tumblr Studio',
+      cpOtherAccount: n => `Tumblr Studio 连接的是另一个账号（${n}）。请在这个浏览器里登录那个账号，或者让 App 连接这个账号。`,
+      cpSnapshot: (at, blogs, packs) => `来自 App 的数据：${at} · ${blogs} 个博客 · ${packs} 个模板包`, cpNoSnapshot: '还没有来自 App 的数据：提示功能暂时用插件以前保存的数据。',
+      cpMoveTitle: '把旧数据移到 App', cpMoveHint: '博客用途、模板包、标签统计、规则、“只显示近期”、收集设置和素材记录会一次性交给 Tumblr Studio。不会改动 Tumblr 上的任何内容，这里也不删除任何数据。AI 密钥不会发送，请在 App 里填写。',
+      cpMove: '发送到 Tumblr Studio', cpExport: '下载为文件', cpMoving: '发送中…', cpMoved: at => `已于 ${at} 移到 Tumblr Studio。再发送一次也没关系。`,
+      cpBrowseTitle: '浏览时（只对这个浏览器）', cpHideAds: '隐藏广告', cpHideRecs: '隐藏推荐的帖子和博客', cpHideAiArt: '隐藏 AI 生成的图片（根据原作者的标签和其他人的说法）',
+      cpLang: '语言', cpLangAuto: '跟随 Tumblr',
+      cpWhereTitle: '各功能现在在哪里', cpWhereHint: '原来管理页上的功能，以及现在去哪里找。',
+      wPosts: '浏览和选择帖子', wTags: '批量改标签', wVisibility: '公开 / 私密、社区标签', wRecent: '只显示近期帖子', wReblogs: '博客之间的转发',
+      wPacks: '模板包、规则、通用分类', wCollect: '收集喜欢的帖子', wStudy: '今日速写', wAi: 'AI 模型设置和 AI 标签（收集之前）',
+      wCleanup: '清理弱标签', wUpkeep: '模板包维护和“建议修改”', wAiArtCheck: '检查已收集帖子是否 AI 生成',
+      wAiResort: '重新整理已收集的帖子（转发保持原来的标签）',
+      wSuggest: '发帖编辑器和博客搜索里的标签提示', wTemplates: '发帖编辑器里的模板面板（▦）', wMega: '批量编辑器增强', wHide: '隐藏广告、推荐、AI 图片',
+      wStudio: '在 Tumblr Studio 里', wPending: 'App 里暂时还没有', wRetired: '已停用', wBrowser: '在浏览器里',
+      ctxOpen: '在 Tumblr Studio 中打开', ctxCollect: '用 Tumblr Studio 收集', ctxNoPost: '这不是 Tumblr 帖子。', ctxOpened: '已在 Tumblr Studio 中打开。',
+      ctxQueued: 'Tumblr Studio 正在收集（可在 App 的活动记录里查看）。', ctxAlready: '已经收集过了。',
+      studioNotRunning: 'Tumblr Studio 没有运行，所以什么也没做。请打开 App 后再试。', studioRefused: e => `Tumblr Studio 没有接受：${e}`,
+      studioExport: '导出给 Tumblr Studio',
       hideAiArt: '浏览 Tumblr 时隐藏标了 AI 图的帖子（如 “ai art”“midjourney” 等 tag；“not ai” 这类不受影响）',
       orgAiGroup: 'AI 识别', orgAiNo: 'AI 还没识别过的', orgAiYes: 'AI 识别过的',
       orgAi: 'AI 识别', orgAiHint: '只识别选中的帖子；每张图都会发给你的 AI 服务。色调会顺带本地算好，不另外花钱',
@@ -556,6 +622,18 @@ const TTHCore = (() => {
     };
   }
 
+  // Tumblr Studio owns every remote write once settings.desktopManaged is on (one writer, spec A28): wrap a
+  // page's request so anything but a read is refused before it is sent. managed() may be async; message() is
+  // the page's translated studioOwnsWrites.
+  function guardWrites(request, managed, message = () => 'Tumblr Studio manages writes') {
+    return async (path, opts = {}) => {
+      if ((opts.method || 'GET') !== 'GET' && await managed()) {
+        throw Object.assign(new Error(message()), { managed: true });
+      }
+      return request(path, opts);
+    };
+  }
+
   async function getBlogs(api) {
     const r = await api('/v2/user/info');
     const blogs = (r?.user?.blogs || []).map(b => ({ uuid: b.uuid || b.name, name: b.name, title: b.title, primary: !!b.primary }));
@@ -649,6 +727,11 @@ const TTHCore = (() => {
     const next = mutate({ state: cur.state, tags: cur.tags.slice(), label: { has: cur.label.has, categories: cur.label.categories.slice() }, reblog: cur.reblog, content: cur.content.slice() }, cur);
     if (typeof next === 'string') return { skipped: true, reason: next };
     if (sameEdit(cur, next)) return { skipped: true, unchanged: true };
+    // A reblog is a frozen snapshot (docs/REBLOG_POLICY.md): its body, layout and ordered tags are never edited.
+    // Visibility, community labels and reblog control stay separate operations that send its own payload back.
+    if (isReblogPost(p) && (next.tags.join('\u0001') !== cur.tags.join('\u0001') || JSON.stringify(next.content) !== JSON.stringify(cur.content))) {
+      return { skipped: true, snapshot: true, reason: t('skipSnapshot') };
+    }
 
     const body = {
       content: next.content,
@@ -670,6 +753,8 @@ const TTHCore = (() => {
     }
     return next;
   }
+
+  const isReblogPost = p => !!(pick(p, 'parentPostId', 'parent_post_id') || (p.trail || []).length);
 
   // Common mutations; each returns a function for editPost
   const mutations = {
@@ -722,8 +807,83 @@ const TTHCore = (() => {
     return { skip, after };
   }
 
+  // ---------- Show only recent posts ----------
+  // settings.recentOnly = { uuid: days } (one of RECENT_DAYS; absent = show everything): a blog keeps only its
+  // recent posts with images public. Older ones are made private by the background (autoRecent) and made public
+  // again when the period gets longer or is switched off. Pinned posts and posts without images stay as they are.
+  // Storage key recentHidden = { uuid: { ids: { postId: timestamp }, done } } lists the posts it made private (only
+  // those are ever made public again); done (seconds) = every post older than this was already looked at.
+  const RECENT_DAYS = [7, 30, 90, 180, 365];
+  const recentDays = (settings, uuid) => (RECENT_DAYS.includes(+settings?.recentOnly?.[uuid]) ? +settings.recentOnly[uuid] : 0);
+  // "uuid:id" keys of the posts it made private: the reblog sync leaves their visibility alone
+  const recentKeys = state => new Set(Object.entries(state || {}).flatMap(([u, s]) => Object.keys(s?.ids || {}).map(id => u + ':' + id)));
+  // One pass: at most opts.max edits in all (the rest waits for the next pass). onSave(state) after each edit.
+  // Returns { state, done: [{ type: 'hide' | 'show' | 'fail', blog, id, error }] }
+  async function autoRecent(api, t, settings, state = {}, opts = {}) {
+    const { now = Math.floor(Date.now() / 1000), max = 40, onSave } = opts;
+    const out = JSON.parse(JSON.stringify(state || {}));
+    const done = [];
+    const blogs = await getBlogs(api);
+    let edits = 0;
+    const save = () => onSave?.(out);
+    for (const uuid of new Set([...Object.keys(settings?.recentOnly || {}), ...Object.keys(out)])) {
+      const b = blogs.find(x => x.uuid === uuid);
+      if (!b) continue; // not one of my blogs (any more): leave its record alone
+      const days = recentDays(settings, uuid);
+      // posts older than cutoff are hidden; switched off, every hidden post is shown again
+      const cutoff = days ? now - days * 86400 : -Infinity;
+      const s = out[uuid] ||= { ids: {}, done: 0 };
+      s.ids ||= {};
+      let complete = true;
+      for (const [id, ts] of Object.entries(s.ids)) {
+        if (ts < cutoff) continue;
+        if (edits >= max) { complete = false; break; }
+        try {
+          // a post I made public (or a draft) by hand since is just let go
+          const r = await editPost(api, t, uuid, id, (n, c) => (c.state === 'private' ? Object.assign(n, { state: 'published' }) : 'not private'));
+          delete s.ids[id];
+          if (!r.skipped) { edits++; done.push({ type: 'show', blog: b.name, id }); }
+        } catch (e) {
+          if (e.status === 404) delete s.ids[id];
+          else { complete = false; done.push({ type: 'fail', blog: b.name, id, error: errMsg(e) }); }
+        }
+        await save();
+        await sleep(1000);
+      }
+      if (days && complete) {
+        // newest first, down to what an earlier pass already looked at
+        let path = basePosts(uuid), n = 0;
+        scan: while (path) {
+          const r = await api(path);
+          const page = (r?.posts || []).filter(isPost);
+          if (!page.length) break;
+          for (const p of page) {
+            const ts = p.timestamp || 0, id = postId(p);
+            if (pick(p, 'isPinned', 'is_pinned') || ts >= cutoff || s.ids[id]) continue;
+            if (ts <= (s.done || 0)) break scan;
+            if ((p.state || 'published') !== 'published' || !postImages(p).length) continue;
+            if (edits >= max) { complete = false; break scan; }
+            try {
+              const e = await editPost(api, t, uuid, id, (nx, c) => (c.state === 'published' ? Object.assign(nx, { state: 'private' }) : 'not public'));
+              if (!e.skipped) { s.ids[id] = ts; edits++; done.push({ type: 'hide', blog: b.name, id }); }
+            } catch (err) { complete = false; done.push({ type: 'fail', blog: b.name, id, error: errMsg(err) }); }
+            await save();
+            await sleep(1000);
+          }
+          n += page.length;
+          path = nextPath(r, uuid, {}, n, page.length >= 20);
+          await sleep(250);
+        }
+      }
+      if (complete) s.done = days ? cutoff : 0;
+      if (!days && !Object.keys(s.ids).length) delete out[uuid];
+    }
+    await save();
+    return { state: out, done };
+  }
+
   // ---------- Tag library ----------
-  // cache.blogs[uuid] = { name, syncedAt, posts: { [postId]: [tags[], timestamp, state, noteCount|null, reblogSource|null, hasLabel, reblog] } }
+  // cache.blogs[uuid] ={ name, syncedAt, posts: { [postId]: [tags[], timestamp, state, noteCount|null, reblogSource|null, hasLabel, reblog] } }
   //   reblogSource is "blogName/postId" of the original when the post is a reblog (reblogSource())
   //   reblog is the reblog control, 'everyone' or 'noone' (readReblog())
   // cache.tagStats[tagKey] = { rate, match, at }: sitewide activity samples used by the cleanup
@@ -863,8 +1023,10 @@ const TTHCore = (() => {
   const splitKey = k => { const i = k.lastIndexOf(':'); return { blog: k.slice(0, i), id: k.slice(i + 1) }; };
   // Reblogs whose tags, visibility, community label or reblog control differ from their original (from the
   // synced cache). Returns [{ root, copy, diffs: ['tags' | 'state' | 'label' | 'reblog'] }] with root/copy as
-  // { key, blog, id }.
-  function reblogDiffs(cache) {
+  // { key, blog, id }. Information only: a reblog is a historical snapshot, so a difference is not drift and
+  // nothing edits the reblog to match (docs/REBLOG_POLICY.md).
+  // keep: "uuid:id" keys whose visibility is not compared (posts hidden by "show only recent", recentKeys)
+  function reblogDiffs(cache, keep = new Set()) {
     const rec = k => { const { blog, id } = splitKey(k); return cache.blogs[blog]?.posts?.[id]; };
     const out = [];
     const seen = new Set();
@@ -876,7 +1038,7 @@ const TTHCore = (() => {
         const c = rec(k);
         const diffs = [];
         if (c[0].join('\u0001') !== r[0].join('\u0001')) diffs.push('tags');
-        if (SYNC_STATES.includes(c[2]) && SYNC_STATES.includes(r[2]) && c[2] !== r[2]) diffs.push('state');
+        if (SYNC_STATES.includes(c[2]) && SYNC_STATES.includes(r[2]) && c[2] !== r[2] && !keep.has(root) && !keep.has(k)) diffs.push('state');
         if (c[5] !== undefined && r[5] !== undefined && c[5] !== r[5]) diffs.push('label');
         if (c[6] !== undefined && r[6] !== undefined && c[6] !== r[6]) diffs.push('reblog');
         if (diffs.length) out.push({ root: { key: root, ...splitKey(root) }, copy: { key: k, ...splitKey(k) }, diffs });
@@ -923,15 +1085,30 @@ const TTHCore = (() => {
     return out;
   }
 
+  // Add older posts of a blog to `list` (newest first, as read so far) until it reaches back to `until` (seconds),
+  // at most maxPages more pages. Returns how far back the list is complete: 0 = the whole blog, else the oldest
+  // timestamp read (anything older may be missing).
+  async function readBack(api, blog, list, until, maxPages = 15) {
+    if (!list.length) return 0; // the first page was empty: nothing on the blog
+    let oldest = Math.min(...list.map(p => p.timestamp || 0));
+    for (let i = 0; i < maxPages && oldest > until; i++) {
+      const page = ((await api(basePosts(blog, { before: oldest })))?.posts || []).filter(isPost).filter(p => (p.timestamp || 0) < oldest);
+      if (!page.length) return 0;
+      list.push(...page);
+      oldest = Math.min(...page.map(p => p.timestamp || 0));
+    }
+    return oldest > until ? oldest : 0;
+  }
+
   // One unattended pass over the newest posts of each of my blogs (the extension runs it every 10 minutes):
   // - a published original on a side blog, newer than `since` (seconds), that my main blog hasn't reblogged is
   //   reblogged to the main blog, published;
   // - a reblog of my own post whose tags, visibility, community label or reblog control drifted from its
   //   original is fixed.
   // opts.skip: uuids of blogs that take no part (material blogs and blogs with no role: reblogScope);
-  // opts.after: { uuid: seconds }, a side blog's posts older than this are not reblogged
+  // opts.after: { uuid: seconds }, a side blog's posts older than this are not reblogged;
   // One post failing doesn't stop the pass (what was done before it would go unlogged).
-  // Returns what it did: [{ type: 'reblog' | 'fix' | 'fail', blog, id, to, error }]
+  // Returns what it did: [{ type: 'reblog' | 'fail', blog, id, to, error }]
   async function autoMaintain(api, t, since, opts = {}) {
     const { pages = 1, skip = [], after = {} } = opts;
     const blogs = (await getBlogs(api)).filter(b => !skip.includes(b.uuid));
@@ -940,37 +1117,33 @@ const TTHCore = (() => {
     const names = new Set(blogs.map(b => b.name.toLowerCase()));
     const lists = new Map();
     for (const b of blogs) lists.set(b.uuid, await newestPosts(api, b.uuid, pages));
-    const onMain = new Set(lists.get(main.uuid).map(reblogSource).filter(Boolean).map(s => s.toLowerCase()));
-    const done = [];
+    const todo = [];
     for (const b of blogs) {
       if (b.uuid === main.uuid) continue;
       for (const p of lists.get(b.uuid)) {
-        const id = postId(p);
         if ((p.timestamp || 0) <= Math.max(since, after[b.uuid] || 0) || (p.state || 'published') !== 'published' || isCopyOf(p, names)) continue;
-        if (onMain.has(`${b.name}/${id}`.toLowerCase())) continue;
-        try {
-          await reblogPost(api, main.uuid, b.uuid, id, 'published', t);
-          done.push({ type: 'reblog', blog: b.name, id, to: main.name });
-        } catch (e) { done.push({ type: 'fail', blog: b.name, id, to: main.name, error: errMsg(e) }); }
-        await sleep(1000);
+        todo.push({ b, p });
       }
     }
-    const byKey = new Map();
-    for (const b of blogs) for (const p of lists.get(b.uuid)) byKey.set(`${b.name}/${postId(p)}`.toLowerCase(), p);
-    for (const b of blogs) {
-      for (const p of lists.get(b.uuid)) {
-        if (!isCopyOf(p, names)) continue;
-        const src = reblogSource(p);
-        let orig = byKey.get(src.toLowerCase());
-        if (!orig) { const [n, rid] = src.split('/'); try { orig = await getPost(api, n, rid); } catch { continue; } }
-        try {
-          const r = await editPost(api, t, b.uuid, postId(p), mutations.copyFrom({ tags: orig.tags || [], state: orig.state, label: readLabel(orig), reblog: readReblog(orig) }));
-          if (r.skipped) continue;
-          done.push({ type: 'fix', blog: b.name, id: postId(p), to: src });
-        } catch (e) { done.push({ type: 'fail', blog: b.name, id: postId(p), to: src, error: errMsg(e) }); }
-        await sleep(1000);
-      }
+    // A side post's reblog on main is newer than the post itself, but the main blog's first page may not reach
+    // back that far (main gets every side blog's posts; a side blog's page can span more days). Read main back
+    // to the oldest candidate, so a post reblogged days ago isn't taken for new and reblogged again.
+    const mainPosts = lists.get(main.uuid).slice();
+    const oldest = Math.min(...todo.map(x => x.p.timestamp || 0));
+    const reach = await readBack(api, main.uuid, mainPosts, oldest);
+    const onMain = new Set(mainPosts.map(reblogSource).filter(Boolean).map(s => s.toLowerCase()));
+    const done = [];
+    for (const { b, p } of todo) {
+      const id = postId(p);
+      if (onMain.has(`${b.name}/${id}`.toLowerCase())) continue;
+      if ((p.timestamp || 0) < reach) continue; // main not read back far enough to be sure: leave it
+      try {
+        await reblogPost(api, main.uuid, b.uuid, id, 'published', t);
+        done.push({ type: 'reblog', blog: b.name, id, to: main.name });
+      } catch (e) { done.push({ type: 'fail', blog: b.name, id, to: main.name, error: errMsg(e) }); }
+      await sleep(1000);
     }
+    // Existing reblogs are frozen snapshots: nothing here edits them (the old "fix drifted copies" step is gone)
     return done;
   }
 
@@ -990,41 +1163,19 @@ const TTHCore = (() => {
     }
     return out.sort((a, b) => b.ts - a.ts);
   }
-  // Keys of posts that are copies (reblogs of a post on one of my blogs). They are kept in line with their
-  // original automatically, so editing features leave them out.
+  // Keys of posts that are copies (reblogs of a post on one of my blogs). Like every reblog they are frozen
+  // snapshots, so editing features leave them out (see snapshotKeys for all reblogs).
   const copyKeys = cache => new Set([...reblogFamilies(cache)].filter(([k, f]) => k !== f.root).map(([k]) => k));
   // The same check for a post read from the API, given my blog names
   const isCopyOf = (p, myNames) => { const s = reblogSource(p); return !!s && myNames.has(s.split('/')[0].toLowerCase()); };
-  // Only these states are copied; a draft or queued copy keeps its own
+  // Keys of every reblog in the cache (rec[4] = what it reblogged). All are frozen snapshots: batch tag and body
+  // edits leave them out and list them as kept as they are.
   const SYNC_STATES = ['published', 'private'];
-  // Mutation: make a post carry another post's tags, visibility, community label and reblog control
-  mutations.copyFrom = src => (n, cur) => Object.assign(n, {
-    tags: src.tags.slice(),
-    state: SYNC_STATES.includes(cur.state) && SYNC_STATES.includes(src.state) ? src.state : n.state,
-    label: { has: src.label.has, categories: src.label.categories.slice() },
-    reblog: src.reblog || n.reblog,
-  });
-  // After editing one post, give the same tags / visibility / label / reblog control to its copies on my other
-  // blogs.
-  // result is what editPost returned for the edited post. Calls onEach(key, r) after each copy is edited.
-  async function syncCopies(api, t, cache, blog, id, result, onEach) {
-    const fam = reblogFamilies(cache).get(blog + ':' + id);
-    if (!fam) return 0;
-    let n = 0;
-    for (const k of fam.members) {
-      if (k === blog + ':' + id) continue;
-      const m = splitKey(k);
-      const r = await editPost(api, t, m.blog, m.id, mutations.copyFrom(result));
-      if (!r.skipped) {
-        n++;
-        const rec = cache.blogs[m.blog]?.posts?.[m.id];
-        if (rec) { rec[0] = uniqTags(r.tags); rec[2] = r.state; rec[5] = r.label.has; rec[6] = r.reblog; }
-        onEach?.(k, r);
-      }
-      await sleep(400);
-    }
-    return n;
-  }
+  const snapshotKeys = cache => {
+    const out = new Set();
+    for (const [uuid, b] of Object.entries(cache?.blogs || {})) for (const [id, rec] of Object.entries(b.posts || {})) if (rec[4]) out.add(uuid + ':' + id);
+    return out;
+  };
 
   // ---------- Collection blog: posts I like, reblogged onto one of my blogs ----------
   // settings.collect = { blog: uuid of the collection blog ('' = off), auto, tags[], imagesOnly, autoPalette, daily, from }
@@ -2080,8 +2231,8 @@ const TTHCore = (() => {
   return {
     sleep, enc, decodeTag, norm, key, esc, pick, debounce, qs, uniqTags, withTags, fmtNum,
     LABEL_CATEGORIES, AD_CSS, REC_CSS, UPSELL_SELECTOR, isUpsell, STRINGS, LANG_NAMES, makeI18n,
-    errMsg, makeApi, getBlogs, ROLES, blogRole, libraryRole, unsetBlogs, roleCache, reblogScope, postId, isPost, basePosts, nextPath, readLabel, readReblog, getPost, postImages, editPost, mutations,
-    emptyCache, buildIndex, matchScore, suggest, syncBlog, syncAll, reblogSource, reblogFamilies, reblogDiffs, syncCopies, copyKeys, isCopyOf, notOnMain, reblogPost, newestPosts, autoMaintain, tagActivity, parseAuth,
+    errMsg, makeApi, guardWrites, getBlogs, ROLES, blogRole, libraryRole, unsetBlogs, roleCache, reblogScope, RECENT_DAYS, recentDays, recentKeys, autoRecent, postId, isPost, basePosts, nextPath, readLabel, readReblog, getPost, postImages, editPost, mutations,
+    emptyCache, buildIndex, matchScore, suggest, syncBlog, syncAll, reblogSource, reblogFamilies, reblogDiffs, copyKeys, snapshotKeys, isReblogPost, isCopyOf, notOnMain, reblogPost, newestPosts, autoMaintain, tagActivity, parseAuth,
     rootKey, likedPosts, emptyCollection, migrateMaterials, syncCollection, collectSkip, collectPost, isPostLimit,
     REF_GROUPS, refGroupOf, paletteTags, imagePixels, postPalette, AI_MARK, AI_NOTE_MARK, withAiNote, aiNoteOf, aiPrompt, parseAiTags, parseAiArt, parseAiNotes, AI_NOTE_LANGS, aiTagImage, imageDataUrl, AI_MAX_IMAGES, aiImageSize, relayout, aiWrite, aiSortPost,
     AI_ART_TAG, aiArtSignal, aiArtVerdict, ownerTagsOf, aiArtCheck, unlikePost, deletePost, autoCollect, dailyPick,

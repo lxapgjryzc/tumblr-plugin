@@ -1,12 +1,12 @@
-// Content script on tumblr.com: tag autocomplete in the post editor and a blog's search box, the tag template
-// panel (pick and insert only; packs and rules are managed on the manager page), a "Redo AI" button on material
-// blogs' posts, and read-only upgrades to the official mass editor (selection, tile details, tag counts). Bulk edits live
-// on the manager page. Data is shared with the manager page through chrome.storage.local.
+// Content script on tumblr.com, part of the browser companion of Tumblr Studio (design 4.3): tag autocomplete in
+// the post editor and a blog's search box, the tag template panel (pick and insert only) and read-only upgrades
+// to the official mass editor (selection, tile details, tag counts). It changes nothing on Tumblr by itself.
+// Its data — tag library, packs, rules, blog roles — is the app's read-only snapshot (storage key `studio`,
+// fetched by the service worker); the extension's older local copies are only used until one has arrived.
 (async () => {
   'use strict';
 
   const C = TTHCore;
-  const AUTO_SYNC_INTERVAL = 6 * 3600 * 1000;
 
   // The mass editor's autocomplete lives in the page's jQuery, which mega-main.js reaches from the page's world.
   // It asks here for suggestions; answers wait until storage has loaded.
@@ -19,16 +19,29 @@
   });
 
   // ---------- Storage ----------
-  // Keys shared with the manager: cache, settings (rules and useBase included) and packs. The panel's own
-  // picks live under templates.
-  const stored = await chrome.storage.local.get(['cache', 'settings', 'packs', 'templates']);
-  const cache = Object.assign(C.emptyCache(), stored.cache || {});
-  const settings = Object.assign({ autoSync: true, lang: '', rules: { ...C.TPL_RULES }, useBase: true }, stored.settings || {});
+  // The app's snapshot (key studio); the older keys cache, settings and packs are read only as a fallback.
+  // The panel's own picks live under templates.
+  const stored = await chrome.storage.local.get(['cache', 'settings', 'packs', 'templates', 'studio']);
+  const settings = Object.assign({ lang: '', rules: { ...C.TPL_RULES }, useBase: true }, stored.settings || {});
+  // The app's snapshot wins over the legacy local copies (which nothing refreshes any more)
+  const fromStudio = snap => {
+    if (!snap?.cache) return null;
+    if (snap.rules) settings.rules = snap.rules;
+    settings.useBase = snap.useBase !== false;
+    settings.blogRoles = Object.fromEntries(Object.entries(snap.roles || {}).map(([uuid, role]) => [uuid, { role }]));
+    return { cache: snap.cache, packs: snap.packs || [], categories: snap.categories || [] };
+  };
+  const studio = fromStudio(stored.studio);
+  const cache = Object.assign(C.emptyCache(), studio?.cache || stored.cache || {});
+  // General categories from the app (read only): chosen ones go first, as in the app's composer (design 6.3)
+  let tplCats = studio?.categories || [];
+  const tplCatSel = new Set();
+  const catTags = () => tplCats.filter(c => tplCatSel.has(String(c.id))).map(c => c.tag);
   // Every write carries this tab's mark (storage key writer), so the change listener can skip our own writes
   const me = Math.random().toString(36).slice(2);
   const store = obj => chrome.storage.local.set({ ...obj, writer: me + ':' + Date.now() });
-  const save = async () => store({ cache });
-  const saveSettings = () => store({ settings });
+  // Only browser-local preferences are written from here (the interface language Tumblr shows)
+  const saveSettings = async () => { const cur = (await chrome.storage.local.get('settings')).settings || {}; return store({ settings: { ...cur, tumblrLang: settings.tumblrLang } }); };
   // Auto language follows the user's Tumblr interface language. New Tumblr pages report it in <html lang>;
   // the legacy mass editor always says "en", so there use the last value seen, or its own button text.
   const legacyPage = location.pathname.startsWith('/mega-editor');
@@ -65,7 +78,8 @@
       return json;
     }
   }
-  const api = C.makeApi(request);
+  // Reads only: every write is refused before it is sent (Tumblr Studio is the one writer)
+  const api = C.makeApi(C.guardWrites(request, () => true, () => t('studioOwnsWrites')));
 
   // ---------- Tag library ----------
   // Two libraries: sharing blogs' tags (blogs with no role yet count as sharing) and material blogs' tags. The
@@ -79,21 +93,6 @@
   const blogByName = name => cache.blogList.find(b => b.name.toLowerCase() === String(name || '').toLowerCase());
   const roleOf = name => { const b = blogByName(name); return b ? C.blogRole(settings, b) : null; };
   const libFor = name => (roleOf(name) === 'material' ? matIndex : index);
-
-  let syncing = null;
-  async function syncAll(full, quiet) {
-    if (syncing) return;
-    syncing = { aborted: false };
-    try {
-      await C.syncAll(api, cache, full, syncing, msg => { if (!quiet) toast(msg, true); }, t, save, settings.collect?.blog ? [settings.collect.blog] : []);
-      rebuildIndex();
-      if (!quiet) toast(t('syncDone', index.tags.size));
-    } catch (e) {
-      if (!quiet) toast(t('syncFailed', C.errMsg(e)));
-    } finally {
-      syncing = null;
-    }
-  }
 
   // ---------- Page UI host (suggestion dropdown, toasts, status box) ----------
   const CSS = `
@@ -344,12 +343,12 @@
   }
 
   // ---------- Tag templates ----------
-  // Packs, rules and useBase are the manager's (storage keys packs and settings) and only read here; the panel's
+  // Packs, rules and useBase are the app's (from the snapshot) and only read here; the panel's
   // own picks, saved combos and per-tag overrides are under templates. Popularity samples share cache.tagStats
   // with the manager.
   // A ▦ button sits at the right end of the post editor's #tags input and opens the panel.
   const tpl = Object.assign({ current: '', picks: [], favs: [], overrides: {} }, stored.templates || {},
-    { packs: stored.packs || [], useBase: settings.useBase, rules: { ...C.TPL_RULES, ...settings.rules } });
+    { packs: studio?.packs || stored.packs || [], useBase: settings.useBase, rules: { ...C.TPL_RULES, ...settings.rules } });
   const saveTpl = () => {
     const { packs, useBase, rules, ...own } = tpl;
     return store({ templates: own });
@@ -399,6 +398,8 @@
 .tp-c small { opacity:.75; }
 .tp-c .del { margin-left:4px; opacity:.6; }
 .tp-combo { margin-bottom:8px; }
+.tp-cats { display:flex; flex-wrap:wrap; align-items:center; gap:6px; padding:6px 10px; border-bottom:1px solid var(--line); }
+.tp-cats .tp-sh { margin:0 4px 0 0; }
 .tp-combo .who { display:block; color:var(--muted); font-size:12px; margin-bottom:3px; }
 .tp-c b { font-weight:600; margin-right:2px; }
 .tp-prev { margin-top:4px; }
@@ -475,8 +476,8 @@
     tplEl.querySelector('.tp-q')?.focus();
   }
   function closeTpl() { tplEl.hidden = true; }
-  // Packs and the rules are managed on the manager page; the service worker opens it (or brings it forward)
-  const openManager = page => chrome.runtime.sendMessage({ type: 'openManager', page });
+  // Packs and the rules are managed in Tumblr Studio; the service worker asks the app to come forward
+  const openManager = page => chrome.runtime.sendMessage({ type: 'openStudio', page });
 
   const tplStats = () => cache.tagStats || {};
   function composeNow() {
@@ -514,8 +515,15 @@
     }
   }
 
+  function catsHtml() {
+    if (!tplCats.length) return '';
+    return `<div class="tp-cats"><span class="tp-sh">${C.esc(t('tplCats'))}</span><span class="tp-chips">${tplCats.map(c =>
+      `<span class="tp-c${tplCatSel.has(String(c.id)) ? ' on' : ''}" data-cat="${C.esc(String(c.id))}" title="#${C.esc(c.tag)}">${C.esc(c.name)}</span>`).join('')}</span>`
+      + (tplCatSel.size ? `<button data-tp="catFirst" title="${C.esc(t('tplCatFirstHint'))}">${C.esc(t('tplCatFirst'))}</button>` : '') + '</div>';
+  }
+
   function pickHtml(pack) {
-    return `<div class="tp-cols">
+    return catsHtml() + `<div class="tp-cols">
         <div class="tp-left"><input class="tp-q" type="text" placeholder="${C.esc(t('tplSearch'))}"><div class="tp-body"></div></div>
         <div class="tp-right"><div class="tp-sel"></div><div class="tp-rel"></div><div class="tp-prev"></div></div>
       </div>
@@ -610,16 +618,19 @@
 
   const copyText = text => navigator.clipboard?.writeText(text);
 
-  async function insertTags(tags) {
+  async function insertTags(tags, lead = catTags()) {
     const el = tagInput();
     if (!el) { copyText(tags.join(', ')); toast(t('tplNoInput')); return; }
     closeTpl();
     // Inserting again replaces what the panel inserted last time in this editor: those tags come out first and
     // the new list goes in, in order. Tags typed by hand are never touched.
     const prev = insertedBy.get(el) || new Set();
-    const removed = await removeInserted(el, prev);
+    // chosen categories already in the editor stay where they are (e.g. put first by "Arrange category first")
+    const leadK = new Set(lead.map(C.key));
+    const removed = await removeInserted(el, new Set([...prev].filter(k => !leadK.has(k))));
     const have = new Set(readEditorTags(el).map(C.key));
-    const order = C.sortTagsFair(tags, tplStats(), fairOpts());
+    const seenK = new Set();
+    const order = [...lead, ...C.sortTagsFair(tags, tplStats(), fairOpts())].filter(tg => !seenK.has(C.key(tg)) && seenK.add(C.key(tg)));
     const added = [];
     for (const tag of order) {
       if (have.has(C.key(tag))) continue;
@@ -635,6 +646,30 @@
     const gone = Math.min(removed, [...prev].filter(k => !wanted.has(k)).length);
     toast(prev.size ? t('tplUpdated', gone, added.filter(k => !prev.has(k)).length) : t('tplInserted', added.length));
     if (left) setTimeout(() => toast(t('tplNotRemoved', left)), 2500);
+  }
+
+  // "Arrange category first" (design 6.3): put the chosen categories' tags ahead of the tags already in the
+  // editor. Tumblr's chips can't be moved, so every chip is taken out and put back in order: the categories,
+  // then all earlier tags as they were. Nothing else is dropped; anything that didn't come back is added again.
+  async function arrangeCategoryFirst() {
+    const el = tagInput();
+    const lead = catTags();
+    if (!el || !lead.length) return toast(t('tplNoInput'));
+    closeTpl();
+    const before = editorChips(el).map(c => c.tag);
+    const leadK = new Set(lead.map(C.key));
+    for (const c of editorChips(el)) { c.remove(); await C.sleep(80); }
+    const want = [...lead, ...before.filter(tg => !leadK.has(C.key(tg)))];
+    for (const tag of want) { commitNative(el, tag); await C.sleep(120); }
+    await C.sleep(200);
+    const now = new Set(readEditorTags(el).map(C.key));
+    const missing = want.filter(tg => !now.has(C.key(tg)));
+    for (const tag of missing) { commitNative(el, tag); await C.sleep(150); }
+    const ins = insertedBy.get(el) || new Set();
+    for (const k of leadK) if (!before.some(tg => C.key(tg) === k)) ins.add(k);
+    insertedBy.set(el, ins);
+    const still = want.filter(tg => !new Set(readEditorTags(el).map(C.key)).has(C.key(tg)));
+    toast(still.length ? t('tplCatFirstMissing', still.join(', ')) : t('tplCatFirstDone', lead.length));
   }
 
   // Tags the panel inserted, per tags input, so a wrong pick can be undone or replaced
@@ -670,11 +705,11 @@
     const todo = tags.filter(tg => !C.statFresh(cache.tagStats[C.key(tg)]));
     if (!todo.length) return toast(t('tplAllFresh'));
     const ctl = tplChecking = { aborted: false };
+    // samples are kept for this page only: the app's statistics are the shared ones
     const failed = await C.ensureTagStats(api, cache, todo, {
-      ctl, save, onProgress: (i, n) => status(t('tplChecking', i, n), () => { ctl.aborted = true; }),
+      ctl, save: async () => {}, onProgress: (i, n) => status(t('tplChecking', i, n), () => { ctl.aborted = true; }),
     });
     tplChecking = null;
-    await save();
     const cold = composeNow()?.rows.filter(row => row.on && row.flag).length || 0;
     status(t('tplCheckDone', todo.length, cold, failed));
     renderPreview();
@@ -730,12 +765,20 @@
       renderPreview();
       return;
     }
+    const catChip = e.target.closest('[data-cat]');
+    if (catChip) {
+      const id = catChip.dataset.cat;
+      tplCatSel.has(id) ? tplCatSel.delete(id) : tplCatSel.add(id);
+      renderTpl();
+      return;
+    }
     const btn = e.target.closest('[data-tp]');
     if (!btn) return;
     const act = btn.dataset.tp;
     if (act === 'close') closeTpl();
     else if (act === 'packs') { closeTpl(); openManager('packs'); }
     else if (act === 'undo') undoInsert();
+    else if (act === 'catFirst') arrangeCategoryFirst();
     else if (act === 'clear') { tpl.picks = []; saveTpl(); renderPickBody(pack); }
     else if (act === 'dropFlagged') {
       for (const r of composeNow().rows) if (r.on && r.flag) tpl.overrides[C.key(r.tag)] = false;
@@ -751,9 +794,9 @@
       const name = prompt(t('tplFavName'), tpl.picks.map(id => pack.items.get(id)?.name).join(' + '));
       if (name) { tpl.favs.push({ pack: pack.id, name, ids: tpl.picks.slice() }); saveTpl(); renderPickBody(pack); }
     } else if (act === 'copy' || act === 'insert') {
-      const res = composeNow();
-      if (!res?.tags.length) return toast(t('tplPickFirst'));
-      if (act === 'copy') { copyText(C.sortTagsFair(res.tags, tplStats(), fairOpts()).join(', ')); toast(t('tplCopied')); } else insertTags(res.tags);
+      const res = composeNow() || { tags: [] };
+      if (!res.tags.length && !tplCatSel.size) return toast(t('tplPickFirst'));
+      if (act === 'copy') { copyText([...new Set([...catTags(), ...C.sortTagsFair(res.tags, tplStats(), fairOpts())])].join(', ')); toast(t('tplCopied')); } else insertTags(res.tags);
     }
   });
   tplEl.addEventListener('change', e => {
@@ -766,7 +809,7 @@
   // A legacy jQuery page. Posts are <a class="brick" id="post_<id>"> tiles whose inline onclick toggles
   // .highlighted; selecting more than 100 makes the page alert(). Its tag removal reads the checked
   // labels' HTML, so those labels must never be edited: decoded names are added beside them instead.
-  // Nothing here edits posts: the page's own buttons do, and bulk edits it lacks are on the manager page.
+  // Nothing here edits posts: the page's own buttons do, and bulk edits it lacks are in Tumblr Studio.
   const ME_MAX = 100;
   const ME_CSS = `
 /* The official popup is a fixed 348x229 box with a background image and absolutely placed parts;
@@ -1083,63 +1126,28 @@
     });
   }
 
-  // ---------- Redo AI on material blogs' posts ----------
-  // Posts of my material blogs get a "Redo AI" button beside Tumblr's own Edit link (a[href="/edit/blog/id"],
-  // shown only on my posts). The service worker runs the AI sort (TTHCore.aiSortPost) and writes the post.
-  const aiBusy = new Set();
-  function bindAiRedo() {
-    for (const edit of document.querySelectorAll('article a[href^="/edit/"]')) {
-      const m = edit.getAttribute('href').match(/^\/edit\/([^/]+)\/(\d+)/);
-      if (!m || roleOf(m[1]) !== 'material' || edit.parentElement.querySelector('.tth-ai-redo')) continue;
-      const blog = m[1], id = m[2];
-      const btn = Object.assign(document.createElement('button'), { type: 'button', className: 'tth-ai-redo', title: t('aiRedoHint') });
-      btn.style.cssText = 'margin-right:8px;padding:2px 8px;border:1px solid currentColor;border-radius:12px;background:none;color:inherit;font:inherit;font-size:13px;cursor:pointer;opacity:.8;white-space:nowrap';
-      btn.textContent = aiBusy.has(id) ? t('aiRedoBusy') : t('aiRedo');
-      btn.disabled = aiBusy.has(id);
-      btn.addEventListener('click', e => { e.preventDefault(); e.stopPropagation(); aiRedo(blog, id, btn); });
-      edit.parentElement.insertBefore(btn, edit);
-    }
-  }
-  async function aiRedo(blog, id, btn) {
-    if (aiBusy.has(id)) return;
-    aiBusy.add(id);
-    // Tumblr may re-render the footer while the AI thinks: update whichever button is there now
-    const show = (text, busy) => {
-      for (const b of document.querySelectorAll('.tth-ai-redo')) {
-        if (b === btn || b.closest('article')?.querySelector(`a[href^="/edit/${blog}/${id}"]`)) { b.textContent = text; b.disabled = busy; }
-      }
-    };
-    show(t('aiRedoBusy'), true);
-    let res;
-    try { res = await chrome.runtime.sendMessage({ type: 'aiRedo', blog, id }); } catch (e) { res = { error: C.errMsg(e) }; }
-    aiBusy.delete(id);
-    if (!res || res.error) {
-      show(t('aiRedo'), false);
-      return status(t('aiRedoFail', res?.error || '?'));
-    }
-    show(t('aiRedoDone', res.tags.length), false);
-    status([t('aiRedoWritten'), res.tags.map(tag => '#' + tag).join(' '), res.note].filter(Boolean).join('\n\n'));
-  }
-
   // ---------- Startup ----------
-  // The manager page and other tabs write the same keys; keep this tab's copy current
+  // A new snapshot from the app (the service worker refreshes it) replaces this tab's copy
   chrome.storage.onChanged.addListener((ch, area) => {
     if (area !== 'local' || ch.writer?.newValue?.startsWith(me + ':')) return;
-    if (ch.cache && !syncing) { Object.assign(cache, C.emptyCache(), ch.cache.newValue || {}); rebuildIndex(); }
-    if (ch.settings) {
-      Object.assign(settings, ch.settings.newValue || {});
-      rebuildIndex();
-      bindAiRedo();
-      Object.assign(tpl, { useBase: settings.useBase ?? true, rules: { ...C.TPL_RULES, ...settings.rules } });
+    if (ch.studio?.newValue) {
+      const fresh = fromStudio(ch.studio.newValue);
+      if (fresh) tplCats = fresh.categories;
+      if (fresh) {
+        Object.assign(cache, C.emptyCache(), fresh.cache);
+        rebuildIndex();
+        Object.assign(tpl, { packs: fresh.packs, useBase: settings.useBase, rules: { ...C.TPL_RULES, ...settings.rules } });
+        parsed.clear();
+      }
     }
-    if (ch.packs) { tpl.packs = ch.packs.newValue || []; parsed.clear(); }
+    if (ch.settings) Object.assign(settings, { lang: ch.settings.newValue?.lang ?? settings.lang });
   });
+  // what the app said about a request made from the context menu
+  chrome.runtime.onMessage?.addListener(msg => { if (msg?.type === 'studioToast') toast(msg.text); });
   resolveReady();
-  new MutationObserver(C.debounce(() => { bindInputs(); bindAiRedo(); }, 300)).observe(document.body, { childList: true, subtree: true });
+  new MutationObserver(C.debounce(() => { bindInputs(); }, 300)).observe(document.body, { childList: true, subtree: true });
   bindInputs();
-  bindAiRedo();
   if (location.pathname.startsWith('/mega-editor')) initMassEditor();
-  if (settings.autoSync && Date.now() - (cache.lastAuto || 0) > AUTO_SYNC_INTERVAL) {
-    setTimeout(() => syncAll(false, true), 5000);
-  }
+  // ask for a fresh snapshot (the service worker only fetches when the app is running and paired)
+  chrome.runtime.sendMessage({ type: 'studioRefresh' }).catch(() => {});
 })();

@@ -1,0 +1,44 @@
+<!doctype html>
+<html lang="zh">
+<head>
+<meta charset="utf-8">
+<meta http-equiv="Content-Security-Policy" content="default-src 'self'; img-src 'self' https: data: blob: file:; media-src 'self' https: blob: file:; style-src 'self' 'unsafe-inline'; script-src 'self'; connect-src 'none'; frame-src 'none'; object-src 'none'">
+<title>Tumblr Studio</title>
+<link rel="stylesheet" href="style.css">
+</head>
+<body>
+<div id="app">
+  <nav id="side">
+    <div class="brand"><span class="logo">t</span><span>Tumblr Studio</span></div>
+    <button class="primary write-btn" data-go="write" data-i18n="newPost"></button>
+    <a data-go="home"><i>⌂</i><span data-i18n="navHome"></span></a>
+    <a data-go="posts"><i>▦</i><span data-i18n="navPosts"></span></a>
+    <a data-go="write"><i>✎</i><span data-i18n="navWrite"></span></a>
+    <a data-go="rules"><i>⏱</i><span data-i18n="navRules"></span></a>
+    <a data-go="followers"><i>☺</i><span data-i18n="navFollowers"></span></a>
+    <a data-go="tags"><i>#</i><span data-i18n="navTags"></span></a>
+    <a data-go="tidy"><i>✓</i><span data-i18n="navTidy"></span></a>
+    <a data-go="material"><i>◫</i><span data-i18n="navMaterial"></span></a>
+    <a data-go="activity"><i>≡</i><span data-i18n="navActivity"></span><b id="jobBadge" class="badge" hidden></b></a>
+    <a data-go="settings"><i>⚙</i><span data-i18n="navSettings"></span></a>
+    <div class="side-foot" id="sideFoot"></div>
+  </nav>
+  <main id="main"></main>
+</div>
+<div id="toasts"></div>
+<script src="i18n.js"></script>
+<script src="ui.js"></script>
+<script src="pages/home.js"></script>
+<script src="pages/posts.js"></script>
+<script src="pages/rules.js"></script>
+<script src="pages/activity.js"></script>
+<script src="pages/settings.js"></script>
+<script src="pages/write.js"></script>
+<script src="pages/followers.js"></script>
+<script src="pages/tags.js"></script>
+<script src="pages/material.js"></script>
+<script src="pages/tidy.js"></script>
+<script src="pages/versions.js"></script>
+<script src="app.js"></script>
+</body>
+</html>

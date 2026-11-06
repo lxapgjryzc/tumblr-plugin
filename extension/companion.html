@@ -1,0 +1,55 @@
+<!doctype html>
+<html>
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="tumblr-studio-companion" content="1">
+<title>Tumblr Tag Helper</title>
+<link rel="stylesheet" href="companion.css">
+</head>
+<body>
+<main>
+  <header><h1 data-i18n="cpTitle"></h1><p class="muted" data-i18n="cpIntro"></p></header>
+
+  <section class="card">
+    <h2 data-i18n="cpConnTitle"></h2>
+    <p id="conn" class="conn"></p>
+    <div class="row">
+      <button id="pairBtn" class="pri" data-act="pair" data-i18n="cpPair"></button>
+      <button id="focusBtn" data-act="focus" data-i18n="cpOpenStudio"></button>
+      <button id="unpairBtn" data-act="unpair" data-i18n="cpUnpair"></button>
+    </div>
+    <p id="snapInfo" class="muted small"></p>
+  </section>
+
+  <section class="card needs-ext">
+    <h2 data-i18n="cpMoveTitle"></h2>
+    <p class="muted" data-i18n="cpMoveHint"></p>
+    <div class="row">
+      <button id="moveBtn" data-act="move" data-i18n="cpMove"></button>
+      <button data-act="export" data-i18n="cpExport"></button>
+    </div>
+    <p id="moveInfo" class="muted small"></p>
+  </section>
+
+  <section class="card needs-ext">
+    <h2 data-i18n="cpBrowseTitle"></h2>
+    <label class="check"><input type="checkbox" id="hideAds"> <span data-i18n="cpHideAds"></span></label>
+    <label class="check"><input type="checkbox" id="hideRecs"> <span data-i18n="cpHideRecs"></span></label>
+    <label class="check"><input type="checkbox" id="hideAiArt"> <span data-i18n="cpHideAiArt"></span></label>
+    <label class="field"><span data-i18n="cpLang"></span>
+      <select id="lang"><option value="" data-i18n="cpLangAuto"></option><option value="en">English</option><option value="zh">中文</option></select>
+    </label>
+  </section>
+
+  <section class="card">
+    <h2 data-i18n="cpWhereTitle"></h2>
+    <p class="muted" data-i18n="cpWhereHint"></p>
+    <table id="where" class="table"></table>
+  </section>
+</main>
+<script src="core.js"></script>
+<script src="companion-ops.js"></script>
+<script src="companion.js"></script>
+</body>
+</html>

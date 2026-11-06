@@ -1,55 +1,36 @@
 # Tumblr Tag Helper
 
-A Chrome extension for managing Tumblr tags:
+The browser companion of **Tumblr Studio**, the desktop app in [`desktop/`](desktop/). The app is the product: posts, publishing, categories and template packs, the tag library, materials (collecting likes), AI and every background job live there ([ownership](docs/DESKTOP_PRODUCT_SPEC.md#43-companion-responsibilities)). This extension keeps only what works best inside tumblr.com pages, using the app's data, and never writes to your posts itself.
 
-- **On tumblr.com**: tag autocomplete while you post and while you search a blog, tag templates, and upgrades to Tumblr's own mass post editor.
-- **Manager page**: a full-page manager for your posts and tags, opened from the toolbar icon.
+[REBLOG_POLICY.md](docs/REBLOG_POLICY.md) applies everywhere: a reblog keeps the content and tags it was created with; a changed source is delivered as a new reblog by the app.
 
-Both share one tag library, built from the tags of published posts on your main blog and all your side blogs, and the same packs and settings.
+Until 0.10 the extension had its own manager page and background passes (reblog sync, show-only-recent, collecting). 0.11.0 removed them; their data moves into the app once (see below).
 
 ## Install
 
-Until it is on the Chrome Web Store, install it by hand:
-
 1. Download this repository and unzip it.
 2. Open `chrome://extensions`, turn on **Developer mode**, click **Load unpacked** and choose the `extension` folder.
-3. Log in to Tumblr in the same browser, then click the extension's toolbar icon.
+3. Start Tumblr Studio, log in to Tumblr in the same browser, and click the extension's toolbar icon. On the companion page, connect to the app and allow the connection in the app's dialog.
+4. If you used an older version, click "Send to Tumblr Studio" there once (or "Download as a file" and import it in the app): blog roles, packs, tag statistics, rules, "show only recent", collecting settings and material records go over; the AI key is not sent, and collecting arrives switched off so you can check it in the app first.
+
+The companion page also lists where each former manager feature lives now. Not in the app yet: tag cleanup, pack upkeep of old posts and the AI-image check of the collection.
 
 ## On tumblr.com
 
-- **Post editor**: typing in the `#tags` field suggests your own tags, ranked by how often you use them and by which tags you usually use together.
-- **Tag templates**: the ▦ button at the right end of the `#tags` field opens a panel built from a template pack you install (see below). The left side lists what you can pick and never moves; the right side shows what you picked, the relations between them and the tags that will go in. The panel opens beside the tags field without covering it and keeps its size while open. After an insert, fix a wrong pick and press "Update tags": the tags the panel inserted last time are replaced by the new list, in order, and tags you typed yourself stay. "Undo insert" takes out everything the panel inserted. (This is remembered until the editor is closed.)
-  - Pick characters, works and formats, search them by name, alias or tag, or pick a preset that selects a whole cast at once.
-  - When everyone in a ship or group is picked, the panel offers it, one row per set of people, labelled with its type (for example romance, friendship or family). Tick any that apply, or "neither".
-  - The preview lists the tags most popular first, the order they're inserted in. The total is always shown, with a warning above 20 (blog search reads only the first 20 tags) and above 30 (sitewide search reads only the first 30). There is no hard limit.
-  - **Nothing is dropped for being unpopular.** Weak tags are flagged, with the reason on hover: no recent posts and no followers, the tag's search mostly shows other tags, or its popularity is in the bottom 20% of the list (adjustable). A tag that is the only one carrying some search word (often a supporting character's only tag) is never flagged as cold, so "Turn off flagged" can't take anyone off the post. Click any tag to turn it on or off. The same rules decide what the pack review and the manager's cleanup call weak.
-  - **Tags mostly used by another fandom start off**, since they would bring the wrong audience. A tag counts as another fandom's when few of its recent posts carry any of the pack's base tags.
-  - With 4 or more characters picked, each one keeps its 2 most popular spellings (both adjustable). The others are listed and can be turned back on.
-  - Save combos you use often. "Check activity" samples the tags that have no recent popularity data.
-- **Template pack upkeep** ("Suggest changes" under "Packs & settings"): samples every tag in the pack, then lists for each character and relation:
-  - tags to remove: used mostly by another fandom (ticked by default), no recent posts and no followers, fuzzy search, or relatively cold (by the rules under "Packs & settings"; a spelling that alone carries a search word is never suggested for being cold);
-  - tags to add: tags often used together with it, after checking that they belong to the same fandom.
-  Ticked changes are written into the installed pack, which is then marked as edited. "Copy pack JSON" copies it so you can publish it. Updating an edited pack from its URL asks first.
+- **Post editor**: typing in the `#tags` field suggests your own tags, ranked by how often you use them and which tags you usually use together (from the app's tag library).
+- **Tag templates**: the ▦ button at the right end of the `#tags` field opens a panel built from the app's template packs. Pick characters, works and formats (or a preset), tick the relations it offers, and insert. The preview lists the tags in the order they go in, with warnings above 20 (blog search) and 30 (sitewide search); weak tags are flagged, never dropped, and tags mostly used by another fandom start off. After an insert, "Update tags" replaces what the panel inserted last time and "Undo insert" takes it out. Saved combos are kept in the browser. "Manage ↗" opens the packs in the app.
 - **Blog search**: typing in a blog's search box suggests that blog's tags, and picking one opens `/blogname/tagged/tag`.
-- **Ad hiding**: blocks the ad networks and hides the ad cells in timelines, Blaze-promoted posts, the sponsored box in the right rail, the "go ad-free with Premium" box above it and the "Get Premium" button in the left menu. "Hide recommendations" (off by default) also hides Radar, recommended blogs and the "check out these" carousels. Both are in the manager's Settings.
-- **Official mass editor** (`/mega-editor/published/<blog>`): also "Tag templates", which edits the selected posts with the template: the panel starts with the characters and relations the posts already carry ticked (those only some posts carry are shown dashed and left alone unless clicked); tick someone to add them to every selected post, untick to take their tags (and old spellings) off every selected post. Posts whose tags don't change keep their order; and "Tidy tags by packs", which first lists what it would change on the selected posts (old spellings your packs have retired, missing search spellings, the same as the manager's Packs page) and applies only the changes you leave ticked.
-  Plus:
-  - **Make public**: a new button next to "Make private".
-  - **Sort tags by popularity**: reorders each selected post's tags in template order (see "Tag order" below): the most popular tag of each subject first, then the rest by popularity.
-  - **Remove content labels**: added to the content label popup, which officially can only add labels.
-  - **Add tags**: the box suggests tags from your library, related tags first.
-  - **Edit tags**: the popup is wider and has a filter box and select all / none. Each tag shows how many of the selected posts carry it (for example `3/5`), and ⊕ adds the tag to the selected posts that lack it. URL-encoded tags such as `yuuto%20%28arc%20v%29` are also shown decoded.
-  - **Tiles**:
-    - drag across tiles to select or deselect them
-    - Shift+click to select a range
-    - Ctrl+A to select all
-    - all three stop at the editor's limit of 100 posts
-    - hovering a tile shows its tag names
-    - private posts get a badge
+- **Open / Collect with Tumblr Studio**: right-click a post link, or anywhere on a post's page, to open its work in the app, or to have the app collect it onto your material blog. The app reads the post itself and shows the job in Activity. With the app closed, nothing is done or queued; you're told to start it.
+- **Hiding**: blocks the ad networks and hides ad cells, Blaze posts and Premium prompts; optionally hides recommendations (Radar, recommended blogs, "check out these") and posts their posters tagged as AI-made. These are browser preferences on the companion page.
+- **Official mass editor** (`/mega-editor/published/<blog>`), reading aids only (the page's own buttons do the edits):
+  - the "Add tags" box suggests tags from your library;
+  - the "Edit tags" popup is wider, with a filter box, select all / none, per-tag counts on the selection (`3/5`) and decoded names for URL-encoded tags;
+  - drag across tiles, Shift+click a range, Ctrl+A (all stop at the editor's limit of 100);
+  - hovering a tile shows its tags; private posts get a badge; multi-image posts show a mosaic; reblogs of your own posts are greyed out.
 
 ### Template packs
 
-A template pack is a JSON file. Install it from a URL, a file or pasted text under "Packs & settings" in the template panel, or on the manager's Packs page. A pack installed from a URL can be updated from there later.
+A template pack is a JSON file. Packs are installed, reviewed and kept up to date in Tumblr Studio (Categories & templates); the template panel here uses the app's copies.
 
 Maintained packs live in [`packs/`](packs/). Install one from its raw URL, for example `https://raw.githubusercontent.com/lxapgjryzc/tumblr-plugin/main/packs/ygo-arcv.json`.
 
@@ -97,38 +78,10 @@ Maintained packs live in [`packs/`](packs/). Install one from its raw URL, for e
 - Older packs that use only `sections` (with `rel` on relation items and a `relations` object for the type labels) still load.
 - **Packs are data only.** They can't run code.
 
-## Manager page
-
-The manager page has six sections:
-
-- **Posts**:
-  - Browse published posts, drafts or the queue of any of your blogs as a grid, optionally filtered by tag.
-  - Select posts by clicking, dragging, Shift+click or Ctrl+A.
-  - **Edit by template**: the side panel shows the characters and relations of a pack on the selected posts (solid: on all, dashed: on some, with counts). Click to take someone off all of them (or, if dashed, to put them on all), add someone from the search box, and apply: their template tags are added to or taken off every selected post (old spellings too), and the changed posts are put in template order. It uses the template options from Settings.
-  - **Tags**: one card lists the tags on the selection with counts. Click tags to mark them for removal, or ⊕ to add a tag to the selected posts that lack it. Below it, type new tags to add to every selected post.
-  - The side panel also makes posts public or private, adds or removes community labels, and turns Tumblr's reblog control on or off. With reblogs off, other accounts can't reblog the post; your own blogs still reblog it to each other, and your reblogs get the same setting. Tumblr only offers everyone or no one, so there is no allow list for other accounts. The "Reblogs turned off" filter shows such posts. The official mass editor gets the same two buttons.
-  - **Sort tags by popularity**: reorders each selected post's tags in template order: the most popular tag of each subject first (the work, then characters, then relations, then the rest), then the rest by popularity. Tumblr's search is said to use only a post's first tags, so this keeps every subject within reach. Popularity compares, in order: how many people follow the tag (read from the tag page), the typical note count of its recent posts, and how many new posts it gets per day. The numbers are cached for 7 days and shared with the cleanup. Only the order changes; no tag is added, removed or rewritten.
-- **Cleanup**: finds weak tags and removes only the ones you tick. Tags your installed packs know (their characters' and relations' tags, old spellings, base tags) are never listed: the Packs page looks after them, so the cleanup can't remove a tag the templates would put back. A tag is listed if it:
-  - is mostly used by another fandom: it is on your posts of a pack's fandom, but few of its recent posts carry that pack's base tags;
-  - has no recent posts and no followers;
-  - returns mostly other tags when you search for it, because Tumblr's tag search is fuzzy, so a search for `yuri (arc v)` also returns posts tagged `yuri` or `arc v`;
-  - is relatively cold: its popularity is in the bottom N% of all your tags (by followers, then typical notes, then posts per day);
-  - or gets few notes on your posts.
-  The cold and search thresholds are the shared rules in Settings, the same ones the template flags use.
-- **Tag library**: sync, search, hide tags from suggestions, add tags manually.
-- **Packs**: install template packs (URL, file or pasted JSON; URL installs can be updated), and bring old posts in line with them. A scan lists, per change, the old spellings a pack has retired on your synced posts (only posts that carry the pack's base tags), how many posts each touches and a few examples. Ticked changes replace the old spelling in place, or remove it when the post already has the current spelling, and add to a character or relation already on a post the spellings people search for that the post lacks ("yuuto arc v" next to "yuto arc v"), right after its own tags. Tags the pack doesn't know never change. The packs also tell the tag sorting whose tag is whose.
-- **Reblogs** (between my blogs): reblogs of your own posts on your other blogs are marked "Synced" and can't be selected; every edit the extension makes to an original goes to its reblogs too (tags, visibility, community label, reblog control). Every 10 minutes, while the browser is open and logged in, the extension also works unattended on the newest posts of each blog: a post published on a side blog (on tumblr.com or in the app) after this was turned on is reblogged to your main blog with the same tags and label, and a reblog that drifted from its original is brought back in line. What it did is listed on the same page. "Check reblogs" lists reblogs that drifted from their original (fix them in one go) and side-blog posts your main blog hasn't reblogged yet (reblog them now or into the queue). The tag library counts a post and its reblogs once.
-- **Collection** (a blog for reference images): pick one of your side blogs (it can be password-protected) and the tags its reblogs get. "Check my likes" lists the posts you've liked that aren't in the collection yet (matched by their original post, so a different reblog of the same post counts as collected); tick and reblog them in one go, now or into its queue. With the automatic option on, likes made after it was turned on are reblogged every 10 minutes. Your own posts, posts with reblogs turned off and (optionally) posts without images are left out. "Today's quick study" shows a few random images from the collection, one per post, the same all day until you ask for another set. The collection blog is left out of the tag library and of the reblogs between your blogs.
-  - **Sorting the collection**: reference categories for drawing — palette, light and shadow, material, composition, subject, technique — as plain English tags (the page shows them in your language). Select posts and click a category to add it, or click again to take it off. Palette tags (warm or cool, saturation, light or dark, contrast, colour scheme) are worked out from the image, also when a like is reblogged; the others are picked by hand. Today's images can be drawn from one category or tag.
-  - **AI-made images**: a liked post whose original poster tagged it as AI-made ("ai art", "midjourney", "stable diffusion" and the like; "not ai" tags count against) is not collected and its like is taken back. "Check for AI images" reads each collected post's original tags, the tags others added when reblogging it and its replies; it is marked `suspected ai` when two or more blogs say so and nobody says otherwise, or when the AI model is sure. "Delete reblogs and unlike" removes the selected reblogs after a confirmation. A setting hides posts tagged as AI-made while you browse Tumblr.
-  - **AI sorting** (optional): in Settings, enter an OpenAI-compatible API address, a model that accepts images and your own API key (kept only in this browser). "AI sort" sends each selected post's image to that service and suggests tags from the categories above, never others; its tags are written straight away (or, with that switch off, after you untick what doesn't fit), the palette is worked out alongside for free, a short note on what it saw and why the tags fit is written into the post (🤖 …, replaced when it looks again; a switch turns this off), and every post it looked at also gets the tag `ai sorted`, so "looked at by the AI" shows in any browser. Chrome asks once for access to that address. The service charges per image.
-- **Settings**: language, delay between edits, auto-sync, hiding ads on tumblr.com, and (off by default) hiding Tumblr's own recommendations: Radar, recommended blogs and the "check out these" carousels. The extension blocks the ad networks themselves (only for requests made by tumblr.com pages), so ads are never loaded, and hides the empty slots. Also here: the weak-tag rules (cold share, search match) used by the template panel, the template card and the cleanup, and the template options (base tags, spellings kept per character). The template panel's "Packs & settings" changes the same values.
-
 ## Notes
 
 - The extension uses the Tumblr web client's internal API with your logged-in session. It is undocumented and may break when Tumblr changes it.
-- Bulk edits run one post at a time and always ask for confirmation first. They only touch the tags you add or remove; every other tag stays exactly as stored. Posts made with the legacy editor are skipped so their formatting is not damaged.
-- Community labels are set through undocumented fields, so every change is re-read and reported as failed if it did not take effect.
+- The extension makes no changes to your posts itself. Every write (bulk edits, reblogs, collecting, visibility) is a job in Tumblr Studio.
 - The interface is in English and Chinese and follows your browser language. Other languages fall back to English, and translations are welcome as pull requests: add a `STRINGS` entry in `src/core.js`.
 
 ## Development
@@ -139,9 +92,9 @@ npm test
 ```
 
 - `src/core.js` holds the shared logic.
-- `extension/` holds the extension: `content.js` (tumblr.com pages), `mega-main.js` (the mass editor's jQuery autocomplete), `noads.js`, `manager.*` and `background.js`.
+- `extension/` holds the extension: `content.js` (tumblr.com pages), `mega-main.js` (the mass editor's jQuery autocomplete), `noads.js`, `companion.*` (the companion page) and `background.js` (pairing, snapshot, requests to the app).
 - `node build.js` (also run by `npm test`) copies `src/core.js` to `extension/core.js` and writes the version from `package.json` into `extension/manifest.json`.
-- `test/core.test.js` unit-tests the pure helpers; `test/` also holds jsdom smoke tests against a fake Tumblr API: one for tumblr.com pages (a copy of the official mass editor and the post editor), one for the manager page.
+- `test/core.test.js` unit-tests the pure helpers; `test/` also holds jsdom smoke tests against a fake Tumblr API: one for tumblr.com pages (a copy of the official mass editor and the post editor), one for the companion page and its connection to a fake app.
 
 ## License
 

@@ -1,0 +1,24 @@
+:root { --bg: #f6f7fb; --panel: #fff; --fg: #1d2433; --muted: #6b7385; --line: #dde1ea; --accent: #3d5afe; --ok: #188a4a; --warn: #b26a00; --bad: #c62828; color-scheme: light; }
+@media (prefers-color-scheme: dark) { :root { --bg: #12151c; --panel: #1b1f29; --fg: #e8ebf2; --muted: #9aa3b5; --line: #2c3240; --accent: #7c93ff; --ok: #4cc38a; --warn: #f0b04a; --bad: #ff7a7a; color-scheme: dark; } }
+* { box-sizing: border-box; }
+body { margin: 0; background: var(--bg); color: var(--fg); font: 14px/1.5 system-ui, "Segoe UI", "Microsoft YaHei", sans-serif; }
+main { max-width: 760px; margin: 0 auto; padding: 24px 16px 48px; }
+h1 { font-size: 22px; margin: 0 0 4px; }
+h2 { font-size: 16px; margin: 0 0 8px; }
+.card { background: var(--panel); border: 1px solid var(--line); border-radius: 12px; padding: 16px 18px; margin-top: 14px; }
+.muted { color: var(--muted); }
+.small { font-size: 12px; }
+.row { display: flex; flex-wrap: wrap; gap: 8px; margin: 8px 0; }
+button, select { font: inherit; color: var(--fg); background: var(--panel); border: 1px solid var(--line); border-radius: 8px; padding: 6px 12px; cursor: pointer; }
+button.pri { background: var(--accent); border-color: var(--accent); color: #fff; }
+button:disabled { opacity: .5; cursor: default; }
+.check { display: flex; gap: 8px; align-items: center; margin: 6px 0; }
+.field { display: flex; gap: 10px; align-items: center; margin-top: 8px; }
+.conn { font-weight: 600; }
+.conn.ok { color: var(--ok); } .conn.warn { color: var(--warn); } .conn.off { color: var(--muted); }
+.table { width: 100%; border-collapse: collapse; }
+.table td { padding: 6px 4px; border-top: 1px solid var(--line); vertical-align: top; }
+.badge { font-size: 12px; border-radius: 10px; padding: 1px 8px; border: 1px solid var(--line); white-space: nowrap; }
+.badge.wStudio { color: var(--ok); border-color: var(--ok); } .badge.wPending { color: var(--warn); border-color: var(--warn); }
+.badge.wRetired { color: var(--muted); } .badge.wBrowser { color: var(--accent); border-color: var(--accent); }
+.banner { background: var(--panel); border: 1px solid var(--warn); border-radius: 8px; padding: 8px 12px; }

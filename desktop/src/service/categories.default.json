@@ -1,0 +1,13 @@
+{
+  "_comment": "Initial general-category configuration (design section 6.2). Data only: every entry is editable in the app, and the code never names a course or category. key identifies a group for the interface's default name; name/tag are the category's display name and the actual Tumblr tag.",
+  "groups": [
+    { "key": "subject", "categories": [{ "name": "原创", "tag": "original" }, { "name": "同人", "tag": "fanart" }] },
+    { "key": "role", "categories": [{ "name": "习作", "tag": "习作" }, { "name": "正式作品", "tag": "正式作品" }] },
+    { "key": "course", "categories": [
+      { "name": "猹鱼日绘", "tag": "猹鱼日绘" }, { "name": "猹鱼速写", "tag": "猹鱼速写" },
+      { "name": "tenten人体系统课", "tag": "tenten人体系统课" }, { "name": "文艺复星球中级班", "tag": "文艺复星球中级班" }
+    ] },
+    { "key": "record", "categories": [{ "name": "过程记录", "tag": "过程记录" }, { "name": "学习笔记", "tag": "学习笔记" }, { "name": "日记", "tag": "diary" }] },
+    { "key": "form", "categories": [{ "name": "Photo", "tag": "photo" }, { "name": "Writing", "tag": "writing" }] }
+  ]
+}

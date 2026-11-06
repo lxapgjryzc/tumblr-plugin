@@ -247,29 +247,20 @@ function fakeJQuery(w) {
   check(onShare.text.includes('#yuuto (arc v)') && !onShare.text.includes('#yuuto study'), 'roles: posting to a sharing blog suggests the sharing library: ' + onShare.text);
   check(onMat.e.errors.length === 0 && onShare.e.errors.length === 0, 'no runtime errors with blog roles');
 
-  // ===== Redo AI: only on my material blogs' posts; the service worker does the work =====
-  const feed = setupWindow('https://www.tumblr.com/dashboard', '<!doctype html><body><article id="pm"><footer><span><a href="/edit/refs/77">Edit</a></span></footer></article>'
-    + '<article id="ps"><footer><span><a href="/edit/me/5">Edit</a></span></footer></article><article id="po"><footer><a href="/reblog/other/9/k">Reblog</a></footer></article></body>', makeServer(), roleStore());
+  // ===== The companion: no AI executor and no writes from the page; the app's snapshot feeds suggestions =====
+  const feed = setupWindow('https://www.tumblr.com/dashboard', '<!doctype html><body><article id="pm"><footer><span><a href="/edit/refs/77">Edit</a></span></footer></article></body>', makeServer(), {
+    settings: { lang: 'en' },
+    cache: { blogList: [{ uuid: 't:1', name: 'me', primary: true }], blogs: { 't:1': { name: 'me', posts: { 1: [['old local tag'], now, 'published', 0] } } }, hidden: [], custom: [], tagStats: {} },
+    studio: { version: 'v1', at: Date.now(), packs: [], rules: null, useBase: true, roles: { 't:1': 'share' },
+      cache: { blogList: [{ uuid: 't:1', name: 'me', primary: true }], blogs: { 't:1': { name: 'me', posts: { 1: [['from studio', 'ygo'], now, 'published', 2] } } }, hidden: [], custom: [], tagStats: {} } },
+  });
   feed.w.eval(src);
   await sleep(50);
-  const fd = feed.w.document;
-  check(!!fd.querySelector('#pm .tth-ai-redo') && !fd.querySelector('#ps .tth-ai-redo') && !fd.querySelector('#po .tth-ai-redo'), 'Redo AI: shown on the material blog\'s post only');
-  let release;
-  feed.w.aiReply = () => new Promise(r => { release = () => r({ tags: ['backlight', 'ai sorted'], note: 'warm light from behind' }); });
-  const redo = fd.querySelector('#pm .tth-ai-redo');
-  redo.click();
-  await sleep(10);
-  check(redo.disabled && redo.textContent.includes('Thinking'), 'Redo AI: busy while the AI thinks');
-  check(JSON.stringify(feed.w.sent.find(m => m.type === 'aiRedo')) === JSON.stringify({ type: 'aiRedo', blog: 'refs', id: '77' }), 'Redo AI: asks the service worker with blog and id only');
-  release();
-  await sleep(20);
-  const fstatus = fd.getElementById('tth-host').shadowRoot.querySelector('.status');
-  check(!redo.disabled && !fstatus.hidden && fstatus.textContent.includes('#backlight') && fstatus.textContent.includes('warm light'), 'Redo AI: shows the tags and note written: ' + fstatus.textContent);
-  feed.w.aiReply = async () => ({ error: 'no permission' });
-  redo.click();
-  await sleep(20);
-  check(fstatus.textContent.includes('no permission') && !redo.disabled, 'Redo AI: an error is shown and the button works again');
-  check(feed.errors.length === 0, 'no runtime errors with Redo AI');
+  check(!feed.w.document.querySelector('.tth-ai-redo'), 'companion: no Redo AI button (the AI runs in the app, before collecting)');
+  check(feed.w.sent.some(m => m.type === 'studioRefresh'), 'companion: asks the service worker for a fresh snapshot');
+  check(feed.errors.length === 0, 'no runtime errors in the companion content script');
+  // the page's request refuses writes even if something tried one
+  check(!makeServer().puts.length, 'companion: nothing written');
 
   // ===== Auto language on the legacy mass editor: <html lang> says "en", the page's own buttons are Chinese =====
   const autoGm = preset();
@@ -389,6 +380,54 @@ function fakeJQuery(w) {
   await sleep(800);
   check(chipTags().join() === 'by hand', 'templates: undo removes everything the panel inserted: ' + chipTags());
 
+  // ===== Categories from the app's snapshot: chosen ones lead; "Arrange category first" keeps every other tag =====
+  {
+    const cg = { settings: { lang: 'en' }, templates: {},
+      studio: { version: 'v1', at: Date.now(), packs: [{ raw: PACK, source: 'app' }], rules: null, useBase: true, roles: { 't:1': 'share' },
+        categories: [{ id: 1, name: 'Fan art', tag: 'fanart', group: 1 }, { id: 2, name: 'Photo', tag: 'photo', group: 1 }],
+        cache: { blogList: [{ uuid: 't:1', name: 'me', primary: true }], blogs: { 't:1': { name: 'me', posts: {} } }, hidden: [], custom: [], tagStats: {} } } };
+    const ce = setupWindow('https://www.tumblr.com/new/text', '<!doctype html><body><div><div><div><input placeholder="#add tags"></div></div></div></body>', makeServer(), cg);
+    const cin = ce.w.document.querySelector('input');
+    cin.getBoundingClientRect = () => ({ left: 100, right: 500, top: 600, bottom: 630, width: 400, height: 30 });
+    const cCommitted = [];
+    cin.addEventListener('keydown', e => {
+      if (e.key !== 'Enter') return;
+      cCommitted.push(cin.value);
+      const chip = ce.w.document.createElement('span');
+      chip.setAttribute('role', 'button');
+      chip.innerHTML = '<span><span role="textbox" contenteditable="true"></span><button aria-label="Remove tag"></button></span>';
+      chip.querySelector('[role="textbox"]').textContent = cin.value;
+      chip.querySelector('button').addEventListener('click', () => chip.remove());
+      cin.before(chip);
+      cin.value = '';
+    });
+    const cChips = () => [...ce.w.document.querySelectorAll('[role="button"] [role="textbox"]')].map(n => n.textContent);
+    for (const v of ['typed one', 'typed two']) { cin.value = v; cin.dispatchEvent(new ce.w.KeyboardEvent('keydown', { key: 'Enter', bubbles: true })); }
+    ce.w.eval(src);
+    await sleep(600);
+    const croot = ce.w.document.getElementById('tth-host').shadowRoot;
+    croot.querySelector('.tp-btn').click();
+    const cp = croot.querySelector('.tp');
+    check(cp.querySelectorAll('.tp-cats [data-cat]').length === 2, 'categories: the app’s categories are offered in the panel');
+    check(!cp.querySelector('[data-tp="catFirst"]'), 'categories: "Arrange category first" only appears once a category is chosen');
+    cp.querySelector('.tp-cats [data-cat="1"]').click();
+    cp.querySelector('[data-tp="catFirst"]').click();
+    await sleep(1500);
+    check(cChips().join() === 'fanart,typed one,typed two', 'categories: arrange first puts the category ahead and keeps the typed tags in order: ' + cChips());
+    croot.querySelector('.tp-btn').click();
+    cp.querySelector('.tp-cats [data-cat="2"]').click();
+    cp.querySelector('.tp-body [data-item="b"]').click();
+    cCommitted.length = 0;
+    cp.querySelector('[data-tp="insert"]').click();
+    await sleep(1200);
+    check(cCommitted[0] === 'photo' && cCommitted.includes('bob x') && !cCommitted.includes('fanart'), 'categories: an insert puts the chosen categories first, then the template; nothing doubled: ' + cCommitted);
+    croot.querySelector('.tp-btn').click();
+    cp.querySelector('[data-tp="undo"]').click();
+    await sleep(1000);
+    check(cChips().includes('typed one') && cChips().includes('typed two') && !cChips().includes('photo') && !cChips().includes('bob x'), 'categories: undo takes out what the panel put in, never the typed tags: ' + cChips());
+    check(ce.errors.length === 0, 'no runtime errors with categories' + (ce.errors.length ? ': ' + ce.errors.map(e => e.stack || e).join(' | ') : ''));
+  }
+
   // presets, a marker-only relation, saved combos, search
   tbtn.click();
   panel.querySelector('[data-tp="clear"]').click();
@@ -407,9 +446,9 @@ function fakeJQuery(w) {
   check(!!chipOf('ab') && !chipOf('c'), 'templates: search also finds relations by kw');
   q.value = ''; q.dispatchEvent(new te.w.Event('input'));
 
-  // packs are managed on the manager page: the panel's link opens it there
+  // packs are managed in Tumblr Studio: the panel's link asks the app to come forward
   panel.querySelector('[data-tp="packs"]').click();
-  check(te.w.sent.some(m => m.type === 'openManager' && m.page === 'packs') && panel.hidden, 'templates: "Manage" opens the manager on Packs');
+  check(te.w.sent.some(m => m.type === 'openStudio' && m.page === 'packs') && panel.hidden, 'templates: "Manage" opens Tumblr Studio');
 
   // ===== Offtopic tags in the panel (the review itself lives on the manager's Packs page) =====
   // Every tag sampled and fresh, so nothing is refetched: carol (y) is mostly another fandom's,

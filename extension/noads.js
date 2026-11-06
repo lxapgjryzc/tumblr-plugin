@@ -1,5 +1,5 @@
 // Content script on tumblr.com: hides ads (and, if asked, Tumblr's recommendations and posts tagged as
-// AI-made) as set in the manager's settings; changes apply live
+// AI-made) as set on the companion page (browser-local preferences); changes apply live
 (() => {
   'use strict';
   const C = TTHCore;

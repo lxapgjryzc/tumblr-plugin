@@ -158,10 +158,8 @@ check(!C.suggestTagChanges(['x'], { x: { match: 100, sample: 10, co: [['x (y)', 
   const d = C.reblogDiffs(cache);
   check(d.length === 1 && d[0].copy.blog === 't:s' && d[0].copy.id === '9' && d[0].diffs.join() === 'tags,state,label', 'reblogDiffs finds tags, visibility and label differences: ' + JSON.stringify(d));
   check(C.isCopyOf({ trail: [{ blog: { name: 'Main' }, post: { id: '5' } }] }, new Set(['main'])), 'isCopyOf recognises a reblog of my own blog');
-  const m = C.mutations.copyFrom({ tags: ['a', 'b'], state: 'published', label: { has: true, categories: ['violence'] } });
-  const n = m({ tags: ['a'], state: 'private', label: { has: false, categories: [] } }, { state: 'private' });
-  check(eq(n.tags, ['a', 'b']) && n.state === 'published' && n.label.has, 'copyFrom copies tags, visibility and label');
-  check(m({ tags: [], state: 'draft', label: { has: false, categories: [] } }, { state: 'draft' }).state === 'draft', 'copyFrom leaves a draft copy a draft');
+  check(C.mutations.copyFrom === undefined && C.syncCopies === undefined, 'there is no copy repair: reblogs are frozen snapshots (R02)');
+  check(eq([...C.snapshotKeys(cache)].sort(), ['t:m:6', 't:s:9']), 'snapshotKeys lists every reblog, mine or not');
 }
 autoTest = async () => {
   // autoMaintain: reblog a new side-blog post to main, leave older ones, fix a drifted reblog; never retry a POST
@@ -183,17 +181,32 @@ autoTest = async () => {
     return { posts: JSON.parse(JSON.stringify(db[blog])) };
   };
   const done = await C.autoMaintain(api, k => k, now - 3600);
-  check(eq(done.map(x => x.type + ':' + x.blog + '/' + x.id), ['reblog:side/10', 'fix:main/20']), 'autoMaintain reblogs only the new side post and fixes the drifted reblog: ' + JSON.stringify(done));
+  check(eq(done.map(x => x.type + ':' + x.blog + '/' + x.id), ['reblog:side/10']), 'autoMaintain reblogs only the new side post and leaves the older reblog with other tags alone: ' + JSON.stringify(done));
   const body = JSON.parse(calls.find(c => c.startsWith('BODY ')).slice(5));
   check(body.parent_tumblelog_uuid === 't:s' && body.parent_post_id === '10' && body.reblog_key === 'k10' && body.state === 'published' && body.tags === 'arc v,new', 'the reblog carries the original tags: ' + JSON.stringify(body));
-  check(calls.some(c => c === 'PUT t:m/20 arc v,yuto arc v'), 'the drifted reblog gets its original tags');
-  // a failing reblog is reported and the pass goes on to fix the drifted reblog
+  check(!calls.some(c => c.startsWith('PUT')), 'no existing reblog is edited (R02)');
+  // the main blog's first page doesn't reach back to a side post reblogged days ago: main is read further back
+  // (before=) instead of reblogging it again
+  const paged = pageOf => async (path, opts = {}) => {
+    if (opts.method === 'POST') { calls.push('POST'); return { id_string: '99' }; }
+    if (path.startsWith('/v2/user/info')) return api(path, opts);
+    const blog = decodeURIComponent(path.match(/^\/v2\/blog\/([^/?]+)/)[1]);
+    const before = +(path.match(/[?&]before=(\d+)/) || [])[1] || Infinity;
+    const all = pageOf[blog].filter(p => p.timestamp < before);
+    return { posts: JSON.parse(JSON.stringify(all.slice(0, 2))) };
+  };
+  const aged = { 't:s': [mk('31', now - 100, ['a']), mk('30', now - 200, ['a'])],
+    't:m': [mk('42', now - 10, ['x']), mk('41', now - 20, ['x']), mk('40', now - 150, ['a'], { trail: [{ blog: { name: 'side' }, post: { id: '30' } }] })] };
+  calls.length = 0;
+  const back = await C.autoMaintain(paged(aged), k => k, now - 3600);
+  check(eq(back.filter(x => x.type === 'reblog').map(x => x.id), ['31']), 'a side post already reblogged further down main is not reblogged again: ' + JSON.stringify(back));
+  // a failing reblog is reported
   const postFails = async (path, opts = {}) => {
     if (opts.method === 'POST') throw Object.assign(new Error('Posting failed'), { status: 500 });
     return api(path, opts);
   };
   const partly = await C.autoMaintain(postFails, k => k, now - 3600);
-  check(eq(partly.map(x => x.type + ':' + x.blog + '/' + x.id), ['fail:side/10', 'fix:main/20']) && partly[0].error === 'Posting failed',
+  check(eq(partly.map(x => x.type + ':' + x.blog + '/' + x.id), ['fail:side/10']) && partly[0].error === 'Posting failed',
     'autoMaintain reports a failed reblog and carries on: ' + JSON.stringify(partly));
   // blog roles: material blogs and blogs with no role stay out of the reblog sync; a blog that became sharing
   // later has only its newer posts reblogged
@@ -254,8 +267,6 @@ autoTest = async () => {
   await C.reblogPost(strict, 't:m', 't:s', '1', 'published');
   check(eq(log, ['POST refused', 'PUT 1 everyone', 'POST noone while everyone', 'PUT 1 noone']) && store[1].interactability_reblog === 'noone',
     'if Tumblr refuses, reblogPost opens the original just for the reblog and closes it again: ' + JSON.stringify(log));
-  const cp = C.mutations.copyFrom({ tags: [], state: 'published', label: { has: false, categories: [] }, reblog: 'noone' })({ tags: [], state: 'published', label: { has: false, categories: [] }, reblog: 'everyone' }, { state: 'published' });
-  check(cp.reblog === 'noone', 'copyFrom copies the reblog control');
   const dc = { blogs: { 't:m': { name: 'main', posts: { 5: [['a'], 1, 'published', 0, null, false, 'noone'] } }, 't:s': { name: 'side', posts: { 9: [['a'], 1, 'published', 0, 'main/5', false, 'everyone'] } } } };
   check(C.reblogDiffs(dc)[0]?.diffs.join() === 'reblog', 'reblogDiffs finds a reblog whose reblog control differs');
 
@@ -390,11 +401,23 @@ autoTest = async () => {
   check(C.parseAiNotes('{"light": [], "notes": " 逆光：太阳在花后面。 "}') === '逆光：太阳在花后面。' && C.parseAiNotes('nope') === '', 'parseAiNotes');
   check(C.aiPrompt('en').includes('"notes" in English') && C.aiPrompt('zh').includes('"notes" in Simplified Chinese') && !C.aiPrompt('').includes('notes'), 'the prompt asks for notes only when wanted, in the chosen language');
   const sent = [];
+  let reblogged = true;
   const napi = async (path, opts = {}) => {
     if (opts.method === 'PUT') { sent.push(opts.body); return {}; }
-    return { state: 'published', tags: ['color'], content: [], layout: [], trail: [{ blog: { name: 'a' }, post: { id: '1' } }] };
+    return { state: 'published', tags: ['color', 'sky'], content: [], layout: [], ...(reblogged ? { parent_post_id: '1', trail: [{ blog: { name: 'a' }, post: { id: '1' }, content: [{ type: 'text', text: 'theirs' }] }] } : {}) };
   };
-  await C.editPost(napi, k => k, 't:c', '5', n => Object.assign(n, { tags: [...n.tags, 'fog'], content: C.withAiNote(n.content, 'misty') }));
+  // a reblog is a frozen snapshot: no tag, order, note or body change is sent (R02, R09)
+  for (const mut of [n => Object.assign(n, { tags: [...n.tags, 'fog'] }), n => Object.assign(n, { tags: ['sky', 'color'] }), n => Object.assign(n, { content: C.withAiNote(n.content, 'misty') }), C.aiWrite(false, ['fog'], 'misty')]) {
+    const r = await C.editPost(napi, k => k, 't:c', '5', mut);
+    check(r.skipped && r.snapshot, 'editPost refuses to change a reblog\'s tags or body');
+  }
+  check(sent.length === 0, 'nothing was sent for the snapshot');
+  // visibility of the same reblog is a separate operation and sends its own payload back unchanged
+  await C.editPost(napi, k => k, 't:c', '5', C.mutations.state(k => k, x => x, 'private'));
+  check(sent.length === 1 && sent[0].state === 'private' && sent[0].tags === 'color,sky' && eq(sent[0].content, []), 'hiding a reblog keeps its tags and body: ' + JSON.stringify(sent[0]));
+  sent.length = 0;
+  reblogged = false;
+  await C.editPost(napi, k => k, 't:c', '5', n => Object.assign(n, { tags: ['color', 'fog'], content: C.withAiNote(n.content, 'misty') }));
   check(sent[0]?.tags === 'color,fog' && eq(sent[0]?.content, [{ type: 'text', text: C.AI_NOTE_MARK + 'misty' }]) && eq(sent[0]?.layout, []), 'editPost sends a changed content with the tags: ' + JSON.stringify(sent[0]));
   sent.length = 0;
   await C.editPost(napi, k => k, 't:c', '5', n => n);
@@ -420,4 +443,50 @@ check(C.statFresh(stats['yuto arc v']) && !C.statFresh({ match: 1, followers: 1,
   check(C.postImages({ content: [img('strip', 2048, 142)] })[0].small === 'strip', 'postImages: a strip alone is still returned');
 }
 
-autoTest().then(() => { console.log(failures ? `${failures} FAILED` : 'all passed'); process.exit(failures ? 1 : 0); });
+// "show only recent": older posts with images go private, come back when the period gets longer or is off
+const recentTest = async () => {
+  const now = 1000 * 86400;
+  const img = { type: 'image', media: [{ url: 'u', width: 500, height: 500 }] };
+  const mk = (id, ageDays, extra = {}) => ({ object_type: 'post', id_string: id, state: 'published', timestamp: now - ageDays * 86400, tags: [], content: [img], layout: [], ...extra });
+  const db = [mk('1', 1), mk('2', 10, { is_pinned: true }), mk('3', 20), mk('4', 40, { content: [{ type: 'text', text: 'x' }] }), mk('5', 50), mk('6', 60, { state: 'private' }), mk('7', 70)];
+  const puts = [];
+  const api = async (path, opts = {}) => {
+    if (path.startsWith('/v2/user/info')) return { user: { blogs: [{ name: 'main', uuid: 't:m', primary: true }] } };
+    const m = path.match(/\/posts\/(\d+)/);
+    if (m && opts.method === 'PUT') { puts.push(m[1] + ':' + opts.body.state); db.find(p => p.id_string === m[1]).state = opts.body.state; return {}; }
+    if (m) return JSON.parse(JSON.stringify(db.find(p => p.id_string === m[1])));
+    return { posts: JSON.parse(JSON.stringify(db)) };
+  };
+  const set = d => ({ recentOnly: { 't:m': d } });
+  check(C.recentDays(set(30), 't:m') === 30 && C.recentDays(set(13), 't:m') === 0, 'recentDays takes only listed periods');
+  let r = await C.autoRecent(api, k => k, set(30), {}, { now });
+  check(eq(puts, ['5:private', '7:private']) && eq(Object.keys(r.state['t:m'].ids), ['5', '7']) && r.state['t:m'].done === now - 30 * 86400,
+    'autoRecent hides old image posts, not pinned, text-only, newer or already private ones: ' + JSON.stringify(puts));
+  puts.length = 0;
+  r = await C.autoRecent(api, k => k, set(30), r.state, { now: now + 15 * 86400 });
+  check(eq(puts, ['3:private']), 'the next pass only looks at posts that aged out since: ' + JSON.stringify(puts));
+  puts.length = 0;
+  const capped = await C.autoRecent(api, k => k, set(7), r.state, { now: now + 15 * 86400, max: 0 });
+  check(!puts.length && capped.state['t:m'].done === r.state['t:m'].done, 'a pass cut short by the cap doesn\'t move done');
+  r = await C.autoRecent(api, k => k, set(90), r.state, { now: now + 30 * 86400 });
+  check(eq(puts.sort(), ['3:published', '5:published']) && eq(Object.keys(r.state['t:m'].ids), ['7']), 'a longer period makes the posts in it public again: ' + JSON.stringify(puts));
+  puts.length = 0;
+  db.find(p => p.id_string === '7').state = 'published'; // made public by hand
+  r = await C.autoRecent(api, k => k, {}, r.state, { now: now + 15 * 86400 });
+  check(!puts.length && !r.state['t:m'], 'switched off: a post made public by hand is let go and the record goes');
+  check(eq([...C.recentKeys({ 't:m': { ids: { 5: 1 } } })], ['t:m:5']), 'recentKeys lists hidden posts');
+  const dc = { blogs: { 't:s': { name: 'side', posts: { 1: [['a'], 1, 'published', 0, null, false, 'everyone'] } }, 't:m': { name: 'main', posts: { 2: [['a'], 1, 'private', 0, 'side/1', false, 'everyone'] } } }, blogList: [], custom: [], hidden: [], tagStats: {} };
+  check(C.reblogDiffs(dc).length === 1 && C.reblogDiffs(dc, new Set(['t:m:2'])).length === 0, 'reblogDiffs ignores visibility of hidden posts');
+};
+
+const guardTest = async () => {
+  let managed = false; const sent = [];
+  const req = C.guardWrites(async (p, o) => { sent.push(o.method); return { ok: 1 }; }, async () => managed, () => 'studio');
+  await req('/a', { method: 'GET' }); await req('/b', { method: 'PUT' });
+  managed = true;
+  await req('/c', { method: 'GET' });
+  let err = null; try { await req('/d', { method: 'POST' }); } catch (e) { err = e; }
+  check(sent.join() === 'GET,PUT,GET' && err?.managed && err.message === 'studio', 'guardWrites refuses writes only while Studio is in charge');
+};
+
+autoTest().then(recentTest).then(guardTest).then(() => { console.log(failures ? `${failures} FAILED` : 'all passed'); process.exit(failures ? 1 : 0); });
