@@ -19,6 +19,7 @@ const { addTidy } = require('../service/tidy');
 const { addAiArt } = require('../service/aiart');
 const { addVersions } = require('../service/versions');
 const { addVisitor } = require('../service/visitor');
+const { addTakeover } = require('../service/takeover');
 const { makeBridge, PORTS } = require('../service/bridge');
 const { makeCompanionPage } = require('../service/companion-page');
 const http = require('node:http');
@@ -74,6 +75,7 @@ function boot() {
   addAiArt(svc, extra);
   addVersions(svc, extra);
   addVisitor(svc, extra);
+  addTakeover(svc, extra, { dataDir });
   api = makeApi(svc, { creds, openUrl: u => shell.openExternal(u), importStage0: readStage0, extra });
   startBridge();
   creds.onChange(() => send('event', { type: 'auth' }));

@@ -76,7 +76,7 @@ function makeApi(svc, { creds, openUrl = () => {}, importStage0 = null, extra = 
     },
     syncNow({ full = false } = {}) { return svc.pass({ full, priority: 2 }); },
     setPaused(paused) { db.setMeta('paused', !!paused); return api.status(); },
-    setAutomation(patch) { db.setMeta('automation', { ...db.getMeta('automation', {}), ...patch }); return api.status(); },
+    setAutomation(patch) { db.setMeta('automation', { ...db.getMeta('automation', {}), ...patch }); svc.passSoon?.(); return api.status(); },
 
     // ----- posts -----
     // view: managed (one card per content item, filed under its management blog) | displayed (physical posts)
@@ -203,7 +203,7 @@ function makeApi(svc, { creds, openUrl = () => {}, importStage0 = null, extra = 
         };
       });
     },
-    saveRule(rule) { const id = upsertRule(rule, false); return display.rulesOf(db).find(r => r.id === id); },
+    saveRule(rule) { const id = upsertRule(rule, false); svc.passSoon?.(); return display.rulesOf(db).find(r => r.id === id); },
     deleteRule({ id }) { db.run('DELETE FROM expiry_rules WHERE id = ?', id); return display.rulesOf(db); },
     restorePreview({ rule }) { return display.restorePlan(db, rule); },
     restore({ rule, targets }) {

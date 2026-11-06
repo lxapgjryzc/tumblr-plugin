@@ -34,6 +34,8 @@ test('extension import: idempotent, no remote changes, recentOnly becomes an ima
   assert.equal(rules.length, 1);
   assert.equal(rules[0].scope, 'images');
   assert.equal(rules[0].enabled, 0);
+  // auto-hiding keeps originals from filling tag search; reblogs never show there, so they are never hidden by it
+  assert.deepEqual(rules[0].kinds, ['original'], 'only the blog’s own originals');
   assert.equal(svc.db.get(`SELECT role FROM blogs WHERE uuid = 't:art'`).role, 'share');
   assert.equal(svc.db.get(`SELECT role FROM blogs WHERE uuid = 't:ref'`).role, 'material');
   assert.equal(svc.db.getMeta('packs').length, 1);

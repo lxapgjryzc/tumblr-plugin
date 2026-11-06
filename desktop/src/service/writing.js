@@ -151,6 +151,32 @@ function addWriting(svc, api, { dataDir }) {
       db.setMeta('categoryGroupsSeeded', true);
     });
   }
+  // Default tags that changed (`was`): a category still holding a default name (or the old flat seed's name) and
+  // an earlier default tag moves to the new tag, once. Ids, selections and posts are untouched; nothing remote.
+  function upgradeDefaultTags() {
+    if (db.getMeta('categoryTagsUpgraded')) return;
+    let conf = { groups: [] };
+    try { conf = JSON.parse(fs.readFileSync(CATEGORY_DEFAULTS, 'utf8')); } catch {}
+    db.tx(() => {
+      const all = db.all('SELECT id, name, tag FROM categories');
+      for (const c of conf.groups.flatMap(g => g.categories || [])) {
+        if (!c.was || all.some(x => C.key(x.tag) === C.key(c.tag))) continue;
+        const hit = all.find(x => c.was.some(w => C.key(w) === C.key(x.tag))
+          && (x.name === c.name || CATEGORY_SUGGESTIONS.some(([n, t]) => n === x.name && C.key(t) === C.key(x.tag))));
+        if (hit) { db.run('UPDATE categories SET tag = ? WHERE id = ?', c.tag, hit.id); hit.tag = c.tag; }
+      }
+      // Retired defaults go only while untouched and selected nowhere (drafts, blog defaults)
+      const selected = new Set([
+        ...db.all('SELECT options FROM drafts').flatMap(r => { try { return JSON.parse(r.options || '{}').categoryIds || []; } catch { return []; } }),
+        ...Object.values(db.getMeta('blogDefaults') || {}).flatMap(d => (d && d.categoryIds) || [])].map(Number));
+      for (const r of conf.retired || []) {
+        const hit = all.find(x => x.name === r.name && C.key(x.tag) === C.key(r.tag));
+        if (hit && !selected.has(Number(hit.id))) db.run('DELETE FROM categories WHERE id = ?', hit.id);
+      }
+      db.setMeta('categoryTagsUpgraded', true);
+    });
+  }
+  upgradeDefaultTags(); // first, so seeding finds the moved tags instead of adding duplicates
   seedCategories();
   const groupsList = () => db.all('SELECT * FROM category_groups ORDER BY ord, id');
   // Configured order: group order, then category order inside the group; ungrouped entries last

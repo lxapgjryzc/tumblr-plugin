@@ -104,9 +104,15 @@ function createService({ dataDir, db: givenDb, tumblr, creds = null, now = Date.
     };
     passTimer = setTimeout(loop, 3000);
   }
-  function stop() { jobs.stop(); clearTimeout(passTimer); }
+  function stop() { jobs.stop(); clearTimeout(passTimer); clearTimeout(soonTimer); }
+  // a pass a few seconds after a rule or automation change, instead of at the next 10-minute tick
+  let soonTimer = null;
+  function passSoon(ms = 5000) {
+    clearTimeout(soonTimer);
+    soonTimer = setTimeout(() => { if (!db.getMeta('paused', false) && creds?.status?.() === 'connected') pass(); }, ms);
+  }
 
-  const svc = { db, jobs, ctx, handlers, pass, start, stop, emit, hooks };
+  const svc = { db, jobs, ctx, handlers, pass, passSoon, start, stop, emit, hooks };
   ctx.service = svc;
   return svc;
 }

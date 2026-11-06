@@ -34,6 +34,7 @@ function planImport(db, exp) {
     rules: !!s.rules,
     legacy: ['collection', 'materials'].filter(k => d[k]),
     desktopManaged: !!s.desktopManaged,
+    reblogSync: !!s.syncReblogs,
     unknownBlogs: [...new Set([...roles, ...recent].filter(r => !r.known).map(r => r.uuid))],
   };
 }
@@ -83,11 +84,12 @@ function applyImport(db, exp, { dataDir, now = Date.now() } = {}) {
         autoPalette: s.collect.autoPalette !== false, daily: s.collect.daily || 4, auto: false, since: 0, ...note });
       else db.setMeta('collect', { ...cur, ...note });
     }
-    // show only recent → image-only per-blog rules, OFF until the user turns them on
+    // show only recent → image-only per-blog rules for that blog's own originals, OFF until the user turns them on.
+    // (The extension hid every image post on the blog, reblogs too; a reblog there is another work's copy.)
     for (const r of plan.recent) {
       const ex = db.get(`SELECT id FROM expiry_rules WHERE mode = 'independent' AND blog = ? AND scope = 'images'`, r.uuid);
       if (ex) db.run('UPDATE expiry_rules SET days = ? WHERE id = ?', r.days, ex.id);
-      else db.run(`INSERT INTO expiry_rules (mode, blog, enabled, days, scope, kinds, updated_at) VALUES ('independent', ?, 0, ?, 'images', '["original","reblog"]', ?)`, r.uuid, r.days, now);
+      else db.run(`INSERT INTO expiry_rules (mode, blog, enabled, days, scope, kinds, updated_at) VALUES ('independent', ?, 0, ?, 'images', '["original"]', ?)`, r.uuid, r.days, now);
     }
     // posts the extension hid: remembered with that provenance (unverified), never published here by import
     for (const [uuid, v] of Object.entries(d.recentHidden || {})) {
@@ -167,9 +169,9 @@ function addData(svc, api, { dataDir, vault = null, openPath = () => {}, relaunc
   const aiFile = path.join(dataDir, 'ai.bin');
   Object.assign(api, {
     importPreview({ text }) { return planImport(db, JSON.parse(text)); },
-    importApply({ text }) { const r = applyImport(db, JSON.parse(text), { dataDir, now: svc.ctx.now() }); applyPendingRoles(db); return r; },
+    importApply({ text }) { const exp = JSON.parse(text); const r = applyImport(db, exp, { dataDir, now: svc.ctx.now() }); applyPendingRoles(db); svc.ctx.onImport?.(exp); return r; },
     // The same import handed over by the paired browser extension (bridge request 'import')
-    importExtension({ data }) { const r = applyImport(db, data, { dataDir, now: svc.ctx.now() }); applyPendingRoles(db); return r; },
+    importExtension({ data }) { const r = applyImport(db, data, { dataDir, now: svc.ctx.now() }); applyPendingRoles(db); svc.ctx.onImport?.(data); return r; },
     backupNow() { const r = backup(db, { dataDir, now: svc.ctx.now() }); db.setMeta('lastBackup', { at: svc.ctx.now(), dir: r.dir }); return r; },
     backups() {
       const dir = path.join(dataDir, 'backups');

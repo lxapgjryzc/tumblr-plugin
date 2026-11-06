@@ -156,8 +156,8 @@ test('categories: optional groups, configured order, display names apart from ta
   assert.equal(by('日记').tag, 'diary');
   // course, role and subject are independent: a course assignment can be a formal original work, fanart a study
   const pick = ids => api.composeTags({ categoryIds: ids, extra: ['weekend sketch', 'FANART'] }).tags.map(x => x.tag);
-  assert.deepEqual(pick([by('猹鱼日绘').id, by('正式作品').id, by('原创').id]), ['original', '正式作品', '猹鱼日绘', 'weekend sketch', 'FANART']);
-  assert.deepEqual(pick([by('习作').id, by('同人').id]), ['fanart', '习作', 'weekend sketch'], 'click order does not matter; fanart appears once, in the prefix');
+  assert.deepEqual(pick([by('猹鱼日绘').id, by('习作').id, by('原创').id]), ['original art', 'art study', '猹鱼日绘', 'weekend sketch', 'FANART']);
+  assert.deepEqual(pick([by('习作').id, by('同人').id]), ['fanart', 'art study', 'weekend sketch'], 'click order does not matter; fanart appears once, in the prefix');
   // a display-name edit keeps the tag
   api.saveCategory({ id: by('同人').id, name: 'Fan art' });
   assert.equal(api.categories().find(c => c.name === 'Fan art').tag, 'fanart');
@@ -212,7 +212,8 @@ test('category migration: a flat list keeps ids, tags, order and draft choices; 
   addWriting(svc, extra, { dataDir: dir });
   const cats = extra.categories();
   const c = id => cats.find(x => x.id === id);
-  assert.deepEqual([c(1).tag, c(2).tag, c(3).tag, c(7).tag], ['diary', 'fanart', 'photo', 'my sketchbook']);
+  // the untouched old seed Photo/photo follows the changed default tag; everything else keeps its tag
+  assert.deepEqual([c(1).tag, c(2).tag, c(3).tag, c(7).tag], ['diary', 'fanart', 'photography', 'my sketchbook']);
   assert.deepEqual([c(1).name, c(2).name, c(7).name], ['Diary', 'Fanart', 'Sketchbook'], 'names kept');
   assert.equal(c(7).group_id, null, 'no invented group');
   assert.ok(c(2).group_id && c(1).group_id && c(3).group_id);
@@ -222,3 +223,28 @@ test('category migration: a flat list keeps ids, tags, order and draft choices; 
   assert.equal(fake.calls.filter(x => /put|create|reblog/.test(x)).length, 0, 'no remote edits');
 });
 
+test('categories: changed default tags reach untouched entries once; retired defaults go only when unselected', () => {
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'studio-cat-up-'));
+  const { openDb } = require('../src/service/db');
+  const db = openDb(path.join(dir, 'studio.db'));
+  db.run('DELETE FROM categories');
+  db.run(`INSERT INTO categories (id, name, tag, ord) VALUES (1, '原创', 'original', 0), (2, '习作', 'my studies', 1), (3, '过程记录', '过程记录', 2),
+    (4, '正式作品', '正式作品', 3), (5, '学习笔记', '学习笔记', 4), (6, 'Original', 'original', 5)`);
+  db.setMeta('categoriesSeeded', true);
+  db.setMeta('categoryGroupsSeeded', true);
+  db.setMeta('categoryTagsUpgraded', false);
+  db.setMeta('blogDefaults', { 't:art': { categoryIds: [5] } });
+  db.close();
+  const fake = makeFake({ blogs: [] });
+  const svc = createService({ dataDir: dir, tumblr: fake });
+  const extra = {};
+  addWriting(svc, extra, { dataDir: dir });
+  const c = id => extra.categories().find(x => x.id === id);
+  assert.equal(c(1).tag, 'original art');
+  assert.equal(c(6).tag, 'original', 'only one entry takes the new tag');
+  assert.equal(c(2).tag, 'my studies', 'an edited tag is kept');
+  assert.equal(c(3).tag, 'wip');
+  assert.equal(c(4), undefined, 'retired and unselected: removed');
+  assert.equal(c(5).tag, '学习笔记', 'retired but a blog default selects it: kept');
+  assert.equal(fake.calls.filter(x => /put|create|reblog/.test(x)).length, 0, 'no remote edits');
+});

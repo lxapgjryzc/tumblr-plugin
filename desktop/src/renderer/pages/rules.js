@@ -6,7 +6,7 @@ const RulesPage = {
   async render(root) {
     this.root = root;
     const s = await App.loadStatus();
-    const [rules, routes] = await Promise.all([call('rules'), call('routes')]);
+    const [rules, routes, takeover] = await Promise.all([call('rules'), call('routes'), call('reblogTakeoverOffer')]);
     const auto = s.automation || {};
     root.replaceChildren(
       h('header', { class: 'page-head' }, h('h1', {}, t('rulesTitle'))),
@@ -18,6 +18,7 @@ const RulesPage = {
         h('p', { class: 'muted small' }, t('offNote'))),
       h('section', { class: 'card' },
         h('h2', {}, t('routesTitle')), h('p', { class: 'muted' }, t('routesHint')),
+        takeover ? this.takeoverBanner(takeover) : null,
         toggle(!!auto.routes, async v => { await call('setAutomation', { routes: v }); this.render(root); }, t('autoRoutes')),
         h('div', { class: 'rule-list' }, routes.map(r => this.routeRow(r))),
         h('button', { class: 'primary', onclick: () => this.editRoute({}) }, '+ ' + t('newRoute'))),
@@ -94,6 +95,20 @@ const RulesPage = {
     toast(t('queued', res.queued), 'ok');
   },
 
+  // The extension used to reblog side-blog posts onto the main blog; continue that here, on one click
+  takeoverBanner(o) {
+    const pick = new Set(o.missed.map(m => m.id));
+    return h('div', { class: 'banner warn' },
+      h('p', {}, h('b', {}, t('takeoverTitle')), ' ', t('takeoverText', o.sources.map(s => s.name).join(', '), o.main?.name || '?')),
+      o.missed.length ? [h('p', { class: 'small' }, t('takeoverMissed', o.missed.length)),
+        h('div', {}, o.missed.map(m => h('label', { class: 'check-row' },
+          h('input', { type: 'checkbox', checked: true, onchange: e => { e.target.checked ? pick.add(m.id) : pick.delete(m.id); } }),
+          m.thumb ? h('img', { src: m.thumb, class: 'avatar' }) : null, h('span', {}, blogName(m.blog) + '/' + m.id), h('span', { class: 'muted small' }, fmtTime(m.published_at) + ' · ' + (m.summary || '').slice(0, 60)))))]
+        : h('p', { class: 'small muted' }, t('takeoverNone')),
+      h('div', { class: 'actions' },
+        h('button', { class: 'primary', onclick: async () => { const r = await call('reblogTakeover', { accept: true, ids: [...pick] }); toast(t('takeoverDone', r.queued), 'ok'); this.render(this.root); } }, t('takeoverAccept')),
+        h('button', { class: 'ghost', onclick: async () => { await call('reblogTakeover', { accept: false }); this.render(this.root); } }, t('takeoverDecline'))));
+  },
   routeRow(r) {
     return h('div', { class: 'rule' },
       h('div', { class: 'grow' }, h('b', {}, r.sources.map(blogName).join(', ')), ' → ', h('b', {}, blogName(r.dest)),
