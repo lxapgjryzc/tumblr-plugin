@@ -129,6 +129,7 @@ These describe the implementation's choices and limitations. Optional mechanism 
    - The brief planned separate uploads with per-occurrence upload states.
    - Image parts and the frozen document's content/layout are sent in the same multipart request, using occurrence identifiers. This avoids separate upload-completion ordering, but correct mapping and remote layout fidelity still require verification.
    - Missing files block publishing at the exact block.
+   - Link addresses are sent percent-encoded: Tumblr silently drops a link whose URL contains raw non-ASCII characters (checked live 2026-11-07). If the post that comes back still differs, the failed job names the first difference (for example "block 2: Tumblr dropped the link formatting").
 3. **No remote draft first.**
    - The brief suggested creating a Tumblr draft and then switching its state.
    - The intermediate draft adds a request and does not itself make creation idempotent. A lost response triggers a search of every post since the publish started, matched on all text blocks, image count, row grouping and tags. Several matches stop for the user; no match leaves the job unknown until it is found or you resolve it, so nothing is sent twice without your say.

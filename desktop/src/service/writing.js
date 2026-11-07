@@ -29,6 +29,9 @@ const FORMATS = ['bold', 'italic', 'strikethrough', 'small', 'link', 'color'];
 const CATEGORY_SUGGESTIONS = [['Diary', 'diary'], ['Fanart', 'fanart'], ['Original', 'original'], ['Photo', 'photo'], ['Writing', 'writing']];
 const CATEGORY_DEFAULTS = path.join(__dirname, 'categories.default.json');
 const cpLen = s => [...String(s)].length;
+// Tumblr silently drops a link whose URL has raw non-ASCII characters (live, 2026-11-07: a formatting link to
+// .../wiki/游戏王 vanished, the same URL percent-encoded was kept), so URLs are sent in their encoded form
+const linkHref = u => { const s = String(u || '').trim(); try { return /^https?:/i.test(s) ? new URL(s).href : s; } catch { return s; } };
 
 const emptyDoc = () => ({ v: DOC_VERSION, blocks: [{ id: 'b' + crypto.randomBytes(5).toString('hex'), type: 'text', text: '' }], rows: [] });
 
@@ -68,7 +71,7 @@ function compile(doc, assetsById = new Map()) {
       if (b.subtype && SUBTYPES.includes(b.subtype)) blk.subtype = b.subtype;
       const n = cpLen(blk.text);
       const f = (b.formatting || []).filter(x => FORMATS.includes(x.type) && x.start >= 0 && x.end <= n && x.start < x.end)
-        .map(x => ({ type: x.type, start: x.start, end: x.end, ...(x.type === 'link' ? { url: x.url } : {}), ...(x.type === 'color' ? { hex: x.hex } : {}) }));
+        .map(x => ({ type: x.type, start: x.start, end: x.end, ...(x.type === 'link' ? { url: linkHref(x.url) } : {}), ...(x.type === 'color' ? { hex: x.hex } : {}) }));
       if (f.length) blk.formatting = f;
       content.push(blk);
     } else if (b.type === 'image') {
@@ -80,7 +83,7 @@ function compile(doc, assetsById = new Map()) {
       content.push(blk);
     } else if (b.type === 'link') {
       if (!/^https?:\/\//i.test(b.url || '')) problems.push({ block: b.id, problem: 'bad_link' });
-      content.push({ type: 'link', url: String(b.url || ''), ...(b.title ? { title: String(b.title) } : {}) });
+      content.push({ type: 'link', url: linkHref(b.url), ...(b.title ? { title: String(b.title) } : {}) });
     }
   }
   // empty trailing text blocks are dropped (an empty editor line is not content)
@@ -438,6 +441,32 @@ function addWriting(svc, api, { dataDir }) {
   };
   const sameBody = (want, got) => bodyKey(want.content, want.layout) === bodyKey(got.content, got.layout)
     && (want.content || []).every((b, i) => b.type !== 'link' || !b.title || (got.content || [])[i]?.title === b.title);
+  // What differs, for the error when the body never matches (first difference only)
+  const FMT_NAMES = { bold: 'bold', italic: 'italic', strikethrough: 'strikethrough', small: 'small text', link: 'link', color: 'colour' };
+  function bodyDiff(want, got) {
+    const a = want.content || [], b = got.content || [];
+    for (let i = 0; i < Math.max(a.length, b.length); i++) {
+      const x = a[i], y = b[i], n = i + 1;
+      if (!y) return `block ${n} (${x.type}) is missing`;
+      if (!x) return `Tumblr has an extra block ${n} (${y.type})`;
+      const kx = blockKey(x), ky = blockKey(y);
+      if (JSON.stringify(kx) === JSON.stringify(ky)) continue;
+      if (kx[0] !== ky[0]) return `block ${n} is ${y.type}, expected ${x.type}`;
+      if (kx[0] === 't') {
+        if (kx[1] !== ky[1]) return `block ${n}: text style ${ky[1] || 'plain'}, expected ${kx[1] || 'plain'}`;
+        if (kx[2] !== ky[2]) return `block ${n}: the text differs`;
+        const gone = kx[3].filter(f => !ky[3].includes(f)).map(f => JSON.parse(f)[0]);
+        const added = ky[3].filter(f => !kx[3].includes(f)).map(f => JSON.parse(f)[0]);
+        if (gone.length) return `block ${n}: Tumblr dropped the ${[...new Set(gone)].map(t => FMT_NAMES[t] || t).join(', ')} formatting`;
+        return `block ${n}: Tumblr added ${[...new Set(added)].map(t => FMT_NAMES[t] || t).join(', ')} formatting`;
+      }
+      if (kx[0] === 'i') return `block ${n}: image ${kx[1] !== ky[1] ? 'alt text' : 'caption'} differs`;
+      if (kx[0] === 'l') return `block ${n}: the link address differs`;
+      return `block ${n} differs`;
+    }
+    if (!(want.content || []).every((x, i) => x.type !== 'link' || !x.title || b[i]?.title === x.title)) return 'a link title differs';
+    return 'the layout (rows or read-more) differs';
+  }
   const tagKey = tags => JSON.stringify((tags || []).map(C.key));
   // Every post since shortly before the publish started, however many pages that takes (newest first, so it
   // stops at the first older post; MAX_PAGES is only a safety net, and the result then says it was cut short)
@@ -479,7 +508,9 @@ function addWriting(svc, api, { dataDir }) {
         const stored = ctx.db.get('SELECT payload FROM posts WHERE blog = ? AND id = ?', p.blog, p.remoteId);
         const got = (stored && P(stored.payload)) || {};
         const okBody = sameBody(want, got);
-        return verifyStep(ctx, job, okTags && okState && okBody, { status: 'succeeded', result: { id: p.remoteId, state: row.state, tags: row.tags, images: (got.content || []).filter(b => b.type === 'image').length } });
+        const why = [!okBody && bodyDiff(want, got), !okTags && 'the tags differ', !okState && `the post is ${row.state}, expected ${p.state}`].filter(Boolean).join('; ');
+        return verifyStep(ctx, job, okTags && okState && okBody, { status: 'succeeded', result: { id: p.remoteId, state: row.state, tags: row.tags, images: (got.content || []).filter(b => b.type === 'image').length } },
+          `published as ${p.remoteId}, but it doesn't match what was sent: ${why}`);
       }
       const d = db.get('SELECT status, revision FROM drafts WHERE id = ?', p.draft);
       if (!d) throw new StaleError('the draft was deleted');

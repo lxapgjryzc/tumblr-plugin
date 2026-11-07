@@ -313,7 +313,7 @@ test('publish: a lost response is still found when Tumblr returns the link perce
   const orig = fake.createPost;
   fake.createPost = async (blog, json, files) => {
     const c = JSON.parse(JSON.stringify(json.content));
-    c[0].formatting[0].url = encodeURI(c[0].formatting[0].url);
+    c[0].formatting[0].url = new URL(c[0].formatting[0].url).href; // Tumblr keeps an encoded URL as is
     await orig(blog, { ...json, content: c }, files);
     throw netFail(true);
   };
@@ -355,4 +355,26 @@ test('composer picker: sections, presets, relations offered once members are pic
   same(api.packView({ id: 'mf', picks: [] }).favs.map(f => f.name), ['Pair']);
   api.deleteTplFav({ index: 0 });
   assert.equal(api.packView({ id: 'mf', picks: [] }).favs.length, 0);
+});
+
+test('links: URLs go out percent-encoded; a dropped formatting is named when verify fails', async () => {
+  const c = compile({ blocks: [
+    { id: 't', type: 'text', text: 'see 游戏王', formatting: [{ type: 'link', start: 4, end: 7, url: ' https://zh.wikipedia.org/wiki/游戏王 ' }] },
+    { id: 'l', type: 'link', url: 'https://example.com/文 章?q=图' },
+  ] });
+  assert.equal(c.content[0].formatting[0].url, 'https://zh.wikipedia.org/wiki/%E6%B8%B8%E6%88%8F%E7%8E%8B');
+  assert.equal(c.content[1].url, 'https://example.com/%E6%96%87%20%E7%AB%A0?q=%E5%9B%BE');
+
+  const { fake, svc, api, run } = setup();
+  svc.pass(); await run();
+  const d = api.newDraft({ blog: 't:art' });
+  api.saveDraft({ id: d.id, doc: { v: 1, blocks: [{ id: 'a', type: 'text', text: 'bold then link', formatting: [{ type: 'bold', start: 0, end: 4 }, { type: 'link', start: 10, end: 14, url: 'https://example.com/x' }] }], rows: [] }, options: { categoryIds: [] }, revision: d.revision, blog: 't:art' });
+  const orig = fake.createPost;
+  // Tumblr keeps the bold and silently drops the link
+  fake.createPost = (blog, json, files) => orig.call(fake, blog, { ...json, content: json.content.map(b => ({ ...b, formatting: b.formatting?.filter(f => f.type !== 'link') })) }, files);
+  api.publish({ id: d.id, mode: 'draft' });
+  for (let i = 0; i < 6; i++) await run();
+  const job = svc.jobs.list({}).find(j => j.kind === 'post.publish');
+  assert.equal(job.status, 'failed');
+  assert.match(job.error, /block 1: Tumblr dropped the link formatting/);
 });

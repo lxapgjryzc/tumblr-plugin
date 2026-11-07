@@ -32,10 +32,10 @@ async function fresh(ctx, blog, id) {
   return { p, row: r?.after };
 }
 
-function verifyStep(ctx, job, ok, out) {
+function verifyStep(ctx, job, ok, out, failError = 'sent, but Tumblr still shows the old value') {
   const n = job.payload.verifyN || 0;
   if (ok) return out;
-  if (n >= VERIFY_DELAYS.length) return { status: 'failed', error: 'sent, but Tumblr still shows the old value', result: job.result };
+  if (n >= VERIFY_DELAYS.length) return { status: 'failed', error: failError, result: job.result };
   return { status: 'verifying', payload: { ...job.payload, phase: 'verify', verifyN: n + 1 }, nextAt: ctx.now() + VERIFY_DELAYS[n], result: job.result };
 }
 
