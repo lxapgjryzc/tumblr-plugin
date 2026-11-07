@@ -101,7 +101,11 @@ function makeApi(svc, { creds, openUrl = () => {}, importStage0 = null, extra = 
       const rows = db.all(`SELECT p.blog, p.id, p.kind, p.state, p.published_at, p.tags, p.notes, p.notes_at, p.summary, p.thumb, p.has_images, p.legacy, p.pinned,
           p.item_id, i.manager, i.status AS item_status, i.external, b.name AS blog_name, mb.name AS manager_name, po.display, po.auto_hide IS NOT NULL AS auto_hidden,
           po.conflict IS NOT NULL AS conflicted,
-          (SELECT COUNT(*) FROM posts c WHERE c.item_id = p.item_id AND c.state != 'gone') AS copies
+          (SELECT COUNT(*) FROM posts c WHERE c.item_id = p.item_id AND c.state != 'gone') AS copies,
+          -- the work's source (its owned original): how many content versions, and reblogs still on their way
+          (SELECT COUNT(*) FROM source_revisions sr WHERE sr.blog = COALESCE(i.origin_blog, p.blog) AND sr.id = COALESCE(i.origin_id, p.id)) AS versions,
+          (SELECT COUNT(*) FROM deliveries d WHERE d.src_blog = COALESCE(i.origin_blog, p.blog) AND d.src_id = COALESCE(i.origin_id, p.id) AND d.status = 'pending') AS deliv_pending,
+          (SELECT COUNT(*) FROM deliveries d WHERE d.src_blog = COALESCE(i.origin_blog, p.blog) AND d.src_id = COALESCE(i.origin_id, p.id) AND d.status = 'unknown') AS deliv_unknown
         FROM posts p LEFT JOIN items i ON i.id = p.item_id JOIN blogs b ON b.uuid = p.blog LEFT JOIN blogs mb ON mb.uuid = i.manager
         LEFT JOIN policies po ON po.blog = p.blog AND po.id = p.id
         WHERE ${where.join(' AND ')} ORDER BY ${order} LIMIT ? OFFSET ?`, ...a, limit, offset);

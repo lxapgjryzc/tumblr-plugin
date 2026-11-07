@@ -99,6 +99,7 @@ const PostsPage = {
       if (r.conflicted) badges.push(h('span', { class: 'badge warn' }, t('conflict')));
       if (r.pinned) badges.push(h('span', { class: 'badge' }, t('pinned')));
       if (r.legacy) badges.push(h('span', { class: 'badge' }, t('legacy')));
+      if (r.deliv_unknown) badges.push(h('span', { class: 'badge warn', title: t('delivUnknownHint') }, t('delivUnknown', r.deliv_unknown)));
       if (ex && ex.action === 'hide') badges.push(h('span', { class: 'badge accent' }, t('dueNow')));
       else if (ex && ex.action === 'none' && ex.reason === 'not_due' && ex.due) { const d = inDays(ex.due); if (d <= 14) badges.push(h('span', { class: 'badge accent' }, t('dueIn', d))); }
       const card = h('div', { class: 'pcard' + (on ? ' sel' : ''), 'data-k': k,
@@ -124,6 +125,8 @@ const PostsPage = {
           h('div', { class: 'row2 muted small' },
             r.manager && r.manager !== r.blog ? h('span', {}, t('managedBy', r.manager_name || blogName(r.manager))) : null,
             r.copies > 1 ? h('span', {}, t('copies', r.copies)) : null,
+            r.versions > 1 ? h('span', { title: t('versionsCardHint') }, t('versionsCard', r.versions)) : null,
+            r.deliv_pending ? h('span', { title: t('delivPendingHint') }, t('delivPending', r.deliv_pending)) : null,
             r.kind === 'reblog' && r.external ? h('span', {}, t('kind_reblog')) : null,
             r.notes != null ? h('span', {}, '♥ ' + r.notes) : null)));
       return card;
