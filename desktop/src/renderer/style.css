@@ -310,7 +310,7 @@ details summary { cursor: pointer; color: var(--accent); }
 .versions-dlg .diff-row .add { background: color-mix(in srgb, var(--ok, #30a46c) 14%, transparent); padding: 4px 6px; border-radius: 4px; white-space: pre-wrap; }
 .versions-dlg .card.inset { margin: 8px 0; }
 .versions-dlg .actions.sticky { position: sticky; bottom: -16px; background: var(--panel, var(--bg)); padding: 8px 0; border-top: 1px solid var(--line); }
-.versions-dlg input { min-width: 8em; }
+.versions-dlg input:not([type=checkbox]):not([type=radio]) { min-width: 8em; }
 
 /* Posts grid: open-details corner button, no text selection while drag-selecting */
 .pcard { position: relative; user-select: none; }
@@ -382,3 +382,17 @@ input[type=search] { padding-left: 32px; background-repeat: no-repeat; backgroun
 .badge.js-succeeded { background: var(--ok-soft); color: var(--ok); }
 .badge.js-cancelled, .badge.js-skipped, .badge.js-unchanged { background: var(--soft); color: var(--muted); }
 .badge.js-failed { background: var(--danger-soft); color: var(--danger); }
+
+/* Inline actions read as actions; links underline on hover only */
+a { text-decoration: none; text-underline-offset: 2px; }
+a:hover { text-decoration: underline; }
+.inst-line button.ghost, p button.ghost, .muted button.ghost { color: var(--accent); min-height: 26px; padding: 0 8px; }
+.inst-line button.ghost:hover, p button.ghost:hover { background: var(--accent-soft); color: var(--accent); }
+.instance { transition: border-color .12s; }
+.instance:hover { border-color: var(--line-strong); }
+.detail-thumb { box-shadow: var(--shadow); }
+.modal-body h3:first-child { margin-top: 4px; }
+.versions-dlg td input:not([type=checkbox]):not([type=radio]) { width: 100%; min-width: 6em; }
+.versions-dlg .check-label { margin-right: 8px; }
+.versions-dlg .table td:first-child { width: 1%; }
+.versions-dlg .actions.sticky { z-index: 2; }
