@@ -77,7 +77,10 @@ const PostsPage = {
       }
       list.replaceChildren(
         h('div', { class: 'list-head' }, h('span', { class: 'muted' }, t('total', this.total))),
-        this.rows.length ? this.grid(this.rows, { selectable: true, onOpen: r => this.openDetail(r) }) : empty(t('noPosts')),
+        this.rows.length ? this.grid(this.rows, { selectable: true, onOpen: r => this.openDetail(r) })
+          : this.f.q || this.f.blog || this.f.state || this.f.kind || this.f.tags.length
+            ? empty(t('noMatch'), h('button', { onclick: () => { Object.assign(this.f, { q: '', blog: '', state: '', kind: '', tags: [] }); this.render(this.root); } }, t('clearFilters')))
+            : empty(t('noPosts')),
         this.rows.length < this.total ? h('div', { class: 'center' }, h('button', { onclick: () => { this.limit += 60; this.load(); } }, t('loadMore'))) : null);
       this.selbar();
     } finally { this.loading = false; list.classList.remove('loading'); }
