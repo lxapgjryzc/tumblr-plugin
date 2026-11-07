@@ -205,3 +205,20 @@ test('bridge: the browser relay is for the paired extension only and lists the a
   await s.call('/relay/done', { answers: [{ rid: got.json.items[0].rid, status: 200, text: '{"response":{}}' }], primary: 'mainblog' }, { auth });
   assert.equal((await p).status, 200);
 });
+
+test('material: an automatic collect queued before collecting was switched off sends nothing; a manual one still goes', async () => {
+  const s = setup();
+  s.svc.pass(); await s.run();
+  s.api.saveCollect({ blog: 't:ref', tags: ['reference'], auto: true });
+  const p = s.fake.addPost('t:o2', { blog: { uuid: 't:o2', name: 'painter' }, content: [IMG('https://64.media.tumblr.com/p/x/s1280x1920/p.jpg')] });
+  const post = { ...JSON.parse(JSON.stringify(p)), id: p.id_string };
+  s.svc.jobs.add('material.collect', { root: 't:o2/' + p.id_string, dest: 't:ref', post, manual: false }, { scope: 'collect:t:o2/' + p.id_string });
+  s.api.saveCollect({ auto: false });
+  await s.run();
+  const onRef = () => [...s.fake.posts.values()].filter(q => q.blog.uuid === 't:ref');
+  assert.equal(onRef().length, 0);
+  assert.equal(s.svc.jobs.list({}).find(j => j.kind === 'material.collect').status, 'cancelled');
+  s.svc.jobs.add('material.collect', { root: 't:o2/' + p.id_string, dest: 't:ref', post, manual: true }, { scope: 'collect:m:' + p.id_string });
+  await s.run();
+  assert.equal(onRef().length, 1, 'a manual collect is not blocked by the automatic switch');
+});

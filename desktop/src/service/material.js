@@ -124,6 +124,8 @@ function addMaterial(svc, api, { media = null, aiKey = () => '' } = {}) {
       const { root, dest, post: p } = job.payload;
       const s = settingsOf(db);
       if (!s.blog || s.blog !== dest) { db.run(`UPDATE collected SET status = 'skipped', reason = 'collection blog changed' WHERE root = ?`, root); throw new StaleError('the collection blog changed'); }
+      // automatic collecting may have been switched off since the scan queued this; a manual collect still goes
+      if (!job.payload.manual && !s.auto) { db.run(`UPDATE collected SET status = 'skipped', reason = 'automatic collecting is off' WHERE root = ?`, root); return { status: 'cancelled', error: 'automatic collecting is off' }; }
       // the material blog may have it by now (collected by hand on Tumblr, another pass)
       const have = holding(db, dest);
       have.delete(root);

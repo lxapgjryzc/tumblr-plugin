@@ -170,6 +170,18 @@ test('expiry: due by age, keep visible survives restarts and rule edits, never r
   assert.deepEqual(plan.map(p => p.id), [old.id_string]);
 });
 
+test('expiry: a hide queued before automatic hiding was switched off sends nothing', async () => {
+  const { fake, svc, run, db, clock } = setup();
+  const p = fake.addPost('t:main', { timestamp: ts(clock.t - 60 * DAY) });
+  svc.pass(); await run();
+  db.run(`INSERT INTO expiry_rules (mode, blog, enabled, days) VALUES ('independent', 't:main', 1, 30)`);
+  assert.ok(display.queueExpiry(db, svc.jobs, { now: clock.t, limit: 40 }) >= 1, 'queued while it was on');
+  db.setMeta('automation', { expiry: false });
+  await run();
+  assert.equal(fake.posts.get(p.id_string).state, 'published');
+  assert.equal(svc.jobs.list({}).find(j => j.kind === 'post.visibility').status, 'cancelled');
+});
+
 test('expiry: an external republish of an auto-hidden post becomes keep visible (A15)', async () => {
   const { fake, svc, run, db, clock } = setup();
   const p = fake.addPost('t:main', { timestamp: ts(clock.t - 60 * DAY) });

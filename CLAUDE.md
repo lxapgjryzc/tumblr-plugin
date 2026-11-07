@@ -79,6 +79,7 @@ The desktop app from docs/DESKTOP_PRODUCT_SPEC.md (a Codex draft: keep its confi
 - Automatic hiding (display rules) exists to keep the user's own originals from filling tag search (they post a lot in small fandoms). Reblogs never appear in tag search, so rules hide originals only: imported "show only recent" becomes an originals-only rule; never default a rule to include reblogs. A rule or automation change starts a pass within 5 s (`svc.passSoon`).
 - Visitor checks: `visitor.js` hooks `ctx.afterVisibility` (called by `ops.visibility` on success) and runs `post.publicCheck` through the public API with `bearer: false`; an error is `unknown`, never "hidden".
 - A development run with `STUDIO_DATA` gets its own Electron profile (`userData`), so it can run next to the installed app.
+- Jobs queued by automation (route reblogs, expiry hides, automatic collects, tag copies) check their switch again right before writing and end `cancelled` if it was turned off; manual actions don't depend on it.
 - A create whose response was lost stays `unknown` until reconciliation finds it or the user picks "It wasn't created" (`jobs.resolve` → handler `abandon`); never let it turn into `failed` or be cancelled on its own.
 
 ### `extension/content.js` (tumblr.com pages)

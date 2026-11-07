@@ -232,6 +232,9 @@ const reblog = {
     if (!p.manual) {
       route = routesOf(db).find(r => r.id === p.route);
       if (!route || !route.enabled || route.revision !== p.revision) { mapClear(db, p); throw new StaleError('the route changed'); }
+      // route automation may have been switched off since this was planned: nothing is sent (the next pass with
+      // it on plans again)
+      if (!db.getMeta('automation', {}).routes) { mapClear(db, p); return { status: 'cancelled', error: 'route automation is off' }; }
     }
     // An earlier revision whose reblog is unresolved goes first (no out-of-order or duplicate versions)
     const earlier = db.get(`SELECT rev FROM deliveries WHERE src_blog = ? AND src_id = ? AND dest_blog = ? AND rev < ? AND status = 'unknown'`, p.blog, String(p.id), p.dest, p.rev);

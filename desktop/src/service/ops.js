@@ -53,6 +53,7 @@ const visibility = {
       const rule = rulesOf(db).find(r => r.id === job.payload.rule);
       if (!rule || !rule.enabled || rule.revision !== job.payload.ruleRevision) throw new StaleError('the rule changed');
       if (policyOf(db, blog, id).display !== 'follow_rule') throw new StaleError('the post has its own display choice now');
+      if (!db.getMeta('automation', {}).expiry) return { status: 'cancelled', error: 'automatic hiding is off' };
     }
     const { p, row } = await fresh(ctx, blog, id);
     if (row.legacy) throw new UnsupportedError('legacy-format post');

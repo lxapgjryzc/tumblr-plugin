@@ -268,3 +268,17 @@ test('R05: a deleted version is not sent again by hand either; its tombstone sta
   assert.equal(s.copies(A.id_string).length, 0);
   assert.equal(s.db.get('SELECT status FROM deliveries WHERE src_id = ? AND rev = 1', A.id_string).status, 'tombstone');
 });
+
+test('a route reblog planned before route automation was switched off sends nothing', async () => {
+  const s = await withRoute();
+  s.db.setMeta('automation', { routes: false });
+  const A = s.fake.addPost('t:art', { content: body('piece'), tags: ['art'], timestamp: ts(s.clock.t) });
+  await s.pass();
+  require('../src/service/groups').rebuild(s.db, s.clock.t);
+  assert.ok(routes.plan(s.db, s.svc.jobs, s.clock.t) >= 1, 'planned while it was on');
+  s.db.setMeta('automation', { routes: false });
+  await s.run();
+  assert.equal(s.copies(A.id_string).length, 0);
+  assert.equal(s.svc.jobs.list({}).find(j => j.kind === 'post.reblog').status, 'cancelled');
+  assert.ok(!s.db.get(`SELECT 1 FROM deliveries WHERE src_id = ? AND status = 'pending'`, A.id_string), 'no delivery left pending');
+});
