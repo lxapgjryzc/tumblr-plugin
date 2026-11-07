@@ -8,7 +8,8 @@ const SettingsPage = {
     let key = '', secret = '';
 
     const conn = card(t('connTitle'),
-      h('p', { class: 'status-line' }, h('span', { class: 'conn ' + s.auth }, '● ', t('connStatus_' + s.auth)), s.account?.name ? h('span', { class: 'muted' }, ' · ' + t('account') + ': ' + s.account.name) : null),
+      h('div', { class: 'status-line' }, h('span', { class: 'conn ' + s.auth }, '● ', t('connStatus_' + s.auth)), s.account?.name ? h('span', { class: 'muted' }, ' · ' + t('account') + ': ' + s.account.name) : null,
+        s.auth === 'connected' ? [h('span', { class: 'grow' }), h('button', { class: 'ghost danger', onclick: async () => { const ok = await modal(t('disconnect'), h('p', {}, t('disconnect') + '?'), [{ label: t('cancel'), value: false }, { label: t('disconnect'), value: true, class: 'danger' }]); if (ok) { await call('disconnect'); this.render(root); } } }, t('disconnect'))] : null),
       s.auth === 'connected' ? null : h('p', { class: 'muted' }, t('appKeyHint', 'http://localhost:8765/callback')),
       ['no_app', 'not_connected', 'reconnect'].includes(s.auth) ? h('div', { class: 'form-row' },
         h('input', { placeholder: t('consumerKey'), oninput: e => { key = e.target.value; }, autocomplete: 'off', spellcheck: 'false' }),
@@ -17,9 +18,9 @@ const SettingsPage = {
       h('div', { class: 'actions' },
         s.auth !== 'no_app' && s.auth !== 'connected' ? h('button', { class: 'primary', onclick: async e => { e.target.disabled = true; try { await call('connect'); toast(t('connStatus_connected'), 'ok'); } finally { this.render(root); } } }, t('connect')) : null,
         s.auth !== 'connected' ? h('button', { onclick: async e => { e.target.disabled = true; try { await call('importStage0'); toast(t('connStatus_connected'), 'ok'); } finally { this.render(root); } } }, t('importStage0')) : null,
-        s.auth !== 'no_app' ? h('button', { class: 'ghost danger', onclick: async () => { const ok = await modal(t('disconnect'), h('p', {}, t('disconnect') + '?'), [{ label: t('cancel'), value: false }, { label: t('disconnect'), value: true, class: 'danger' }]); if (ok) { await call('disconnect'); this.render(root); } } }, t('disconnect')) : null),
+        s.auth !== 'no_app' && s.auth !== 'connected' ? h('button', { class: 'ghost danger', onclick: async () => { const ok = await modal(t('disconnect'), h('p', {}, t('disconnect') + '?'), [{ label: t('cancel'), value: false }, { label: t('disconnect'), value: true, class: 'danger' }]); if (ok) { await call('disconnect'); this.render(root); } } }, t('disconnect')) : null),
       s.budget?.perHour ? h('p', { class: 'muted small' }, t('budget', s.budget.hour, s.budget.perHour, s.budget.day, s.budget.perDay)) : null,
-      s.relay ? h('div', {},
+      s.relay ? h('div', { class: 'setting-block' },
         h('label', { class: 'check-label' }, h('input', { type: 'checkbox', checked: s.settings.browserRelay !== false, onchange: async e => { await call('setSettings', { browserRelay: e.target.checked }); this.render(root); } }), t('relayUse')),
         h('p', { class: 'muted small' }, t('relayHint')),
         s.relay.enabled ? h('p', { class: 'muted small' }, s.relay.coolWhy ? t('relayCool_' + (['signed_out', 'other_account', 'limited'].includes(s.relay.coolWhy) ? s.relay.coolWhy : 'other'))
@@ -33,7 +34,7 @@ const SettingsPage = {
 
     const roles = card(t('rolesTitle'), h('p', { class: 'muted' }, t('rolesHint')),
       h('table', { class: 'table' }, h('tbody', {}, s.blogs.map(b => h('tr', {},
-        h('td', { class: 'blogcell' }, b.avatar ? h('img', { src: b.avatar, class: 'avatar' }) : null, h('b', {}, b.name), b.is_primary ? h('span', { class: 'badge' }, 'main') : null),
+        h('td', {}, h('div', { class: 'blogcell' }, b.avatar ? h('img', { src: b.avatar, class: 'avatar' }) : null, h('b', {}, b.name), b.is_primary ? h('span', { class: 'badge' }, 'main') : null)),
         h('td', {}, b.title || ''),
         h('td', { class: 'right' }, b.is_primary ? t('role_share')
           : select(['share', 'material', ''].map(r => ({ value: r, label: t('role_' + (r || 'null')) })), b.role || '', async v => { await call('setRole', { blog: b.uuid, role: v || null }); toast('✓'); })))))));

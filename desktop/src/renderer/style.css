@@ -431,3 +431,10 @@ input[type=checkbox]:disabled, input[type=radio]:disabled { opacity: .45; cursor
 .draft-cards .pcard .thumb.text { padding: 16px; font-size: 15px; font-weight: 600; -webkit-mask-image: none; mask-image: none; }
 .draft-cards .pcard .meta { flex-direction: row; flex-wrap: wrap; align-items: center; justify-content: space-between; }
 .draft-cards .pcard .row1 { flex: 1 1 100%; }
+
+/* Settings */
+.status-line { display: flex; align-items: center; gap: 4px; flex-wrap: wrap; margin: 4px 0 8px; }
+.status-line .grow { min-width: 0; }
+.status-line button { min-height: 28px; padding: 0 10px; font-size: 13px; }
+.setting-block { margin-top: 12px; padding-top: 12px; border-top: 1px solid var(--line); }
+.setting-block p { margin: 4px 0 0 24px; }
