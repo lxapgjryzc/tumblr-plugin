@@ -87,7 +87,7 @@ const WritePage = {
     const drafts = await call('drafts');
     root.replaceChildren(h('header', { class: 'page-head' }, h('h1', {}, t('navWrite')),
       h('div', { class: 'head-actions' }, h('button', { class: 'primary', onclick: () => this.create() }, t('newPost')))),
-      drafts.length ? h('div', { class: 'cards' }, drafts.map(d => h('div', { class: 'pcard', onclick: () => this.open(d.id) },
+      drafts.length ? h('div', { class: 'cards draft-cards' }, drafts.map(d => h('div', { class: 'pcard', onclick: () => this.open(d.id) },
         d.thumb ? h('div', { class: 'thumb' }, h('img', { src: d.thumb })) : h('div', { class: 'thumb text' }, d.title || t('untitled')),
         h('div', { class: 'meta' }, h('div', { class: 'row1' }, h('span', { class: 'blog' }, d.blog ? blogName(d.blog) : '—'), h('span', { class: 'muted' }, fmtTime(d.updated_at))),
           d.status !== 'editing' ? h('span', { class: 'badge warn' }, t('ds_' + d.status)) : null)))) : empty(t('noDrafts'), h('button', { class: 'primary', onclick: () => this.create() }, t('newPost'))));

@@ -330,9 +330,9 @@ details summary { cursor: pointer; color: var(--accent); }
 .cat-admin > .form-row { margin: 0 0 2px; padding: 4px 8px 4px 10px; background: var(--soft); border-radius: var(--radius-s); }
 .cat-admin > .form-row h3 { margin: 0; font-size: 12.5px; text-transform: uppercase; letter-spacing: .4px; color: var(--muted); }
 .cat-admin .table { table-layout: fixed; }
-.cat-admin .table td:first-child { width: 38%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.cat-admin .table td:first-child { width: 32%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .cat-admin .table td:nth-child(2) { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.cat-admin .table td:last-child { width: 196px; }
+.cat-admin .table td:last-child { width: 172px; }
 
 /* ---------- editor polish ---------- */
 .write { grid-template-columns: minmax(0, 820px) 340px; justify-content: center; }
@@ -425,3 +425,9 @@ input[type=checkbox]:disabled, input[type=radio]:disabled { opacity: .45; cursor
 .home-recent .pcard .sum, .home-recent .pcard .row2 { display: none; }
 .home-recent .pcard .meta { padding: 8px 10px 10px; gap: 4px; }
 .home-recent .pcard .row1 { flex-direction: column; gap: 0; }
+
+/* Drafts list */
+.draft-cards .pcard .thumb { aspect-ratio: 16 / 9; }
+.draft-cards .pcard .thumb.text { padding: 16px; font-size: 15px; font-weight: 600; -webkit-mask-image: none; mask-image: none; }
+.draft-cards .pcard .meta { flex-direction: row; flex-wrap: wrap; align-items: center; justify-content: space-between; }
+.draft-cards .pcard .row1 { flex: 1 1 100%; }

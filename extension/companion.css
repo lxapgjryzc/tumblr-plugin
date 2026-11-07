@@ -1,24 +1,54 @@
-:root { --bg: #f6f7fb; --panel: #fff; --fg: #1d2433; --muted: #6b7385; --line: #dde1ea; --accent: #3d5afe; --ok: #188a4a; --warn: #b26a00; --bad: #c62828; color-scheme: light; }
-@media (prefers-color-scheme: dark) { :root { --bg: #12151c; --panel: #1b1f29; --fg: #e8ebf2; --muted: #9aa3b5; --line: #2c3240; --accent: #7c93ff; --ok: #4cc38a; --warn: #f0b04a; --bad: #ff7a7a; color-scheme: dark; } }
+/* Same visual language as Tumblr Studio's window (desktop/src/renderer/style.css) */
+:root {
+  --bg: #f5f6f9; --panel: #fff; --fg: #171c29; --muted: #697186; --faint: #9aa1b2; --line: #e4e7ee; --line-strong: #d3d8e3; --soft: #f0f2f7; --hover: #eceff6;
+  --accent: #4361ee; --accent-ink: #3550d4; --accent-soft: #e8ecff; --on-accent: #fff;
+  --ok: #1a8754; --ok-soft: #e2f5eb; --warn: #a96300; --warn-soft: #fff4e0; --bad: #c93838; --bad-soft: #fdeaea;
+  --ring: 0 0 0 3px color-mix(in srgb, var(--accent) 28%, transparent);
+  --shadow: 0 1px 2px rgba(20, 30, 60, .05), 0 2px 8px rgba(20, 30, 60, .04);
+  color-scheme: light;
+}
+@media (prefers-color-scheme: dark) {
+  :root { --bg: #0f131b; --panel: #171c26; --fg: #e7eaf1; --muted: #9aa2b5; --faint: #6c7489; --line: #262d3a; --line-strong: #343c4c; --soft: #1e2430; --hover: #232a37;
+    --accent: #7b96ff; --accent-ink: #9cb0ff; --accent-soft: #222c4d; --on-accent: #0b1020;
+    --ok: #4cc38a; --ok-soft: #142d22; --warn: #f0b04c; --warn-soft: #33270f; --bad: #ff7b7b; --bad-soft: #3a1a1c; --shadow: none; color-scheme: dark; }
+}
 * { box-sizing: border-box; }
-body { margin: 0; background: var(--bg); color: var(--fg); font: 14px/1.5 system-ui, "Segoe UI", "Microsoft YaHei", sans-serif; }
-main { max-width: 760px; margin: 0 auto; padding: 24px 16px 48px; }
-h1 { font-size: 22px; margin: 0 0 4px; }
-h2 { font-size: 16px; margin: 0 0 8px; }
-.card { background: var(--panel); border: 1px solid var(--line); border-radius: 12px; padding: 16px 18px; margin-top: 14px; }
+body { margin: 0; background: var(--bg); color: var(--fg); font: 14px/1.55 "Segoe UI Variable Text", "Segoe UI", "Microsoft YaHei UI", "PingFang SC", system-ui, sans-serif; -webkit-font-smoothing: antialiased; }
+main { max-width: 760px; margin: 0 auto; padding: 32px 16px 56px; }
+header { display: grid; grid-template-columns: auto 1fr; column-gap: 14px; align-items: center; }
+header::before { content: "t"; grid-row: span 2; width: 40px; height: 40px; border-radius: 11px; display: grid; place-items: center; color: #fff; font-weight: 800; font-size: 22px;
+  background: linear-gradient(135deg, #5b7bff, #3a4fd8); box-shadow: 0 2px 10px rgba(67, 97, 238, .35); }
+h1 { font-size: 21px; margin: 0; font-weight: 650; letter-spacing: -.2px; }
+header p { margin: 0; }
+h2 { font-size: 15px; margin: 0 0 8px; font-weight: 640; }
+p { margin: 6px 0; }
+a { color: var(--accent); text-decoration: none; } a:hover { text-decoration: underline; }
+.card { background: var(--panel); border: 1px solid var(--line); border-radius: 12px; padding: 18px 20px; margin-top: 16px; box-shadow: var(--shadow); }
 .muted { color: var(--muted); }
-.small { font-size: 12px; }
-.row { display: flex; flex-wrap: wrap; gap: 8px; margin: 8px 0; }
-button, select { font: inherit; color: var(--fg); background: var(--panel); border: 1px solid var(--line); border-radius: 8px; padding: 6px 12px; cursor: pointer; }
-button.pri { background: var(--accent); border-color: var(--accent); color: #fff; }
-button:disabled { opacity: .5; cursor: default; }
-.check { display: flex; gap: 8px; align-items: center; margin: 6px 0; }
-.field { display: flex; gap: 10px; align-items: center; margin-top: 8px; }
-.conn { font-weight: 600; }
+.small { font-size: 12.5px; }
+.row { display: flex; flex-wrap: wrap; gap: 8px; margin: 10px 0 6px; }
+button, select { font: inherit; color: var(--fg); background: var(--panel); border: 1px solid var(--line-strong); border-radius: 8px; min-height: 34px; padding: 5px 14px; cursor: pointer; transition: background .12s, border-color .12s; }
+button:hover:not(:disabled) { background: var(--hover); }
+button.pri { background: var(--accent); border-color: var(--accent); color: var(--on-accent); font-weight: 600; }
+button.pri:hover:not(:disabled) { background: var(--accent-ink); border-color: var(--accent-ink); }
+button:disabled { opacity: .45; cursor: default; }
+button:focus-visible, select:focus-visible, input:focus-visible { outline: none; box-shadow: var(--ring); }
+input[type=checkbox] { appearance: none; -webkit-appearance: none; flex: none; width: 16px; height: 16px; margin: 0; border: 1.5px solid var(--faint); border-radius: 4px; background: var(--panel);
+  display: inline-grid; place-content: center; cursor: pointer; transition: background .12s, border-color .12s; }
+input[type=checkbox]:hover { border-color: var(--accent); }
+input[type=checkbox]:checked { background: var(--accent); border-color: var(--accent); }
+input[type=checkbox]:checked::after { content: ""; width: 9px; height: 5px; border: solid var(--on-accent); border-width: 0 0 2px 2px; transform: translateY(-1px) rotate(-45deg); }
+.check { display: flex; gap: 10px; align-items: center; margin: 8px 0; cursor: pointer; }
+.field { display: flex; gap: 10px; align-items: center; margin-top: 12px; }
+.field > span { color: var(--muted); }
+.conn { font-weight: 600; display: flex; align-items: center; gap: 8px; }
+.conn::before { content: ""; width: 8px; height: 8px; border-radius: 50%; background: currentColor; flex: none; }
 .conn.ok { color: var(--ok); } .conn.warn { color: var(--warn); } .conn.off { color: var(--muted); }
-.table { width: 100%; border-collapse: collapse; }
-.table td { padding: 6px 4px; border-top: 1px solid var(--line); vertical-align: top; }
-.badge { font-size: 12px; border-radius: 10px; padding: 1px 8px; border: 1px solid var(--line); white-space: nowrap; }
-.badge.wStudio { color: var(--ok); border-color: var(--ok); } .badge.wPending { color: var(--warn); border-color: var(--warn); }
-.badge.wRetired { color: var(--muted); } .badge.wBrowser { color: var(--accent); border-color: var(--accent); }
-.banner { background: var(--panel); border: 1px solid var(--warn); border-radius: 8px; padding: 8px 12px; }
+.table { width: 100%; border-collapse: collapse; margin-top: 6px; }
+.table td { padding: 8px 6px; border-top: 1px solid var(--line); vertical-align: top; }
+.table tr:first-child td { border-top: 0; }
+.badge { display: inline-block; font-size: 11.5px; font-weight: 550; border-radius: 99px; padding: 1px 9px; background: var(--soft); color: var(--muted); white-space: nowrap; line-height: 1.7; }
+.badge.wStudio { background: var(--ok-soft); color: var(--ok); } .badge.wPending { background: var(--warn-soft); color: var(--warn); }
+.badge.wRetired { background: var(--soft); color: var(--muted); } .badge.wBrowser { background: var(--accent-soft); color: var(--accent); }
+.banner { background: var(--warn-soft); color: var(--warn); border: 1px solid color-mix(in srgb, var(--warn) 25%, transparent); border-radius: 10px; padding: 10px 14px; }
+.conn:empty::before { display: none; }
