@@ -447,3 +447,10 @@ input[type=checkbox]:disabled, input[type=radio]:disabled { opacity: .45; cursor
 .review-item { padding: 12px 0; border-top: 1px solid var(--line); }
 .review-item h3 { margin: 0 0 6px; }
 .cat-pick { display: flex; flex-direction: column; gap: 6px; margin: 8px 0; }
+.cat-pick .form-row { margin: 0; gap: 6px; }
+.cat-pick .form-row > span:first-child { min-width: 120px; }
+.cat-pick + .chips { margin: 14px 0 10px; padding-top: 12px; border-top: 1px solid var(--line); }
+/* a tag and its "put on the rest" button read as one control */
+.chip-pair { margin: 0; gap: 0; }
+.chip-pair .chip:first-child:not(:last-child) { border-top-right-radius: 0; border-bottom-right-radius: 0; }
+.chip-pair .chip + .chip { border-top-left-radius: 0; border-bottom-left-radius: 0; margin-left: -1px; padding: 4px 10px; }
