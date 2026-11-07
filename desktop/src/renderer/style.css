@@ -69,6 +69,7 @@ button:disabled { opacity: .45; cursor: default; transform: none; }
 button:disabled:hover { background: var(--panel); }
 button.primary { background: var(--accent); border-color: var(--accent); color: var(--on-accent); font-weight: 600; }
 button.primary:hover { background: var(--accent-ink); border-color: var(--accent-ink); }
+button.primary:disabled, button.primary:disabled:hover { opacity: 1; background: var(--soft); border-color: var(--line-strong); color: var(--faint); }
 button.ghost { background: transparent; border-color: transparent; color: var(--muted); }
 button.ghost:hover { color: var(--ink); background: var(--hover); }
 button.danger { color: var(--danger); }
@@ -79,7 +80,7 @@ input:not([type=checkbox]):not([type=radio]):not([type=range]):not([type=color])
 input::placeholder, textarea::placeholder { color: var(--faint); }
 input:hover, select:hover, textarea:hover { border-color: color-mix(in srgb, var(--accent) 35%, var(--line-strong)); }
 input:focus, select:focus, textarea:focus { outline: none; border-color: var(--accent); box-shadow: var(--ring); }
-select { cursor: pointer; }
+select { cursor: pointer; min-width: 120px; }
 input[type=checkbox], input[type=radio] { width: 16px; height: 16px; margin: 0; accent-color: var(--accent); cursor: pointer; flex: none; }
 
 /* ---------- layout ---------- */
@@ -435,3 +436,14 @@ input[type=checkbox]:disabled, input[type=radio]:disabled { opacity: .45; cursor
 .page-loading { width: 28px; height: 28px; margin: 80px auto; border-radius: 50%; border: 3px solid var(--line-strong); border-top-color: var(--accent);
   opacity: 0; animation: spin .8s linear infinite, appear .2s ease-out .25s forwards; }
 .npf-tags { display: flex; flex-wrap: wrap; gap: 2px 10px; padding: 10px 16px 0; color: #767676; font-size: 13px; }
+
+/* Tag upkeep: ticked lists of suggested changes */
+.page-head + p.muted { margin: -8px 0 16px; max-width: 900px; }
+.checklist { display: flex; flex-direction: column; gap: 2px; margin: 8px 0; max-height: 420px; overflow-y: auto; }
+.check-row { display: flex; align-items: baseline; gap: 10px; padding: 7px 10px; border-radius: 8px; cursor: pointer; flex-wrap: wrap; }
+.check-row input { align-self: center; }
+.check-row:hover { background: var(--soft); }
+.check-row.bad b, .check-row.bad s { color: var(--danger); }
+.review-item { padding: 12px 0; border-top: 1px solid var(--line); }
+.review-item h3 { margin: 0 0 6px; }
+.cat-pick { display: flex; flex-direction: column; gap: 6px; margin: 8px 0; }
