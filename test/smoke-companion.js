@@ -231,7 +231,7 @@ function makeChrome(store, studio, tumblrCalls) {
   const r3 = await studio.relay.send({ method: 'PUT', path: '/v2/blog/someoneelse/posts/13', query: {}, json: { tags: 'x' } }).then(() => 'sent', e => e.message);
   check(/not_own_blog/.test(r3) && tumblrCalls.length === n, 'an edit on a blog outside the account is refused without a request: ' + r3);
   const r4 = await studio.relay.send({ method: 'GET', path: '/v2/blog/someoneelse/posts', query: {} }).then(() => 'sent', e => e.message);
-  check(/not_own_blog/.test(r4) && tumblrCalls.length === n, 'another blog's post list is refused, and one refusal doesn't pause the relay: ' + r4);
+  check(/not_own_blog/.test(r4) && tumblrCalls.length === n, "another blog's post list is refused, and one refusal doesn't pause the relay: " + r4);
   console.log(failures ? `${failures} FAILED` : 'all passed');
   process.exit(failures ? 1 : 0);
 })().catch(e => { console.log('TEST CRASH', e.stack || e); process.exit(1); });

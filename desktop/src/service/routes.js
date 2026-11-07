@@ -169,10 +169,12 @@ function manualReblog(db, jobs, { blog, id, dest, state = 'published' }) {
   if (!rev) throw new Error('the source has not been read yet (sync first)');
   const st = standing(db, blog, id, dest);
   const have = st.delivered.get(rev.rev);
+  if (have?.status === 'tombstone') throw new Error('this version’s reblog was deleted from that blog; it is not sent again (a new version can be)');
   if (have && ['created', 'existing', 'pending', 'unknown'].includes(have.status)) throw new Error('this version is already on the destination or on its way');
   if (st.open) throw new Error('an earlier version\'s reblog has an unknown outcome; resolve it in Activity first');
   db.run(`INSERT INTO deliveries (route_id, src_blog, src_id, rev, dest_blog, status, fingerprint, at) VALUES (NULL, ?, ?, ?, ?, 'pending', ?, ?)
-    ON CONFLICT(src_blog, src_id, rev, dest_blog) DO UPDATE SET status = 'pending', dest_id = NULL, reason = NULL, fingerprint = excluded.fingerprint, at = excluded.at`,
+    ON CONFLICT(src_blog, src_id, rev, dest_blog) DO UPDATE SET status = 'pending', dest_id = NULL, reason = NULL, fingerprint = excluded.fingerprint, at = excluded.at
+    WHERE deliveries.status != 'tombstone'`,
   blog, id, rev.rev, dest, rev.fingerprint, Date.now());
   return jobs.add('post.reblog', { route: null, blog, id, rev: rev.rev, fp: rev.fingerprint, dest, state, manual: true }, { priority: 1, scope: `reblog:${blog}:${id}:${dest}` });
 }

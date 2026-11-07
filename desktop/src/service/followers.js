@@ -105,7 +105,8 @@ function addFollowers(svc, api, { aiKey = () => null, fetchFn = fetch } = {}) {
       const { blog } = job.payload;
       let offset = job.payload.offset || 0;
       const started = job.payload.started || now();
-      const baseline = !db.get('SELECT 1 FROM followers WHERE blog = ? AND baseline = 1', blog) && !db.getMeta('followerBaseline:' + blog);
+      // decided once per scan and carried through its segments: the first scan's later pages are baseline too
+      const baseline = job.payload.baseline ?? (!db.get('SELECT 1 FROM followers WHERE blog = ? AND baseline = 1', blog) && !db.getMeta('followerBaseline:' + blog));
       for (let i = 0; i < 10; i++) {
         const r = await ctx.tumblr.followers(blog, offset, 20);
         const users = r.users || [];
@@ -126,7 +127,7 @@ function addFollowers(svc, api, { aiKey = () => null, fetchFn = fetch } = {}) {
           return { status: 'succeeded', result: { followers: offset, baseline } };
         }
       }
-      return { status: 'pending', payload: { ...job.payload, offset: Math.max(0, offset - 5), started } };
+      return { status: 'pending', payload: { ...job.payload, offset: Math.max(0, offset - 5), started, baseline } };
     },
   };
   svc.handlers['follower.following'] = {
@@ -190,9 +191,20 @@ function addFollowers(svc, api, { aiKey = () => null, fetchFn = fetch } = {}) {
       const { blog, uuid, name, undo } = job.payload;
       if (!undo && db.get('SELECT 1 FROM allowlist WHERE uuid = ?', uuid)) return { status: 'cancelled', error: 'allowlisted' };
       if (job.payload.phase !== 'verify') {
-        // identity is checked again: a name can change hands
-        const info = await ctx.tumblr.publicInfo(name).catch(() => null);
-        if (info && info.blog?.uuid && info.blog.uuid !== uuid) return { status: 'failed', error: 'this name now belongs to another blog' };
+        // identity is checked again: a name can change hands. Unconfirmed → nothing is sent; try again later.
+        let info = null, why = null;
+        try { info = await ctx.tumblr.publicInfo(name); }
+        catch (e) {
+          if (e instanceof HttpError && e.status === 404) return { status: 'failed', error: 'this name no longer exists; not sent' };
+          why = String(e?.message || e).slice(0, 200);
+        }
+        if (!why && !info?.blog?.uuid) why = 'no stable id in the answer';
+        if (why) {
+          const n = job.payload.idTries || 0;
+          if (n >= 5) return { status: 'failed', error: 'could not confirm who this name belongs to; not sent (' + why + ')' };
+          return { status: 'waiting', error: 'identity not confirmed yet: ' + why, payload: { ...job.payload, idTries: n + 1 }, nextAt: now() + 60_000 * 2 ** n };
+        }
+        if (info.blog.uuid !== uuid) return { status: 'failed', error: 'this name now belongs to another blog' };
         const pre = await isBlocked(ctx, blog, uuid, name);
         if (!undo && pre) { setBlock(blog, uuid, name, 'external', 'blocked'); return { status: 'unchanged', error: 'already blocked' }; }
         if (undo) {

@@ -243,3 +243,28 @@ test('tag sync: an edit of the original in the app reaches its reblogs at once; 
   await s.run(); await s.pass();
   assert.deepEqual(s.fake.posts.get(R.id_string).tags, ['art', 'general tag'], 'off means nothing is written to reblogs');
 });
+
+test('tag sync: a copy.tags job queued before route automation was switched off sends nothing', async () => {
+  const s = await withRoute();
+  const A = s.fake.addPost('t:art', { content: body('piece'), tags: ['art'], timestamp: ts(s.clock.t) });
+  await s.pass();
+  const [R] = s.copies(A.id_string);
+  s.db.run(`UPDATE posts SET tags = ? WHERE blog = 't:art' AND id = ?`, JSON.stringify(['art', 'new']), A.id_string);
+  s.svc.jobs.add('copy.tags', { blog: 't:main', id: R.id_string, src_blog: 't:art', src_id: A.id_string }, { scope: `post:t:main:${R.id_string}` });
+  s.db.setMeta('automation', { routes: false });
+  await s.run();
+  assert.ok(!s.fake.calls.includes('put:' + R.id_string));
+  assert.equal(s.svc.jobs.list({}).find(j => j.kind === 'copy.tags').status, 'cancelled');
+});
+
+test('R05: a deleted version is not sent again by hand either; its tombstone stays', async () => {
+  const s = await withRoute();
+  const A = s.fake.addPost('t:art', { content: body('first'), tags: ['art'], timestamp: ts(s.clock.t) });
+  await s.pass();
+  s.fake.posts.delete(s.copies(A.id_string)[0].id_string);
+  await s.pass({ full: true });
+  assert.throws(() => s.api.reblogTo({ targets: [{ blog: 't:art', id: A.id_string }], dest: 't:main' }), /deleted/);
+  await s.run();
+  assert.equal(s.copies(A.id_string).length, 0);
+  assert.equal(s.db.get('SELECT status FROM deliveries WHERE src_id = ? AND rev = 1', A.id_string).status, 'tombstone');
+});

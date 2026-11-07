@@ -248,3 +248,78 @@ test('categories: changed default tags reach untouched entries once; retired def
   assert.equal(c(5).tag, '学习笔记', 'retired but a blog default selects it: kept');
   assert.equal(fake.calls.filter(x => /put|create|reblog/.test(x)).length, 0, 'no remote edits');
 });
+
+test('publish: a reconcile that is rate limited or signed out stays unknown and never sends again', async () => {
+  const { fake, svc, api, run } = setup();
+  svc.pass(); await run();
+  svc.db.run(`UPDATE blogs SET role = 'share'`);
+  const d = api.newDraft({ blog: 't:art' });
+  api.saveDraft({ id: d.id, doc: { v: 1, blocks: [{ id: 'y', type: 'text', text: 'only once' }], rows: [] }, options: {}, revision: d.revision, blog: 't:art' });
+  const { RateError, AuthError } = require('../src/service/errors');
+  const orig = fake.createPost, page = fake.postsPage;
+  fake.createPost = async (...args) => { await orig(...args); throw netFail(true); };
+  let lookups = 0;
+  fake.postsPage = async (...args) => {
+    lookups++;
+    if (lookups === 1) throw new RateError('HTTP 429', { retryAt: 0 });
+    if (lookups === 2) throw new AuthError('HTTP 401');
+    return page(...args);
+  };
+  api.publish({ id: d.id });
+  await svc.jobs.drain(svc.ctx); // create (lost) + first failed lookup
+  const job = () => svc.jobs.list({}).find(j => j.kind === 'post.publish');
+  assert.equal(job().status, 'unknown');
+  await run();
+  fake.createPost = orig; fake.postsPage = page;
+  assert.equal(fake.calls.filter(c => c === 'create:t:art').length, 1, 'sent once');
+  assert.equal([...fake.posts.values()].filter(p => p.content?.[0]?.text === 'only once').length, 1);
+  assert.equal(api.draft({ id: d.id }).status, 'published');
+});
+
+test('publish: reconcile compares links, formatting and layout, so a different link post is not claimed', async () => {
+  const { fake, svc, api, run, clock } = setup();
+  svc.pass(); await run();
+  svc.db.run(`UPDATE blogs SET role = 'share'`);
+  const at = Math.floor(clock.t / 1000);
+  fake.addPost('t:art', { content: [{ type: 'link', url: 'https://b.example/' }], timestamp: at });
+  fake.addPost('t:art', { content: [{ type: 'text', text: 'see here', formatting: [{ type: 'link', start: 4, end: 8, url: 'https://b.example/' }] }], timestamp: at });
+  const d = api.newDraft({ blog: 't:art' });
+  api.saveDraft({ id: d.id, revision: d.revision, blog: 't:art', options: {}, doc: { v: 1, rows: [], blocks: [
+    { id: 'l', type: 'link', url: 'https://a.example/' },
+  ] } });
+  const d2 = api.newDraft({ blog: 't:art' });
+  api.saveDraft({ id: d2.id, revision: d2.revision, blog: 't:art', options: {}, doc: { v: 1, rows: [], blocks: [
+    { id: 't', type: 'text', text: 'see here', formatting: [{ type: 'link', start: 4, end: 8, url: 'https://a.example/' }] },
+  ] } });
+  const orig = fake.createPost;
+  fake.createPost = async () => { throw netFail(true); };
+  api.publish({ id: d.id }); api.publish({ id: d2.id });
+  await run();
+  fake.createPost = orig;
+  const jobs = svc.jobs.list({}).filter(j => j.kind === 'post.publish');
+  assert.deepEqual(jobs.map(j => j.status), ['unknown', 'unknown']);
+  assert.equal(api.draft({ id: d.id }).status, 'publishing');
+  assert.equal(api.draft({ id: d2.id }).status, 'publishing');
+});
+
+test('publish: a lost response is still found when Tumblr returns the link percent-encoded', async () => {
+  const { fake, svc, api, run } = setup();
+  svc.pass(); await run();
+  svc.db.run(`UPDATE blogs SET role = 'share'`);
+  const d = api.newDraft({ blog: 't:art' });
+  api.saveDraft({ id: d.id, revision: d.revision, blog: 't:art', options: {}, doc: { v: 1, rows: [], blocks: [
+    { id: 't', type: 'text', text: 'wiki 赤足队', formatting: [{ type: 'link', start: 5, end: 8, url: 'https://zh.example.org/赤足队' }] },
+  ] } });
+  const orig = fake.createPost;
+  fake.createPost = async (blog, json, files) => {
+    const c = JSON.parse(JSON.stringify(json.content));
+    c[0].formatting[0].url = encodeURI(c[0].formatting[0].url);
+    await orig(blog, { ...json, content: c }, files);
+    throw netFail(true);
+  };
+  api.publish({ id: d.id });
+  await run();
+  fake.createPost = orig;
+  assert.equal(fake.calls.filter(c => c === 'create:t:art').length, 1);
+  assert.equal(api.draft({ id: d.id }).status, 'published');
+});

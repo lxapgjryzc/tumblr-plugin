@@ -111,6 +111,13 @@ function makeJobs(db, { handlers = {}, now = Date.now, onChange = () => {}, log 
 
   function classify(e, job, h, reconciling) {
     const msg = String(e?.message || e).slice(0, 500);
+    // A create being reconciled may already exist: whatever stopped the lookup (rate limit, signed out, a
+    // server error), it stays unknown and is looked up again later. Only reconcile or "It wasn't created" ends it.
+    if (h.creates && reconciling) {
+      const wait = e instanceof RateError ? (e.retryAt || now() + 60_000) : e instanceof AuthError ? now() + 10 * 60_000
+        : now() + Math.min(30 * 60_000, 60_000 * 2 ** Math.min(job.attempts, 5));
+      return { status: 'unknown', error: 'outcome unknown (lookup failed: ' + msg + ')', next_at: wait };
+    }
     if (e instanceof AuthError) return { status: 'waiting', error: 'auth: ' + msg, next_at: now() + 10 * 60_000 };
     if (e instanceof RateError) return { status: 'waiting', error: 'rate: ' + msg, next_at: e.retryAt || now() + 60_000 };
     if (e instanceof NetError) {

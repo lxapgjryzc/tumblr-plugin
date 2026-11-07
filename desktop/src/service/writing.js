@@ -369,20 +369,38 @@ function addWriting(svc, api, { dataDir }) {
 
   // ----- the publish job -----
   const boxOf = state => (state === 'draft' ? 'draft' : state === 'queue' ? 'queue' : '');
-  // The body as far as it can be compared after the fact: every text block (subtype + text) in order, the
-  // image count and which blocks share a row. Images come back as Tumblr's copies, so only their count.
-  const bodyKey = (content = [], layout = []) => JSON.stringify([
-    (content || []).filter(b => b.type === 'text').map(b => [b.subtype || '', (b.text || '').trim()]),
-    (content || []).filter(b => b.type === 'image').length,
-    ((layout || []).find(l => l.type === 'rows')?.display || []).map(r => r.blocks).filter(b => b.length > 1),
-  ]);
+  // The body as far as it can be compared after the fact, block by block in order: text (subtype, text and
+  // every formatting range with its link/colour), links (url), images (alt text, caption; the files come back
+  // as Tumblr's copies) and any other block by type, plus the layout's rows, order and read-more. A link title
+  // we set must come back too (sameBody); one Tumblr fills in itself is not compared.
+  // Tumblr returns URLs percent-encoded (non-ASCII paths, %XX), so both sides are compared in one decoded form
+  const urlKey = u => { const s = String(u || '').trim(); try { return decodeURI(new URL(s).href); } catch { return s; } };
+  const fmtKey = f => (f || []).map(x => JSON.stringify([x.type, x.start, x.end, x.url ? urlKey(x.url) : '', String(x.hex || '').toLowerCase()])).sort();
+  const blockKey = b => b.type === 'text' ? ['t', b.subtype || '', (b.text || '').trim(), fmtKey(b.formatting)]
+    : b.type === 'image' ? ['i', b.alt_text || '', b.caption || '']
+      : b.type === 'link' ? ['l', urlKey(b.url)]
+        : ['?', b.type || ''];
+  const layoutKey = (layout, n) => {
+    const l = (layout || []).find(x => x.type === 'rows');
+    if (!l) return [];
+    const rows = (l.display || []).map(r => r.blocks || []);
+    const plain = rows.every((r, i) => r.length === 1 && r[0] === i) && rows.length === n;
+    return [plain ? [] : rows, l.truncate_after ?? null];
+  };
+  const bodyKey = (content = [], layout = []) => {
+    const c = content || [];
+    const lk = layoutKey(layout, c.length);
+    return JSON.stringify([c.map(blockKey), lk.length && (lk[0].length || lk[1] !== null) ? lk : []]);
+  };
+  const sameBody = (want, got) => bodyKey(want.content, want.layout) === bodyKey(got.content, got.layout)
+    && (want.content || []).every((b, i) => b.type !== 'link' || !b.title || (got.content || [])[i]?.title === b.title);
   const tagKey = tags => JSON.stringify((tags || []).map(C.key));
   // Every post since shortly before the publish started, however many pages that takes (newest first, so it
   // stops at the first older post; MAX_PAGES is only a safety net, and the result then says it was cut short)
   const MAX_PAGES = 40;
   async function findPublished(ctx, p) {
     const want = compile(p.doc, assetsOf(p.doc));
-    const key = bodyKey(want.content, want.layout), tags = tagKey(p.tags), since = p.startedAt - 120e3;
+    const tags = tagKey(p.tags), since = p.startedAt - 120e3;
     const found = [];
     let next = null, complete = false;
     for (let i = 0; i < MAX_PAGES; i++) {
@@ -391,7 +409,7 @@ function addWriting(svc, api, { dataDir }) {
       for (const q of page.posts) {
         const ts = (q.timestamp || 0) * 1000;
         if (ts && ts < since) { older = true; continue; }
-        if (bodyKey(q.content, q.layout) === key && tagKey(q.tags) === tags) found.push(String(q.id_string ?? q.id));
+        if (sameBody(want, q) && tagKey(q.tags) === tags) found.push(String(q.id_string ?? q.id));
       }
       next = page.next;
       // the queue is ordered by publish time, not creation time: read all of it
@@ -416,7 +434,7 @@ function addWriting(svc, api, { dataDir }) {
         const want = compile(p.doc, assetsOf(p.doc));
         const stored = ctx.db.get('SELECT payload FROM posts WHERE blog = ? AND id = ?', p.blog, p.remoteId);
         const got = (stored && P(stored.payload)) || {};
-        const okBody = bodyKey(got.content, got.layout) === bodyKey(want.content, want.layout);
+        const okBody = sameBody(want, got);
         return verifyStep(ctx, job, okTags && okState && okBody, { status: 'succeeded', result: { id: p.remoteId, state: row.state, tags: row.tags, images: (got.content || []).filter(b => b.type === 'image').length } });
       }
       const d = db.get('SELECT status, revision FROM drafts WHERE id = ?', p.draft);

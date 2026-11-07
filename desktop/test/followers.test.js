@@ -121,3 +121,36 @@ test('block, allowlist correction, external blocks, reused names (F07, F10, F11,
   await run();
   assert.ok(!fake.blockMap.get('t:main').has('renamed'));
 });
+
+test('block: an identity lookup that fails sends nothing and is tried again later', async () => {
+  const { fake, svc, api, run } = setup();
+  svc.pass(); await run();
+  follow2(fake, 'maybe', 't:m1');
+  const info = fake.publicInfo;
+  fake.publicInfo = async () => { throw new Error('network down (fake)'); };
+  api.blockFollower({ uuid: 't:m1', name: 'maybe' });
+  await svc.jobs.drain(svc.ctx);
+  assert.ok(!fake.calls.some(c => c.startsWith('block:')), 'not sent without a confirmed identity');
+  assert.equal(svc.jobs.list({}).find(j => j.kind === 'follower.block').status, 'waiting');
+  fake.publicInfo = info;
+  await run();
+  assert.ok(fake.blockMap.get('t:main').has('maybe'));
+});
+
+test('scan: a first scan longer than one segment is a baseline all the way through', async () => {
+  const { svc, api, run, follow } = setup();
+  svc.pass(); await run();
+  for (let i = 0; i < 205; i++) follow('f' + i, 't:f' + i);
+  api.setFollowerGuard({ mode: 'review' });
+  await run();
+  assert.equal(svc.db.get('SELECT COUNT(*) n FROM followers WHERE baseline = 1').n, 205);
+  assert.equal(svc.db.get('SELECT COUNT(*) n FROM followers WHERE baseline = 0').n, 0);
+  assert.equal(svc.jobs.list({}).filter(j => j.kind === 'follower.inspect').length, 0);
+});
+
+function follow2(fake, name, uuid) {
+  const list = fake.followerMap.get('t:main') || [];
+  list.unshift({ name, updated: 0 });
+  fake.followerMap.set('t:main', list);
+  fake.infos.set(name, { uuid });
+}

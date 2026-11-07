@@ -28,6 +28,7 @@ test('relay: only own-post reads and edits, follower lists, likes and tag search
   assert.ok(relayable('GET', '/v2/user/following'));
   assert.ok(relayable('GET', '/v2/user/likes'));
   assert.ok(relayable('GET', '/v2/tagged'));
+  assert.ok(relayable('GET', '/v2/blog/someoneelse/notes'));
   assert.ok(!relayable('POST', '/v2/user/unlike'), 'unlike stays official');
   assert.ok(!relayable('POST', '/v2/blog/mainblog/posts'), 'creates stay official');
   assert.ok(!relayable('POST', '/v2/blog/mainblog/post/delete'), 'deletes stay official');
@@ -100,6 +101,16 @@ test('relay: not connected, signed out, limited or another account → the offic
   await browser(relay, () => ({ refused: 'other_account' }));
   assert.equal((await p).via, 'official');
   assert.equal(relay.stats().coolWhy, 'other_account');
+
+  // one request the browser won't carry (a blog outside the account) goes official, and the relay stays usable
+  relay = makeRelay();
+  T = makeTumblr({ creds, relay, fetchFn: official(calls) });
+  await relay.next(0);
+  p = T.putPost('someoneelse', '1', { tags: 'x' });
+  await browser(relay, () => ({ refused: 'not_own_blog' }));
+  assert.equal((await p).via, 'official');
+  assert.equal(relay.stats().coolWhy, null);
+  assert.ok(relay.available());
 
   relay = makeRelay();
   T = makeTumblr({ creds, relay, fetchFn: official(calls) });

@@ -57,6 +57,9 @@ function addCopyTags(svc) {
       }
       // the original's tags as last verified (a tag edit here reads it back; a pass syncs edits made on Tumblr
       // before queueing), so only the reblog itself is read: one request saved per copy
+      // route automation may have been switched off since this was queued: nothing is sent then (a copy already
+      // sent is still verified above)
+      if (!on()) return { status: 'cancelled', error: 'route automation is off' };
       const src = db.get(`SELECT tags FROM posts WHERE blog = ? AND id = ? AND kind = 'original' AND state != 'gone'`, src_blog, String(src_id));
       if (!src) return { status: 'skipped', error: 'the original is gone' };
       const { p, row } = await fresh(ctx, blog, id);
