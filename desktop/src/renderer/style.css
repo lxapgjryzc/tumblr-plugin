@@ -422,3 +422,9 @@ input[type=checkbox]:disabled, input[type=radio]:disabled { opacity: .45; cursor
 /* Clicking a tag chip in the detail view removes it: say so on hover */
 .tag-edit .chips .chip:not(.on):not(.struck):hover { text-decoration: line-through; color: var(--danger); border-color: color-mix(in srgb, var(--danger) 45%, transparent); background: var(--danger-soft); }
 .tag-edit .chip.struck { color: var(--danger); background: var(--danger-soft); border-color: transparent; }
+
+/* Shown while a page loads its data; appears only if loading takes a moment */
+@keyframes spin { to { transform: rotate(360deg); } }
+@keyframes appear { to { opacity: 1; } }
+.page-loading { width: 28px; height: 28px; margin: 80px auto; border-radius: 50%; border: 3px solid var(--line-strong); border-top-color: var(--accent);
+  opacity: 0; animation: spin .8s linear infinite, appear .2s ease-out .25s forwards; }

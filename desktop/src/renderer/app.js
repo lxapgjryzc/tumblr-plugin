@@ -26,7 +26,7 @@ const App = {
     App.pageName = name;
     try { localStorage.setItem('page', name); } catch {}
     const root = $('#main');
-    root.replaceChildren();
+    root.replaceChildren(h('div', { class: 'page-loading' }));  // pages replace it when their data is in
     root.scrollTop = 0;
     try { await Page.render(root, params); }
     catch (e) { console.error('render ' + name + ': ' + (e?.stack || e)); root.append(h('div', { class: 'banner warn' }, cleanErr(e))); }

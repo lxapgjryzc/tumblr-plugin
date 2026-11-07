@@ -2,7 +2,7 @@
 // Electron main process: hosts the desktop service, the window and the tray.
 // Closing the window keeps the service running in the tray; Quit stops it (resumes and reconciles next start).
 
-const { app, BrowserWindow, Tray, Menu, ipcMain, shell, safeStorage, nativeImage, dialog } = require('electron');
+const { app, BrowserWindow, Tray, Menu, ipcMain, shell, safeStorage, nativeImage, dialog, nativeTheme } = require('electron');
 const path = require('node:path');
 const fs = require('node:fs');
 const { spawnSync } = require('node:child_process');
@@ -168,7 +168,7 @@ function send(ch, data) { if (win && !win.isDestroyed()) win.webContents.send(ch
 
 function createWindow() {
   win = new BrowserWindow({
-    width: 1380, height: 900, minWidth: 980, minHeight: 640, title: 'Tumblr Studio', backgroundColor: '#f6f7fb', show: false,
+    width: 1380, height: 900, minWidth: 980, minHeight: 640, title: 'Tumblr Studio', backgroundColor: nativeTheme.shouldUseDarkColors ? '#0f131b' : '#f5f6f9', show: false,
     icon: path.join(__dirname, '..', 'renderer', 'icon.png'),
     webPreferences: { backgroundThrottling: !process.env.STUDIO_SNAP, preload: path.join(__dirname, 'preload.js'), contextIsolation: true, nodeIntegration: false, sandbox: true },
   });
