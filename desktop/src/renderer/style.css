@@ -454,3 +454,4 @@ input[type=checkbox]:disabled, input[type=radio]:disabled { opacity: .45; cursor
 .chip-pair { margin: 0; gap: 0; }
 .chip-pair .chip:first-child:not(:last-child) { border-top-right-radius: 0; border-bottom-right-radius: 0; }
 .chip-pair .chip + .chip { border-top-left-radius: 0; border-bottom-left-radius: 0; margin-left: -1px; padding: 4px 10px; }
+.modal-body > div > input:not([type=checkbox]):not([type=radio]), .tag-edit > input { width: min(100%, 420px); }
