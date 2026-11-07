@@ -438,3 +438,10 @@ input[type=checkbox]:disabled, input[type=radio]:disabled { opacity: .45; cursor
 .status-line button { min-height: 28px; padding: 0 10px; font-size: 13px; }
 .setting-block { margin-top: 12px; padding-top: 12px; border-top: 1px solid var(--line); }
 .setting-block p { margin: 4px 0 0 24px; }
+
+/* Between-block inserters take a thin strip and float their buttons over it on hover */
+.canvas > .inserter { position: relative; z-index: 3; height: 12px; min-height: 0; padding: 0; align-items: center; overflow: visible; }
+.canvas > .inserter:last-child { height: auto; padding: 3px 0; }
+.canvas > .inserter:not(:last-child)::before { content: ""; position: absolute; left: 8px; right: 8px; top: 50%; border-top: 1px dashed var(--accent); opacity: 0; transition: opacity .12s; }
+.canvas > .inserter:not(:last-child):hover::before { opacity: .5; }
+.canvas > .inserter:not(:last-child) button { position: relative; background: var(--panel); }
