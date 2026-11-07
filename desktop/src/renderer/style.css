@@ -322,7 +322,7 @@ details summary { cursor: pointer; color: var(--accent); }
 .pcard .open { top: 8px; right: 8px; min-height: 26px; padding: 0 8px; border-radius: 6px; opacity: 0; background: rgba(255, 255, 255, .95); color: #1b2234; box-shadow: 0 1px 4px rgba(0, 0, 0, .18); transition: opacity .12s; }
 .pcard:hover .open, .pcard .open:focus-visible { opacity: 1; }
 .pcard .open:hover { background: #fff; color: #000; }
-.pcard .thumb.text { padding-right: 40px; }
+.pcard .thumb.text { padding: 42px 16px 0; }
 
 /* Compact row actions in tables and group headers */
 .table td.right button, .cat-admin .form-row button { min-height: 28px; padding: 2px 9px; }
@@ -370,7 +370,7 @@ details summary { cursor: pointer; color: var(--accent); }
 
 /* ---------- toolbars and search ---------- */
 .toolbar > button.on { background: var(--accent-soft); border-color: color-mix(in srgb, var(--accent) 45%, transparent); color: var(--accent); font-weight: 600; }
-.toolbar input[type=search].grow { min-width: 200px; }
+.toolbar input[type=search].grow { flex: 1 1 140px; min-width: 140px; }
 input[type=search] { padding-left: 32px; background-repeat: no-repeat; background-position: 10px 50%; background-size: 15px;
   background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%23879' stroke-width='2.2' stroke-linecap='round'%3E%3Ccircle cx='11' cy='11' r='7'/%3E%3Cpath d='m20 20-3.5-3.5'/%3E%3C/svg%3E"); }
 .filter-line .chip { min-height: 26px; padding: 0 10px; font-size: 12.5px; }
@@ -396,3 +396,18 @@ a:hover { text-decoration: underline; }
 .versions-dlg .check-label { margin-right: 8px; }
 .versions-dlg .table td:first-child { width: 1%; }
 .versions-dlg .actions.sticky { z-index: 2; }
+
+/* Checkboxes and radios drawn to match both themes */
+input[type=checkbox], input[type=radio] { appearance: none; -webkit-appearance: none; padding: 0; width: 16px; height: 16px; min-width: 16px; display: inline-grid; place-content: center; border: 1.5px solid var(--faint); background: var(--panel); transition: background .12s, border-color .12s; }
+input[type=checkbox] { border-radius: 4px; }
+input[type=radio] { border-radius: 50%; }
+input[type=checkbox]:hover, input[type=radio]:hover { border-color: var(--accent); }
+input[type=checkbox]:checked, input[type=radio]:checked { background: var(--accent); border-color: var(--accent); }
+input[type=checkbox]:checked::after { content: ""; width: 9px; height: 5px; border: solid var(--on-accent); border-width: 0 0 2px 2px; transform: translateY(-1px) rotate(-45deg); }
+input[type=radio]:checked::after { content: ""; width: 6px; height: 6px; border-radius: 50%; background: var(--on-accent); }
+input[type=checkbox]:indeterminate { background: var(--accent); border-color: var(--accent); }
+input[type=checkbox]:indeterminate::after { content: ""; width: 8px; height: 2px; background: var(--on-accent); }
+input[type=checkbox]:disabled, input[type=radio]:disabled { opacity: .45; cursor: default; }
+.pcard .check input[type=checkbox], .img-tile .check input[type=checkbox] { background: #fff; border-color: #8a90a0; }
+.pcard .check input[type=checkbox]:checked, .img-tile .check input[type=checkbox]:checked { background: #4361ee; border-color: #4361ee; }
+.pcard .check input[type=checkbox]:checked::after, .img-tile .check input[type=checkbox]:checked::after { border-color: #fff; }
