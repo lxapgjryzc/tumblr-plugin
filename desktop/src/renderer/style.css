@@ -135,7 +135,7 @@ input[type=checkbox], input[type=radio] { width: 16px; height: 16px; margin: 0; 
 
 .cards { display: grid; grid-template-columns: repeat(auto-fill, minmax(190px, 1fr)); gap: 12px; }
 .small-cards { grid-template-columns: repeat(auto-fill, minmax(140px, 1fr)); gap: 10px; margin-top: 10px; }
-.pcard { position: relative; background: var(--panel); border: 1px solid var(--line); border-radius: var(--radius); overflow: hidden; cursor: pointer; display: flex; flex-direction: column; transition: border-color .12s, box-shadow .15s, transform .15s; }
+.pcard { position: relative; user-select: none; background: var(--panel); border: 1px solid var(--line); border-radius: var(--radius); overflow: hidden; cursor: pointer; display: flex; flex-direction: column; transition: border-color .12s, box-shadow .15s, transform .15s; }
 .pcard:hover { border-color: color-mix(in srgb, var(--accent) 55%, var(--line)); box-shadow: var(--shadow-pop); transform: translateY(-1px); }
 .pcard.sel { border-color: var(--accent); box-shadow: 0 0 0 2px var(--accent); }
 .pcard .check { position: absolute; top: 8px; left: 8px; z-index: 2; background: rgba(255, 255, 255, .95); border-radius: 6px; padding: 4px; display: flex; box-shadow: 0 1px 4px rgba(0, 0, 0, .18); opacity: 0; transition: opacity .12s; }
@@ -143,7 +143,7 @@ input[type=checkbox], input[type=radio] { width: 16px; height: 16px; margin: 0; 
 .pcard .thumb { aspect-ratio: 4 / 3; background: var(--soft); overflow: hidden; flex: none; }
 .pcard .thumb img { width: 100%; height: 100%; object-fit: cover; display: block; transition: transform .25s; }
 .pcard:hover .thumb img { transform: scale(1.02); }
-.pcard .thumb.text { padding: 16px 16px 0; font-size: 13.5px; line-height: 1.6; color: var(--ink); background: var(--soft);
+.pcard .thumb.text { padding: 42px 16px 0; font-size: 13.5px; line-height: 1.6; color: var(--ink); background: var(--soft);
   -webkit-mask-image: linear-gradient(#000 70%, transparent); mask-image: linear-gradient(#000 70%, transparent); }
 .small-cards .pcard .thumb.text { font-size: 12px; padding: 10px 10px 0; }
 .pcard .meta { padding: 10px 12px 12px; display: flex; flex-direction: column; gap: 6px; flex: 1; }
@@ -153,6 +153,11 @@ input[type=checkbox], input[type=radio] { width: 16px; height: 16px; margin: 0; 
 .pcard .sum { font-size: 12.5px; color: var(--muted); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .pcard .badges { display: flex; gap: 4px; flex-wrap: wrap; }
 .pcard .row2 { display: flex; gap: 10px; flex-wrap: wrap; font-size: 12.5px; color: var(--muted); margin-top: auto; }
+/* corner button opening the details: a small chip shown on hover */
+.pcard .open { position: absolute; top: 8px; right: 8px; z-index: 2; min-height: 26px; padding: 0 8px; border-radius: 6px; opacity: 0; background: rgba(255, 255, 255, .95); color: #1b2234; box-shadow: 0 1px 4px rgba(0, 0, 0, .18); transition: opacity .12s; }
+.pcard:hover .open, .pcard .open:focus-visible { opacity: 1; }
+.pcard .open:hover { background: #fff; color: #000; }
+.chip-pair { display: inline-flex; gap: 2px; margin: 2px; }
 #postList.loading { opacity: .5; transition: opacity .15s; }
 
 
@@ -216,26 +221,41 @@ ul.plain { margin: 0; padding-left: 18px; line-height: 1.8; }
 .inst-line { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; }
 
 /* ---------- editor ---------- */
-.write { display: grid; grid-template-columns: minmax(0, 1fr) 340px; gap: 24px; align-items: start; }
+.write { display: grid; grid-template-columns: minmax(0, 820px) 340px; justify-content: center; gap: 24px; align-items: start; }
 .canvas-wrap { min-width: 0; }
-.write-toolbar { position: sticky; top: -22px; z-index: 4; display: flex; gap: 6px; align-items: center; flex-wrap: wrap; padding: 8px 10px; background: var(--panel); border: 1px solid var(--line); border-radius: 10px; margin-bottom: 12px; }
+.write-toolbar { position: sticky; top: -22px; z-index: 4; display: flex; gap: 4px; align-items: center; flex-wrap: wrap; padding: 6px 8px; margin-bottom: 12px;
+  background: color-mix(in srgb, var(--panel) 92%, transparent); backdrop-filter: blur(8px); border: 1px solid var(--line); border-radius: 10px; }
 .write-toolbar .sep { flex: 1; }
-.canvas { max-width: 760px; background: var(--panel); border: 1px solid var(--line); border-radius: var(--radius); padding: 18px 22px 24px; box-shadow: var(--shadow); }
+/* bold / italic / strike as square icon buttons, then a divider before Link; the image buttons keep a border */
+.write-toolbar > button { min-height: 30px; padding: 2px 10px; border-color: transparent; background: transparent; }
+.write-toolbar > button:hover:not(:disabled) { background: var(--hover); }
+.write-toolbar > button:nth-child(-n+3) { width: 32px; padding: 0; }
+.write-toolbar > button:nth-child(4) { position: relative; margin-left: 6px; }
+.write-toolbar > button:nth-child(4)::before { content: ""; position: absolute; left: -5px; top: 6px; bottom: 6px; width: 1px; background: var(--line-strong); }
+.write-toolbar > button:not(:nth-child(-n+4)) { border-color: var(--line-strong); }
+.canvas { min-height: 420px; background: var(--panel); border: 1px solid var(--line); border-radius: var(--radius); padding: 24px 32px 32px; font-size: 15.5px; box-shadow: var(--shadow); }
 .unit { position: relative; padding: 4px 0; }
-.unit-tools { position: absolute; right: -6px; top: -2px; display: flex; gap: 4px; opacity: 0; transition: opacity .12s; z-index: 2; background: var(--panel); padding: 2px; border-radius: 8px; }
+.unit-tools { position: absolute; right: -6px; top: -2px; z-index: 2; display: flex; gap: 4px; padding: 2px; opacity: 0; transition: opacity .12s;
+  background: var(--panel); border: 1px solid var(--line); border-radius: 8px; box-shadow: var(--shadow-pop); }
 .unit:hover .unit-tools, .unit:focus-within .unit-tools { opacity: 1; }
-.unit-tools button, .unit-tools select { padding: 3px 9px; font-size: 13px; }
-.text-block { min-height: 1.6em; padding: 6px 8px; border-radius: 8px; line-height: 1.7; white-space: pre-wrap; word-break: break-word; outline: none; }
-.text-block:focus { background: var(--soft); }
+.unit-tools button, .unit-tools select { min-height: 26px; padding: 0 8px; font-size: 12.5px; }
+.text-block { min-height: 1.6em; padding: 6px 10px; border-radius: 8px; line-height: 1.7; white-space: pre-wrap; word-break: break-word; outline: none; }
+.text-block:focus { background: color-mix(in srgb, var(--soft) 70%, transparent); }
 .text-block:empty::before { content: attr(data-ph); color: var(--muted); }
 .st-heading1 { font-size: 24px; font-weight: 700; } .st-heading2 { font-size: 19px; font-weight: 650; }
 .st-quote { font-family: Georgia, serif; font-size: 18px; border-left: 3px solid var(--line); }
 .st-indented { padding-left: 28px; border-left: 3px solid var(--accent-soft); } .st-chat { font-family: Consolas, monospace; }
 .st-unordered-list-item::before { content: '•  '; } .st-ordered-list-item::before { content: '1.  '; color: var(--muted); }
 .text-block.st-unordered-list-item:empty::before, .text-block.st-ordered-list-item:empty::before { content: attr(data-ph); }
-.inserter { display: flex; gap: 6px; padding: 2px 0; opacity: .35; transition: opacity .12s; }
-.inserter:hover, .inserter:focus-within { opacity: 1; }
-.inserter button { padding: 2px 10px; font-size: 13px; border-style: dashed; color: var(--muted); }
+/* Between blocks: a thin strip whose buttons float over it on hover; the last one (end of the post) stays faintly visible */
+.inserter { display: flex; gap: 6px; align-items: center; transition: opacity .12s; }
+.canvas > .inserter { position: relative; z-index: 3; height: 12px; opacity: 0; overflow: visible; }
+.canvas > .inserter:last-child { height: auto; padding: 3px 0; margin-top: 8px; opacity: .55; }
+.canvas > .inserter:hover, .canvas > .inserter:focus-within { opacity: 1; }
+.canvas > .inserter:not(:last-child)::before { content: ""; position: absolute; left: 8px; right: 8px; top: 50%; border-top: 1px dashed var(--accent); opacity: 0; transition: opacity .12s; }
+.canvas > .inserter:not(:last-child):hover::before { opacity: .5; }
+.inserter button { position: relative; min-height: 26px; padding: 0 10px; font-size: 12.5px; border-style: dashed; color: var(--muted); background: var(--panel); }
+.inserter button:hover { color: var(--accent); border-color: var(--accent); background: var(--accent-soft); }
 .canvas.ro .text-block { cursor: default; }
 .img-row { display: flex; gap: 6px; }
 .img-row.grouped { outline: 2px dashed var(--accent-soft); outline-offset: 4px; border-radius: 6px; }
@@ -254,18 +274,23 @@ ul.plain { margin: 0; padding-left: 18px; line-height: 1.8; }
 .link-block { display: flex; gap: 8px; align-items: center; padding: 8px; background: var(--soft); border-radius: 8px; }
 .link-block input { flex: 1; }
 .readmore { text-align: center; color: var(--muted); border-top: 1px dashed var(--line); border-bottom: 1px dashed var(--line); padding: 6px; font-size: 13px; }
-.write-side { position: sticky; top: 0; display: flex; flex-direction: column; gap: 12px; }
-.side-card { background: var(--panel); border: 1px solid var(--line); border-radius: var(--radius); padding: 14px 16px; display: flex; flex-direction: column; gap: 8px; }
-.side-card h3 { margin: 0 0 2px; font-size: 14px; }
+/* Side panel scrolls on its own; publishing stays in view at its bottom */
+.write-side { position: sticky; top: 0; max-height: calc(100vh - 44px); overflow-y: auto; padding-right: 2px; display: flex; flex-direction: column; gap: 10px; }
+.side-card { background: var(--panel); border: 1px solid var(--line); border-radius: var(--radius); padding: 14px 16px; display: flex; flex-direction: column; gap: 8px; box-shadow: var(--shadow); }
+.side-card h3 { margin: 0 0 2px; font-size: 13px; text-transform: uppercase; letter-spacing: .4px; color: var(--muted); font-weight: 650; }
+.side-card h3 .muted { text-transform: none; letter-spacing: 0; font-weight: 400; }
+.side-card .chip { min-height: 28px; padding: 2px 11px; }
+.side-card.publish { position: sticky; bottom: 0; z-index: 2; box-shadow: 0 -8px 24px color-mix(in srgb, var(--bg) 85%, transparent); border-color: var(--line-strong); }
 .req { color: var(--danger); }
 .pick-list { max-height: 200px; overflow-y: auto; display: flex; flex-direction: column; gap: 2px; }
 .pick { padding: 3px 0; }
-.tag-order { margin: 0; padding-left: 26px; font-size: 14px; line-height: 1.75; max-height: 300px; overflow-y: auto; }
+.tag-order { margin: 0; padding-left: 26px; font-size: 13px; line-height: 1.75; max-height: 300px; overflow-y: auto; }
 .tag-order .seg-category { color: var(--accent); font-weight: 600; } .tag-order .seg-template { color: var(--ink); } .tag-order .seg-extra { color: var(--muted); }
 .tag-order .cut { list-style: none; margin-left: -26px; color: var(--warn); font-size: 12px; }
-.publish .big-btn { padding: 12px; font-size: 16px; }
+.publish .big-btn { min-height: 42px; font-size: 15px; }
 .pub-more { display: grid; grid-template-columns: 1fr 1fr; gap: 6px; }
-.pub-more button { font-size: 13px; padding: 7px 8px; }
+.pub-more button { min-height: 30px; font-size: 12.5px; padding: 2px 8px; }
+.publish > .ghost.danger { align-self: flex-start; min-height: 26px; padding: 0 8px; font-size: 12.5px; }
 .save-state { font-size: 13px; margin-right: 6px; }
 .wide-input { width: 100%; }
 .order-list { display: flex; flex-direction: column; gap: 6px; }
@@ -279,7 +304,7 @@ ul.plain { margin: 0; padding-left: 18px; line-height: 1.8; }
 .npf-text { padding: 4px 16px; line-height: 1.6; white-space: pre-wrap; flex: 1; }
 .npf-link { padding: 8px 16px; color: #3d63dd; }
 .npf-more { text-align: center; color: #888; font-size: 13px; padding: 6px; border-top: 1px dashed #ddd; }
-@media (max-width: 1150px) { .write { grid-template-columns: 1fr; } .write-side { position: static; } }
+@media (max-width: 1150px) { .write { grid-template-columns: minmax(0, 1fr); } .write-side { position: static; max-height: none; overflow: visible; } }
 
 /* ---------- followers ---------- */
 .digest { display: flex; gap: 28px; flex-wrap: wrap; font-size: 15px; margin-bottom: 8px; }
@@ -298,7 +323,7 @@ details summary { cursor: pointer; color: var(--accent); }
 .study { display: grid; grid-template-columns: repeat(auto-fill, minmax(140px, 1fr)); gap: 8px; margin-bottom: 10px; }
 .study img { width: 100%; aspect-ratio: 1; object-fit: cover; border-radius: 8px; display: block; }
 .pcard.dim { opacity: .55; }
-.cat-group { margin: 6px 0 10px; }
+.cat-group { display: flex; flex-direction: column; gap: 5px; margin: 2px 0 8px; }
 .filter-line { display: flex; flex-wrap: wrap; gap: 4px; align-items: center; width: 100%; }
 
 /* Versions & reblogs dialog */
@@ -312,17 +337,6 @@ details summary { cursor: pointer; color: var(--accent); }
 .versions-dlg .actions.sticky { position: sticky; bottom: -16px; background: var(--panel, var(--bg)); padding: 8px 0; border-top: 1px solid var(--line); }
 .versions-dlg input:not([type=checkbox]):not([type=radio]) { min-width: 8em; }
 
-/* Posts grid: open-details corner button, no text selection while drag-selecting */
-.pcard { position: relative; user-select: none; }
-.pcard .open { position: absolute; top: 6px; right: 6px; z-index: 2; opacity: .75; }
-.pcard .open:hover { opacity: 1; }
-.chip-pair { display: inline-flex; gap: 2px; margin: 2px; }
-
-/* Card corner open button: a small chip shown on hover */
-.pcard .open { top: 8px; right: 8px; min-height: 26px; padding: 0 8px; border-radius: 6px; opacity: 0; background: rgba(255, 255, 255, .95); color: #1b2234; box-shadow: 0 1px 4px rgba(0, 0, 0, .18); transition: opacity .12s; }
-.pcard:hover .open, .pcard .open:focus-visible { opacity: 1; }
-.pcard .open:hover { background: #fff; color: #000; }
-.pcard .thumb.text { padding: 42px 16px 0; }
 
 /* Compact row actions in tables and group headers */
 .table td.right button, .cat-admin .form-row button { min-height: 28px; padding: 2px 9px; }
@@ -333,40 +347,6 @@ details summary { cursor: pointer; color: var(--accent); }
 .cat-admin .table td:first-child { width: 32%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .cat-admin .table td:nth-child(2) { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .cat-admin .table td:last-child { width: 172px; }
-
-/* ---------- editor polish ---------- */
-.write { grid-template-columns: minmax(0, 820px) 340px; justify-content: center; }
-.write-toolbar { gap: 4px; padding: 6px 8px; background: color-mix(in srgb, var(--panel) 92%, transparent); backdrop-filter: blur(8px); }
-.write-toolbar > button { min-height: 30px; padding: 2px 10px; border-color: transparent; background: transparent; }
-.write-toolbar > button:hover:not(:disabled) { background: var(--hover); }
-.write-toolbar > button:nth-child(-n+3) { width: 32px; padding: 0; }
-.write-toolbar > button:nth-child(4) { border-left: 0; position: relative; margin-left: 6px; }
-.write-toolbar > button:nth-child(4)::before { content: ""; position: absolute; left: -5px; top: 6px; bottom: 6px; width: 1px; background: var(--line-strong); }
-.write-toolbar > button:not(:nth-child(-n+4)) { border-color: var(--line-strong); }
-.canvas { max-width: none; min-height: 420px; padding: 24px 32px 32px; font-size: 15.5px; }
-.text-block { padding: 6px 10px; }
-.text-block:focus { background: color-mix(in srgb, var(--soft) 70%, transparent); }
-.inserter { opacity: 0; min-height: 10px; padding: 3px 0; }
-.canvas > .inserter:last-child { opacity: .55; margin-top: 8px; }
-.canvas > .inserter:hover, .canvas > .inserter:focus-within { opacity: 1; }
-.inserter button { min-height: 26px; padding: 0 10px; font-size: 12.5px; border-style: dashed; background: transparent; }
-.inserter button:hover { color: var(--accent); border-color: var(--accent); background: var(--accent-soft); }
-.unit-tools { box-shadow: var(--shadow-pop); border: 1px solid var(--line); }
-.unit-tools button, .unit-tools select { min-height: 26px; padding: 0 8px; font-size: 12.5px; }
-
-/* Side panel scrolls on its own; publishing stays in view at its bottom */
-.write-side { top: 0; max-height: calc(100vh - 44px); overflow-y: auto; padding: 0 2px 0 0; gap: 10px; }
-.side-card { padding: 14px 16px; box-shadow: var(--shadow); }
-.side-card h3 { font-size: 13px; text-transform: uppercase; letter-spacing: .4px; color: var(--muted); font-weight: 650; }
-.side-card h3 .muted { text-transform: none; letter-spacing: 0; font-weight: 400; }
-.side-card .chip { min-height: 28px; padding: 2px 11px; }
-.cat-group { display: flex; flex-direction: column; gap: 5px; margin: 2px 0 8px; }
-.side-card.publish { position: sticky; bottom: 0; z-index: 2; box-shadow: 0 -8px 24px color-mix(in srgb, var(--bg) 85%, transparent); border-color: var(--line-strong); }
-.publish .big-btn { min-height: 42px; font-size: 15px; }
-.pub-more button { min-height: 30px; font-size: 12.5px; padding: 2px 8px; }
-.publish > .ghost.danger { align-self: flex-start; min-height: 26px; padding: 0 8px; font-size: 12.5px; }
-.tag-order { font-size: 13px; }
-@media (max-width: 1150px) { .write { grid-template-columns: minmax(0, 1fr); } .write-side { max-height: none; overflow: visible; } }
 
 /* ---------- toolbars and search ---------- */
 .toolbar > button.on { background: var(--accent-soft); border-color: color-mix(in srgb, var(--accent) 45%, transparent); color: var(--accent); font-weight: 600; }
@@ -438,13 +418,6 @@ input[type=checkbox]:disabled, input[type=radio]:disabled { opacity: .45; cursor
 .status-line button { min-height: 28px; padding: 0 10px; font-size: 13px; }
 .setting-block { margin-top: 12px; padding-top: 12px; border-top: 1px solid var(--line); }
 .setting-block p { margin: 4px 0 0 24px; }
-
-/* Between-block inserters take a thin strip and float their buttons over it on hover */
-.canvas > .inserter { position: relative; z-index: 3; height: 12px; min-height: 0; padding: 0; align-items: center; overflow: visible; }
-.canvas > .inserter:last-child { height: auto; padding: 3px 0; }
-.canvas > .inserter:not(:last-child)::before { content: ""; position: absolute; left: 8px; right: 8px; top: 50%; border-top: 1px dashed var(--accent); opacity: 0; transition: opacity .12s; }
-.canvas > .inserter:not(:last-child):hover::before { opacity: .5; }
-.canvas > .inserter:not(:last-child) button { position: relative; background: var(--panel); }
 
 /* Clicking a tag chip in the detail view removes it: say so on hover */
 .tag-edit .chips .chip:not(.on):not(.struck):hover { text-decoration: line-through; color: var(--danger); border-color: color-mix(in srgb, var(--danger) 45%, transparent); background: var(--danger-soft); }
