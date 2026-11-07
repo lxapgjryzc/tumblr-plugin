@@ -309,8 +309,12 @@ ul.plain { margin: 0; padding-left: 18px; line-height: 1.8; }
 @media (max-width: 1150px) { .write { grid-template-columns: minmax(0, 1fr); } .write-side { position: static; max-height: none; overflow: visible; } }
 
 /* ---------- followers ---------- */
-.digest { display: flex; gap: 28px; flex-wrap: wrap; font-size: 15px; margin-bottom: 8px; }
-.digest b { font-size: 22px; margin-right: 2px; }
+.digest { display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); gap: 10px; margin-bottom: 12px; }
+.digest > span { display: flex; flex-direction: column; gap: 0; padding: 10px 14px; border-radius: 10px; background: var(--soft); font-size: 12.5px; }
+.digest > span:not(.warn-text) { color: var(--muted); }
+.digest b { font-size: 22px; font-weight: 650; line-height: 1.3; color: var(--ink); font-variant-numeric: tabular-nums; }
+.digest .warn-text b { color: var(--warn); }
+.form-row .toggle { margin-right: 18px; }
 .case-list { display: flex; flex-direction: column; gap: 10px; margin-top: 14px; }
 .case { display: flex; gap: 14px; padding: 14px 16px; background: var(--panel); border: 1px solid var(--line); border-radius: var(--radius); }
 .case .grow { display: flex; flex-direction: column; gap: 4px; }
