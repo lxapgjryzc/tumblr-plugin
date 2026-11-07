@@ -460,3 +460,16 @@ input[type=checkbox]:disabled, input[type=radio]:disabled { opacity: .45; cursor
 .chip-pair .chip:first-child:not(:last-child) { border-top-right-radius: 0; border-bottom-right-radius: 0; }
 .chip-pair .chip + .chip { border-top-left-radius: 0; border-bottom-left-radius: 0; margin-left: -1px; padding: 4px 10px; }
 .modal-body > div > input:not([type=checkbox]):not([type=radio]), .tag-edit > input { width: min(100%, 420px); }
+
+/* composer template picker (same model as the browser panel) */
+.tpl-sub { font-size: 12px; color: var(--muted); margin-top: 4px; }
+.tpl-browse { max-height: 320px; overflow-y: auto; display: flex; flex-direction: column; gap: 4px; padding-right: 2px; }
+.tpl-combo { display: flex; flex-direction: column; gap: 3px; }
+.tpl-actions { display: flex; flex-wrap: wrap; gap: 6px; align-items: center; justify-content: space-between; }
+.chip.inc { border-color: var(--accent); color: var(--accent); }
+.chip.ghost { opacity: .75; }
+.tag-order li.flip { cursor: pointer; }
+.tag-order li.flip:hover { text-decoration: line-through; }
+.tag-order li.flag { text-decoration: underline dotted; color: #d97706; }
+.tag-order li.forced { font-weight: 600; }
+.tag-off { display: flex; flex-wrap: wrap; gap: 4px; }

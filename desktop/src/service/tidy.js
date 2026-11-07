@@ -47,7 +47,9 @@ function addTidy(svc, api, { fetchFn = fetch } = {}) {
     .map(r => ({ ...r, tags: JSON.parse(r.tags || '[]') }));
 
   Object.assign(api, {
-    tidyStatus() { return scan ? { running: scan.kind, i: scan.i, n: scan.n } : { running: null }; },
+    // Sample tags for the composer's "Check heat" (only tags without a fresh sample are read)
+    async sampleTags({ tags = [] }) { const { failed, stopped } = await sample(tags, 'compose'); return { failed, stopped }; },
+        tidyStatus() { return scan ? { running: scan.kind, i: scan.i, n: scan.n } : { running: null }; },
     tidyStop() { if (scan) scan.aborted = true; return true; },
 
     // ----- weak-tag cleanup -----

@@ -428,6 +428,33 @@ function fakeJQuery(w) {
     check(ce.errors.length === 0, 'no runtime errors with categories' + (ce.errors.length ? ': ' + ce.errors.map(e => e.stack || e).join(' | ') : ''));
   }
 
+  // ===== Categories without any template pack: grouped like the app, insertable on their own =====
+  {
+    const cg = { settings: { lang: 'en' }, templates: {},
+      studio: { version: 'v1', at: Date.now(), packs: [], rules: null, useBase: true, roles: { 't:1': 'share' },
+        groups: [{ id: 1, key: 'subject', name: null }, { id: 2, key: 'course', name: 'My courses' }],
+        categories: [{ id: 1, name: 'Fan art', tag: 'fanart', group: 1 }, { id: 3, name: 'Daily', tag: 'daily sketch', group: 2 }, { id: 2, name: 'Photo', tag: 'photography', group: 1 }],
+        cache: { blogList: [{ uuid: 't:1', name: 'me', primary: true }], blogs: { 't:1': { name: 'me', posts: {} } }, hidden: [], custom: [], tagStats: {} } } };
+    const ne = setupWindow('https://www.tumblr.com/new/text', '<!doctype html><body><div><div><div><input placeholder="#add tags"></div></div></div></body>', makeServer(), cg);
+    const nin = ne.w.document.querySelector('input');
+    nin.getBoundingClientRect = () => ({ left: 100, right: 500, top: 600, bottom: 630, width: 400, height: 30 });
+    const nCommitted = [];
+    nin.addEventListener('keydown', e => { if (e.key === 'Enter') { nCommitted.push(nin.value); nin.value = ''; } });
+    ne.w.eval(src);
+    await sleep(600);
+    const nroot = ne.w.document.getElementById('tth-host').shadowRoot;
+    nroot.querySelector('.tp-btn').click();
+    const np = nroot.querySelector('.tp');
+    const labels = [...np.querySelectorAll('.tp-cg .tp-gl')].map(n => n.textContent);
+    check(labels.join() === 'Creative subject,My courses', 'no pack: categories are shown, under the app’s group names: ' + labels);
+    np.querySelector('[data-cat="3"]').click();
+    np.querySelector('[data-cat="1"]').click();
+    np.querySelector('[data-tp="insert"]').click();
+    await sleep(800);
+    check(nCommitted.join() === 'fanart,daily sketch', 'no pack: chosen categories are inserted in configured order: ' + nCommitted);
+    check(ne.errors.length === 0, 'no runtime errors with categories and no pack' + (ne.errors.length ? ': ' + ne.errors.map(e => e.stack || e).join(' | ') : ''));
+  }
+
   // presets, a marker-only relation, saved combos, search
   tbtn.click();
   panel.querySelector('[data-tp="clear"]').click();

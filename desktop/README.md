@@ -85,6 +85,7 @@ Development aids: `STUDIO_FAKE=1` runs against a made-up demo account (no networ
   - Images are placed with buttons: insert here, ↑/↓, move to a chosen paragraph, side by side (2–3 adjacent), separate, replace with an alt-text check. Dragging is not used anywhere.
   - Undo and redo, autosave with revisions, and a compiled preview at wide and phone widths.
   - Category → template → extra tag order with the 20 and 30 search cutoffs, using the extension's packs and `sortTagsFair`.
+  - The template picker works like the browser panel (0.4.4): sections, presets that pick their members, relations offered once their members are picked ("neither" hides a row), what a pick pulls in, saved combinations (`tplFavs`, the app's own), and in the final list a click turns a template tag off or back on (`overrides` in the draft options; left-out tags are listed with the reason), "Turn off flagged" and "Check heat" (`sampleTags`).
   - Per-blog remembered choices that never overwrite a draft's own choices.
   - Publish, publish privately, Tumblr draft, queue or schedule. A lost create response triggers a search on Tumblr; identity, coverage and unresolved-outcome handling still need the acceptance work recorded in the status document.
 - **Routes**:

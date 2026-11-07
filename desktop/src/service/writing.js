@@ -263,22 +263,66 @@ function addWriting(svc, api, { dataDir }) {
       if (!p) return [];
       return C.searchItems(p, q).map(it => ({ id: it.id, name: it.name, kind: it.kind, tags: it.tags.slice(), with: it.with.slice() }));
     },
+    // The composer's picker, as the browser panel shows it: the pack's sections (relations only while searching;
+    // otherwise they are offered once their members are picked), what the picks pull in, and those relations
+    packView({ id, q = '', picks = [] }) {
+      const p = parsedPacks().find(x => x.id === id);
+      if (!p) return null;
+      const item = it => ({ id: it.id, name: it.name, kind: it.kind, rel: it.rel || null, tags: it.tags.slice() });
+      const match = new Set(C.searchItems(p, q).filter(it => q || !it.rel).map(it => it.id));
+      const sections = p.sections.map(s => ({ name: s.name || null, kind: s.kind, items: s.items.filter(it => match.has(it.id)).map(item) })).filter(s => s.items.length);
+      const picked = new Set(picks);
+      const pulled = {}; // item id -> name of the picked item that pulled it in
+      for (const pid of picks) for (const it of C.expandPicks(p, [pid])) if (!picked.has(it.id) && !pulled[it.id]) pulled[it.id] = { name: it.name, by: p.items.get(pid)?.name || pid };
+      const order = ['romance', 'friendship', 'family'];
+      const rank = o => (order.indexOf(o.item.rel) + 1 || order.length + 1);
+      const combos = C.suggestCombos(p, picks).map(g => ({ key: g.key, members: g.members.map(m => m.name),
+        options: g.options.slice().sort((a, b) => rank(a) - rank(b)).map(o => ({ ...item(o.item), relName: p.types[o.item.rel] || o.item.rel, picked: o.picked, pulled: o.pulled })) }));
+      return { id: p.id, sections, picked: picks.map(x => p.items.get(x)).filter(Boolean).map(item), pulled, combos,
+        favs: db.getMeta('tplFavs', []).map((f, i) => ({ ...f, index: i })).filter(f => f.pack === p.id) };
+    },
+    // Picking in the composer, with the browser panel's rules: a preset adds its members (each can then be
+    // dropped), and dropping someone also drops the relations they are part of
+    togglePick({ id, picks = [], item }) {
+      const p = parsedPacks().find(x => x.id === id);
+      const it = p?.items.get(item);
+      if (!it) return picks;
+      if (it.kind === 'preset') return [...new Set([...picks, ...it.with])];
+      if (picks.includes(item)) return picks.filter(x => x !== item && !(p.items.get(x)?.rel && p.items.get(x).with.includes(item)));
+      return [...picks, item];
+    },
+    // Saved combinations of picks, per pack (the app's own; the browser panel keeps its own list)
+    saveTplFav({ pack, name, ids }) {
+      name = String(name || '').trim();
+      if (!pack || !name || !ids?.length) throw new Error('a saved combination needs a name and picks');
+      const all = db.getMeta('tplFavs', []);
+      all.push({ pack, name, ids: ids.slice() });
+      db.setMeta('tplFavs', all);
+      return all;
+    },
+    deleteTplFav({ index }) { const all = db.getMeta('tplFavs', []); all.splice(index, 1); db.setMeta('tplFavs', all); return all; },
     // Tags for a draft's choices, in final order, with the search cutoffs
-    composeTags({ categoryIds = [], pack = null, picks = [], extra = [] }) {
+    // rows: the template's tags with why a tag is off or flagged (the browser panel's preview), for the editor
+    composeTags({ categoryIds = [], pack = null, picks = [], extra = [], overrides = {} }) {
       const cats = orderedTags(categoryIds);
-      let template = [];
+      let template = [], rows = [];
       if (pack && picks.length) {
         const packs = parsedPacks();
         const p = packs.find(x => x.id === pack);
         if (p) {
           const stats = db.getMeta('tagStats', {});
           const settings = db.getMeta('settings', {});
-          const res = C.composeTemplate(p, { ids: picks, stats, rules: settings.rules, useBase: settings.useBase !== false, exclude: cats });
+          const res = C.composeTemplate(p, { ids: picks, stats, overrides: overrides || {}, rules: settings.rules, useBase: settings.useBase !== false, exclude: cats });
           template = C.sortTagsFair(res.tags.slice(), stats, { groups: C.packGrouping(packs).groups });
+          // in final order, then the tags left out
+          const at = new Map(template.map((tg, i) => [C.key(tg), i]));
+          const heat = tg => { const st = stats[C.key(tg)]; return st ? { followers: st.followers ?? null, notes: st.notes ?? null, match: st.match ?? null } : null; };
+          rows = res.rows.map(r => ({ tag: r.tag, on: r.on, why: r.why, flag: r.flag, forced: r.forced, fit: r.fit, rank: r.rank, of: r.of, heat: heat(r.tag) }))
+            .sort((a, b) => (at.get(C.key(a.tag)) ?? 1e9) - (at.get(C.key(b.tag)) ?? 1e9));
         }
       }
       const tags = composeTags({ categories: cats, template, extra });
-      return { tags, cuts: C.TPL_SEARCH_CUTS.slice() };
+      return { tags, rows, cuts: C.TPL_SEARCH_CUTS.slice() };
     },
     blogDefaults({ blog }) { return db.getMeta('blogDefaults', {})[blog] || null; },
     setBlogDefaults({ blog, defaults }) { const all = db.getMeta('blogDefaults', {}); all[blog] = defaults; db.setMeta('blogDefaults', all); return all[blog]; },

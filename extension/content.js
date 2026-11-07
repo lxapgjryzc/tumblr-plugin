@@ -29,12 +29,13 @@
     if (snap.rules) settings.rules = snap.rules;
     settings.useBase = snap.useBase !== false;
     settings.blogRoles = Object.fromEntries(Object.entries(snap.roles || {}).map(([uuid, role]) => [uuid, { role }]));
-    return { cache: snap.cache, packs: snap.packs || [], categories: snap.categories || [] };
+    return { cache: snap.cache, packs: snap.packs || [], categories: snap.categories || [], groups: snap.groups || [] };
   };
   const studio = fromStudio(stored.studio);
   const cache = Object.assign(C.emptyCache(), studio?.cache || stored.cache || {});
   // General categories from the app (read only): chosen ones go first, as in the app's composer (design 6.3)
   let tplCats = studio?.categories || [];
+  let tplGroups = studio?.groups || [];
   const tplCatSel = new Set();
   const catTags = () => tplCats.filter(c => tplCatSel.has(String(c.id))).map(c => c.tag);
   // Every write carries this tab's mark (storage key writer), so the change listener can skip our own writes
@@ -398,8 +399,15 @@
 .tp-c small { opacity:.75; }
 .tp-c .del { margin-left:4px; opacity:.6; }
 .tp-combo { margin-bottom:8px; }
-.tp-cats { display:flex; flex-wrap:wrap; align-items:center; gap:6px; padding:6px 10px; border-bottom:1px solid var(--line); }
+.tp-cats { display:flex; flex-direction:column; gap:4px; padding:6px 10px; border-bottom:1px solid var(--line); max-height:40%; overflow:auto; flex-shrink:0; }
+.tp-cats-h { display:flex; align-items:center; gap:6px; }
+.tp-cats-h small { color:var(--muted); }
+.tp-cats-h .sp { flex:1; }
 .tp-cats .tp-sh { margin:0 4px 0 0; }
+.tp-cg { display:flex; align-items:baseline; gap:8px; }
+.tp-gl { flex:0 0 72px; color:var(--muted); font-size:12px; }
+.tp-cg .tp-chips { display:flex; flex-wrap:wrap; gap:4px; }
+.tp-empty.small { flex:1; gap:6px; font-size:12px; }
 .tp-combo .who { display:block; color:var(--muted); font-size:12px; margin-bottom:3px; }
 .tp-c b { font-weight:600; margin-right:2px; }
 .tp-prev { margin-top:4px; }
@@ -505,7 +513,7 @@
         `<option value="${C.esc(p.raw.id)}"${p.raw.id === pack.id ? ' selected' : ''}>${C.esc(p.raw.name || p.raw.id)}</option>`).join('')}</select>` : '')
       + `<button data-tp="packs" title="${C.esc(t('tplManageHint'))}">${C.esc(t('tplManage'))} ↗</button>`
       + `<button class="x" data-tp="close">×</button></div>`;
-    tplEl.innerHTML = head + (pack ? pickHtml(pack)
+    tplEl.innerHTML = head + (pack ? pickHtml(pack) : tplCats.length ? catsOnlyHtml()
       : `<div class="tp-empty"><div>${C.esc(t('tplNoPack'))}</div><button class="pri" data-tp="packs">${C.esc(t('tplManage'))} ↗</button></div>`);
     if (pack) {
       const q = tplEl.querySelector('.tp-q');
@@ -515,11 +523,25 @@
     }
   }
 
+  // The app's general categories, in its group order (design 6.2): every group is optional and choices combine
+  const groupLabel = g => (!g ? t('grp_other') : g.name || (g.key ? t('grp_' + g.key) : t('grp_other')));
   function catsHtml() {
     if (!tplCats.length) return '';
-    return `<div class="tp-cats"><span class="tp-sh">${C.esc(t('tplCats'))}</span><span class="tp-chips">${tplCats.map(c =>
-      `<span class="tp-c${tplCatSel.has(String(c.id)) ? ' on' : ''}" data-cat="${C.esc(String(c.id))}" title="#${C.esc(c.tag)}">${C.esc(c.name)}</span>`).join('')}</span>`
-      + (tplCatSel.size ? `<button data-tp="catFirst" title="${C.esc(t('tplCatFirstHint'))}">${C.esc(t('tplCatFirst'))}</button>` : '') + '</div>';
+    const sections = tplGroups.map(g => [g, tplCats.filter(c => c.group === g.id)]);
+    const loose = tplCats.filter(c => !tplGroups.some(g => g.id === c.group));
+    if (loose.length) sections.push([null, loose]);
+    const chip = c => `<span class="tp-c${tplCatSel.has(String(c.id)) ? ' on' : ''}" data-cat="${C.esc(String(c.id))}" title="#${C.esc(c.tag)}">${C.esc(c.name)}</span>`;
+    return `<div class="tp-cats"><div class="tp-cats-h"><span class="tp-sh">${C.esc(t('tplCats'))}</span><small>${C.esc(t('tplCatsOptional'))}</small><span class="sp"></span>`
+      + (tplCatSel.size ? `<button data-tp="catFirst" title="${C.esc(t('tplCatFirstHint'))}">${C.esc(t('tplCatFirst'))}</button>` : '') + '</div>'
+      + sections.filter(([, list]) => list.length).map(([g, list]) =>
+        `<div class="tp-cg"><span class="tp-gl">${C.esc(groupLabel(g))}</span><span class="tp-chips">${list.map(chip).join('')}</span></div>`).join('')
+      + '</div>';
+  }
+  // Without a pack the categories can still be inserted on their own
+  function catsOnlyHtml() {
+    return catsHtml() + `<div class="tp-empty small"><div>${C.esc(t('tplCatsOnly'))}</div><button data-tp="packs">${C.esc(t('tplManage'))} ↗</button></div>`
+      + `<div class="tp-f"><span class="sp"></span>${hasInserted() ? `<button data-tp="undo">${C.esc(t('tplUndo'))}</button>` : ''}`
+      + `<button data-tp="copy">${C.esc(t('tplCopy'))}</button><button class="pri" data-tp="insert">${C.esc(t(hasInserted() ? 'tplUpdateTags' : 'tplInsert'))}</button></div>`;
   }
 
   function pickHtml(pack) {
@@ -1132,7 +1154,7 @@
     if (area !== 'local' || ch.writer?.newValue?.startsWith(me + ':')) return;
     if (ch.studio?.newValue) {
       const fresh = fromStudio(ch.studio.newValue);
-      if (fresh) tplCats = fresh.categories;
+      if (fresh) { tplCats = fresh.categories; tplGroups = fresh.groups; }
       if (fresh) {
         Object.assign(cache, C.emptyCache(), fresh.cache);
         rebuildIndex();

@@ -496,7 +496,32 @@ const WritePage = {
     const effects = this.d.blog ? await call('routeEffect', { blog: this.d.blog, tags: tags.map(x => x.tag) }) : [];
     const setOpt = patch => { Object.assign(this.opts, patch, { fromDefaults: false }); this.scheduleSave(); this.drawSide(); };
     let extraInput;
-    const items = o.pack ? await call('packItems', { id: o.pack, q: this.packQ || '' }) : [];
+    const view = o.pack ? await call('packView', { id: o.pack, q: this.packQ || '', picks: o.picks }) : null;
+    const dismissed = this.dismissed || (this.dismissed = new Set());
+    const pick = async id => { const next = await call('togglePick', { id: o.pack, picks: o.picks, item: id }); setOpt({ picks: next }); };
+    const itemTitle = it => (view.pulled[it.id] ? t('tplIncludedBy', view.pulled[it.id].by) : it.tags.length ? it.tags.map(x => '#' + x).join(' ') : t('tplMarkerOnly'));
+    const itemChip = it => h('button', { class: 'chip' + (o.picks.includes(it.id) ? ' on' : view.pulled[it.id] ? ' inc' : ''), disabled: ro, title: itemTitle(it), onclick: () => pick(it.id) }, it.name);
+    const sectionName = sc => sc.name || t(sc.kind === 'preset' ? 'tplPresets' : sc.kind === 'ship' || sc.kind === 'group' ? 'tplRelations' : 'tplOther');
+    // Why a template tag is off or flagged, plus its heat, as the browser panel says it
+    const rowTitle = r => {
+      const code = r.why || r.flag;
+      const why = code === 'cold' ? t('why_cold', r.rank, r.of) : code === 'offtopic' ? t('why_offtopic', Math.round((r.fit || 0) * 100))
+        : code === 'fuzzy' ? t('why_fuzzy', r.heat?.match ?? '?') : code ? t('why_' + code) : '';
+      const heat = r.heat ? [r.heat.followers != null ? t('followersN', r.heat.followers) : '', r.heat.notes != null ? t('tagNotesN', r.heat.notes) : ''].filter(Boolean).join(' · ') : '';
+      return [why, heat].filter(Boolean).join(' · ');
+    };
+    const rowOf = new Map((tagsRes.rows || []).map(r => [r.tag.toLowerCase(), r]));
+    // Flip what a row shows now; a flip back to the computed state clears the override
+    const flip = async r => {
+      const k = r.tag.toLowerCase(), want = !r.on;
+      const ov = { ...(o.overrides || {}) };
+      delete ov[k];
+      const plain = (await call('composeTags', { ...o, overrides: ov })).rows.find(x => x.tag.toLowerCase() === k);
+      if (plain && plain.on !== want) ov[k] = want;
+      setOpt({ overrides: ov });
+    };
+    const flagged = (tagsRes.rows || []).filter(r => r.on && r.flag);
+    const offRows = (tagsRes.rows || []).filter(r => !r.on);
     const box = [
       h('section', { class: 'side-card' }, h('h3', {}, t('destination')),
         select(share.map(b => ({ value: b.uuid, label: b.name + (b.is_primary ? ' (main)' : '') })), this.d.blog || '', async v => {
@@ -514,22 +539,58 @@ const WritePage = {
           h('div', { class: 'muted small' }, groupName(g)),
           h('div', { class: 'chips' }, list.map(c => h('button', { class: 'chip' + (o.categoryIds.includes(c.id) ? ' on' : ''), disabled: ro, title: '#' + c.tag,
             onclick: () => setOpt({ categoryIds: o.categoryIds.includes(c.id) ? o.categoryIds.filter(x => x !== c.id) : [...o.categoryIds, c.id].sort((a, b) => this.categories.findIndex(x => x.id === a) - this.categories.findIndex(x => x.id === b)) }) }, c.name)))))),
-      h('section', { class: 'side-card' }, h('h3', {}, t('template')),
+      h('section', { class: 'side-card tpl-card' }, h('h3', {}, t('template')),
         this.packList.length ? [
-          select([{ value: '', label: t('noTemplate') }, ...this.packList.map(p => ({ value: p.id, label: p.name }))], o.pack || '', v => setOpt({ pack: v || null, picks: [] }), { disabled: ro }),
-          o.pack ? [
+          select([{ value: '', label: t('noTemplate') }, ...this.packList.map(p => ({ value: p.id, label: p.name }))], o.pack || '', v => setOpt({ pack: v || null, picks: [], overrides: {} }), { disabled: ro }),
+          view ? [
+            // what is picked (click to drop) and what it pulls in
+            h('div', { class: 'tpl-sub' }, t('tplPicked')),
+            view.picked.length ? h('div', { class: 'chips' },
+              view.picked.map(it => h('button', { class: 'chip on', disabled: ro, title: itemTitle(it), onclick: () => pick(it.id) }, it.name, ' ✕')),
+              Object.values(view.pulled).map(p => h('span', { class: 'chip inc', title: t('tplIncludedBy', p.by) }, p.name)))
+              : h('p', { class: 'muted small' }, t('tplNone')),
+            // relations between the picked people; "neither" hides a row until the picks change
+            view.combos.filter(g => !dismissed.has(g.key) || g.options.some(x => x.picked)).map(g => h('div', { class: 'tpl-combo' },
+              h('div', { class: 'muted small' }, g.members.join(' + ')),
+              h('div', { class: 'chips' }, g.options.map(x => h('button', { class: 'chip' + (x.picked ? ' on' : x.pulled ? ' inc' : ''), disabled: ro,
+                title: x.tags.length ? x.tags.map(y => '#' + y).join(' ') : t('tplMarkerOnly'), onclick: () => pick(x.id) }, h('b', {}, x.relName), ' ', x.name)),
+                g.options.some(x => x.picked) ? null : h('button', { class: 'chip ghost', onclick: () => { dismissed.add(g.key); this.drawSide(); } }, t('tplNotCombo'))))),
             h('input', { type: 'search', placeholder: t('searchItems'), value: this.packQ || '', oninput: e => { this.packQ = e.target.value; clearTimeout(this.pqT); this.pqT = setTimeout(() => this.drawSide(), 250); } }),
-            h('div', { class: 'pick-list' }, items.slice(0, 80).map(it => h('label', { class: 'check-label pick' }, h('input', { type: 'checkbox', disabled: ro, checked: o.picks.includes(it.id), onchange: e => setOpt({ picks: e.target.checked ? [...o.picks, it.id] : o.picks.filter(x => x !== it.id) }) }), it.name))),
+            h('div', { class: 'tpl-browse' },
+              view.favs.length && !this.packQ ? [h('div', { class: 'tpl-sub' }, t('tplFavs')), h('div', { class: 'chips' }, view.favs.map(f => h('span', { class: 'chip-pair' },
+                h('button', { class: 'chip', disabled: ro, onclick: () => { dismissed.clear(); setOpt({ picks: f.ids.slice() }); } }, f.name),
+                h('button', { class: 'chip ghost', disabled: ro, title: t('tplRemoveFav'), onclick: async () => { await call('deleteTplFav', { index: f.index }); this.drawSide(); } }, '✕'))))] : null,
+              view.sections.map(sc => [h('div', { class: 'tpl-sub' }, sectionName(sc)), h('div', { class: 'chips' }, sc.items.map(itemChip))])),
+            ro ? null : h('div', { class: 'tpl-actions' },
+              h('button', { disabled: !o.picks.length, onclick: async () => {
+                let name = view.picked.map(it => it.name).join(' + ');
+                const ok = await modal(t('tplSaveFav'), h('label', { class: 'field' }, t('tplFavName'), h('input', { value: name, oninput: e => { name = e.target.value; } })), [{ label: t('cancel'), value: false }, { label: t('tplSaveFav'), value: true, class: 'primary' }]);
+                if (ok && name.trim()) { await call('saveTplFav', { pack: o.pack, name, ids: o.picks }); this.drawSide(); }
+              } }, t('tplSaveFav')),
+              h('button', { disabled: !o.picks.length, onclick: () => { dismissed.clear(); setOpt({ picks: [], overrides: {} }); } }, t('tplClear'))),
           ] : null,
         ] : h('p', { class: 'muted small' }, t('noPacks'), ' ', h('a', { href: '#', 'data-go': 'tags' }, t('navTags')))),
       h('section', { class: 'side-card' }, h('h3', {}, t('extraTags')),
         extraInput = h('input', { placeholder: t('extraHint'), disabled: ro, onkeydown: e => { if (e.key === 'Enter' || e.key === ',') { e.preventDefault(); const v = e.target.value.trim(); if (v) setOpt({ extra: [...o.extra, ...v.split(',').map(s => s.trim()).filter(Boolean)] }); } } }),
         h('div', { class: 'chips' }, o.extra.map(x => h('button', { class: 'chip', disabled: ro, onclick: () => setOpt({ extra: o.extra.filter(y => y !== x) }) }, '#' + x, ' ✕')))),
       h('section', { class: 'side-card' }, h('h3', {}, t('finalTags'), ' ', h('span', { class: 'muted small' }, tags.length)),
-        h('ol', { class: 'tag-order' }, tags.map((x, i) => [
-          i === tagsRes.cuts[0] ? h('li', { class: 'cut' }, t('cutBlog', tagsRes.cuts[0])) : null,
-          i === tagsRes.cuts[1] ? h('li', { class: 'cut' }, t('cutSite', tagsRes.cuts[1])) : null,
-          h('li', { class: 'seg-' + x.from }, '#' + x.tag)]))),
+        (tagsRes.rows || []).length ? h('div', { class: 'tpl-actions' },
+          flagged.length && !ro ? h('button', { onclick: () => setOpt({ overrides: { ...(o.overrides || {}), ...Object.fromEntries(flagged.map(r => [r.tag.toLowerCase(), false])) } }) }, t('dropFlagged', flagged.length))
+            : h('span', { class: 'muted small' }, t('tplToggleHint')),
+          h('button', { onclick: async e => {
+            e.target.disabled = true; toast(t('checkingHeat'));
+            try { await call('sampleTags', { tags: tagsRes.rows.map(r => r.tag) }); toast(t('checkedHeat'), 'ok'); } catch (err) { toast(cleanErr(err), 'error'); }
+            this.drawSide();
+          } }, t('checkHeat'))) : null,
+        h('ol', { class: 'tag-order' }, tags.map((x, i) => {
+          const r = x.from === 'template' ? rowOf.get(x.tag.toLowerCase()) : null;
+          return [
+            i === tagsRes.cuts[0] ? h('li', { class: 'cut' }, t('cutBlog', tagsRes.cuts[0])) : null,
+            i === tagsRes.cuts[1] ? h('li', { class: 'cut' }, t('cutSite', tagsRes.cuts[1])) : null,
+            h('li', { class: 'seg-' + x.from + (r ? ' flip' : '') + (r?.flag ? ' flag' : '') + (r?.forced ? ' forced' : ''), title: r ? rowTitle(r) : '', onclick: r && !ro ? () => flip(r) : null }, '#' + x.tag)];
+        })),
+        offRows.length ? [h('div', { class: 'tpl-sub' }, t('tagsOff')), h('div', { class: 'tag-off' }, offRows.map(r =>
+          h('button', { class: 'chip struck', disabled: ro, title: rowTitle(r), onclick: () => flip(r) }, '#' + r.tag)))] : null),
       ro ? null : h('section', { class: 'side-card publish' },
         h('button', { class: 'primary big-btn', onclick: () => this.publish('published') }, t('publish')),
         h('div', { class: 'pub-more' },

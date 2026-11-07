@@ -323,3 +323,36 @@ test('publish: a lost response is still found when Tumblr returns the link perce
   assert.equal(fake.calls.filter(c => c === 'create:t:art').length, 1);
   assert.equal(api.draft({ id: d.id }).status, 'published');
 });
+
+test('composer picker: sections, presets, relations offered once members are picked, per-tag overrides, saved combos', () => {
+  const { svc, api } = setup();
+  const same = (a, b, msg) => assert.deepEqual(JSON.parse(JSON.stringify(a)), b, msg);
+  const PACK = {
+    format: 'tth-template-pack', id: 'mf', name: 'My fandom', version: '1', base: ['my fandom'],
+    types: { romance: 'Romance', friendship: 'Friends' },
+    characters: [{ id: 'alice', name: 'Alice', tags: ['alice my fandom'] }, { id: 'bob', name: 'Bob', tags: ['bob my fandom'] }],
+    relations: [{ id: 'ab', members: ['alice', 'bob'], type: 'romance', tags: ['alicebob'] }, { id: 'abf', name: 'A & B', members: ['alice', 'bob'], type: 'friendship', tags: [] }],
+    presets: [{ id: 'cast', name: 'Cast', members: ['alice', 'bob'] }],
+  };
+  svc.db.setMeta('packs', [{ raw: PACK, source: 'test' }]);
+  let v = api.packView({ id: 'mf', picks: [] });
+  assert.ok(v.sections.flatMap(s => s.items).every(it => !it.rel), 'relations are not browsed until their members are picked');
+  assert.equal(v.combos.length, 0);
+  let picks = api.togglePick({ id: 'mf', picks: [], item: 'cast' });
+  same(picks.sort(), ['alice', 'bob'], 'a preset picks its members');
+  picks = api.togglePick({ id: 'mf', picks, item: 'ab' });
+  v = api.packView({ id: 'mf', picks });
+  assert.equal(v.combos.length, 1);
+  same(v.combos[0].options.map(o => [o.id, o.relName, o.picked]), [['ab', 'Romance', true], ['abf', 'Friends', false]]);
+  same(api.togglePick({ id: 'mf', picks, item: 'alice' }), ['bob'], 'dropping a member drops their relations');
+  // a template tag turned off by hand leaves the final list and is shown as left out
+  const on = api.composeTags({ pack: 'mf', picks });
+  assert.ok(on.tags.some(x => x.tag === 'alicebob'));
+  const off = api.composeTags({ pack: 'mf', picks, overrides: { alicebob: false } });
+  assert.ok(!off.tags.some(x => x.tag === 'alicebob'));
+  same(off.rows.filter(r => !r.on).map(r => [r.tag, r.why]), [['alicebob', 'off']]);
+  api.saveTplFav({ pack: 'mf', name: 'Pair', ids: picks });
+  same(api.packView({ id: 'mf', picks: [] }).favs.map(f => f.name), ['Pair']);
+  api.deleteTplFav({ index: 0 });
+  assert.equal(api.packView({ id: 'mf', picks: [] }).favs.length, 0);
+});
