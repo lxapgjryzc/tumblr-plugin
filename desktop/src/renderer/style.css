@@ -211,7 +211,7 @@ ul.plain { margin: 0; padding-left: 18px; line-height: 1.8; }
 
 #toasts { position: fixed; right: 24px; bottom: 24px; display: flex; flex-direction: column; gap: 8px; z-index: 60; }
 .toast { background: #1b2234; color: #fff; padding: 10px 16px; border-radius: 10px; box-shadow: var(--shadow-pop); max-width: 420px; font-size: 13.5px; animation: pop-in .18s ease-out; }
-.toast.error { background: var(--danger); } .toast.ok { background: var(--ok); }
+.toast.error { background: #c93838; } .toast.ok { background: #1a8754; }
 
 .inst-line { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; }
 
@@ -445,3 +445,7 @@ input[type=checkbox]:disabled, input[type=radio]:disabled { opacity: .45; cursor
 .canvas > .inserter:not(:last-child)::before { content: ""; position: absolute; left: 8px; right: 8px; top: 50%; border-top: 1px dashed var(--accent); opacity: 0; transition: opacity .12s; }
 .canvas > .inserter:not(:last-child):hover::before { opacity: .5; }
 .canvas > .inserter:not(:last-child) button { position: relative; background: var(--panel); }
+
+/* Clicking a tag chip in the detail view removes it: say so on hover */
+.tag-edit .chips .chip:not(.on):not(.struck):hover { text-decoration: line-through; color: var(--danger); border-color: color-mix(in srgb, var(--danger) 45%, transparent); background: var(--danger-soft); }
+.tag-edit .chip.struck { color: var(--danger); background: var(--danger-soft); border-color: transparent; }
