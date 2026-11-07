@@ -1,3 +1,8 @@
+/* Tumblr Studio window styles.
+   - Colours come only from the tokens below; dark mode redefines them. The companion page
+     (extension/companion.css) uses the same tokens, so keep the two in step.
+   - Controls share one height (--ctl); compact rows use 26-30px.
+   - Rules live in their section; don't append override blocks at the end. */
 /* ---------- tokens ---------- */
 :root {
   --bg: #f5f6f9; --panel: #ffffff; --ink: #171c29; --muted: #697186; --faint: #9aa1b2; --line: #e4e7ee; --line-strong: #d3d8e3; --soft: #f0f2f7; --hover: #eceff6;
@@ -406,7 +411,7 @@ input[type=checkbox]:disabled, input[type=radio]:disabled { opacity: .45; cursor
 #side .write-btn .plus { font-size: 18px; line-height: 1; font-weight: 500; margin-top: -2px; }
 
 /* Home: recent posts as a compact strip */
-.home-recent .cards { grid-template-columns: repeat(auto-fill, minmax(130px, 1fr)); gap: 10px; }
+.home-recent .cards { grid-template-columns: repeat(auto-fit, minmax(118px, 1fr)); gap: 10px; }
 .home-recent .pcard .thumb { aspect-ratio: 1; }
 .home-recent .pcard .thumb.text { padding: 14px 12px 0; font-size: 12.5px; }
 .home-recent .pcard .sum, .home-recent .pcard .row2 { display: none; }
