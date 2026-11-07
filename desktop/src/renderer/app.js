@@ -45,6 +45,7 @@ window.studio.on(ev => {
 });
 
 document.addEventListener('click', e => {
+  if (e.target.closest('#newPostBtn')) { App.go('write', { create: true }); return; }
   const go = e.target.closest('[data-go]');
   if (go) { e.preventDefault(); App.go(go.dataset.go); }
 });

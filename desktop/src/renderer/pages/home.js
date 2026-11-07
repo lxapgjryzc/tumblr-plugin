@@ -40,7 +40,7 @@ const HomePage = {
       drafts.length ? h('section', { class: 'card' }, h('h2', {}, t('continueWriting')),
         h('div', { class: 'draft-list' }, drafts.slice(0, 4).map(d => h('button', { class: 'draft-item', onclick: () => App.go('write', { id: d.id }) },
           h('b', {}, d.title || t('untitled')), h('span', { class: 'muted' }, fmtTime(d.updated_at)))))) : null,
-      h('section', { class: 'card' }, h('h2', {}, t('recentPosts')), PostsPage.grid(recent.rows, { onOpen: r => PostsPage.openDetail(r) })),
+      h('section', { class: 'card home-recent' }, h('h2', {}, t('recentPosts')), PostsPage.grid(recent.rows, { onOpen: r => PostsPage.openDetail(r) })),
       h('section', { class: 'card' }, h('h2', {}, t('coverage')), h('table', { class: 'table' }, h('tbody', {},
         s.blogs.map(b => {
           const c = s.coverage.filter(x => x.uuid === b.uuid);

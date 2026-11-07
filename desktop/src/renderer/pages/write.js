@@ -83,6 +83,7 @@ const WritePage = {
   async render(root, params = {}) {
     this.root = root;
     if (params.id) return this.open(params.id);
+    if (params.create) return this.create();
     const drafts = await call('drafts');
     root.replaceChildren(h('header', { class: 'page-head' }, h('h1', {}, t('navWrite')),
       h('div', { class: 'head-actions' }, h('button', { class: 'primary', onclick: () => this.create() }, t('newPost')))),
