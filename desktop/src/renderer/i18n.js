@@ -178,6 +178,7 @@ const STRINGS = {
     activityTitle: 'Activity', openJobs: 'In progress', log: 'Log', noJobs: 'Nothing waiting.', cancelJob: 'Cancel',
     js_pending: 'queued', js_running: 'running', js_verifying: 'checking the result', js_waiting: 'waiting', js_unknown: 'outcome unknown', js_succeeded: 'done',
     js_unchanged: 'already so', js_skipped: 'skipped', js_failed: 'failed', js_cancelled: 'cancelled',
+    jk_copy_tags: 'Copy tags to reblogs', jk_follower_block: 'Block follower', jk_follower_unblock: 'Unblock', jk_follower_following: 'Read who I follow', jk_follower_inspect: 'Check new follower', jk_follower_scan: 'Read followers', jk_like_remove: 'Unlike', jk_maintain_after: 'Upkeep after sync', jk_material_collect: 'Collect material', jk_material_scan: 'Read likes', jk_post_delete: 'Delete post', jk_post_publicCheck: 'Visitor check', jk_post_publish: 'Publish', jk_post_reblog: 'Reblog', jk_post_tags: 'Edit tags', jk_post_visibility: 'Change visibility', jk_sync_blog: 'Sync blog', jk_sync_blogs: 'Sync blogs', jk_display: 'Display rule', jk_routes: 'Reblog route', jk_companion: 'Browser companion', jk_followers: 'Followers', jk_pass: 'Background pass', jk_routine: 'Background sync', timesN: '×{0}', logEmpty: 'Nothing logged yet.',
     // settings
     settingsTitle: 'Settings', connTitle: 'Tumblr connection', connStatus_connected: 'Connected', connStatus_no_app: 'No app key yet', connStatus_not_connected: 'App key saved, not authorised',
     connStatus_reconnect: 'Needs reconnecting', appKeyHint: 'Register an app at tumblr.com/oauth/apps with the OAuth2 redirect URL {0}, then paste its key and secret here. They are stored encrypted for this Windows user.',
@@ -543,6 +544,7 @@ const STRINGS = {
     activityTitle: '活动记录', openJobs: '进行中', log: '记录', noJobs: '没有等待中的任务。', cancelJob: '取消',
     js_pending: '排队中', js_running: '执行中', js_verifying: '核对结果', js_waiting: '等待中', js_unknown: '结果未知', js_succeeded: '完成',
     js_unchanged: '无需修改', js_skipped: '已跳过', js_failed: '失败', js_cancelled: '已取消',
+    jk_copy_tags: '同步标签到转发', jk_follower_block: '屏蔽关注者', jk_follower_unblock: '取消屏蔽', jk_follower_following: '读取我的关注', jk_follower_inspect: '检查新关注者', jk_follower_scan: '读取关注者', jk_like_remove: '取消喜欢', jk_maintain_after: '同步后维护', jk_material_collect: '收集素材', jk_material_scan: '读取喜欢', jk_post_delete: '删除帖子', jk_post_publicCheck: '访客检查', jk_post_publish: '发布', jk_post_reblog: '转发', jk_post_tags: '修改标签', jk_post_visibility: '修改可见性', jk_sync_blog: '同步博客', jk_sync_blogs: '同步所有博客', jk_display: '展示规则', jk_routes: '转发路线', jk_companion: '浏览器伴侣', jk_followers: '关注者', jk_pass: '后台检查', jk_routine: '后台同步', timesN: '×{0}', logEmpty: '还没有记录。',
     settingsTitle: '设置', connTitle: 'Tumblr 连接', connStatus_connected: '已连接', connStatus_no_app: '还没有应用密钥', connStatus_not_connected: '已保存密钥，尚未授权',
     connStatus_reconnect: '需要重新连接', appKeyHint: '在 tumblr.com/oauth/apps 注册应用，OAuth2 回调地址填 {0}，再把密钥粘贴到这里。密钥按当前 Windows 用户加密保存。',
     consumerKey: 'OAuth consumer key', consumerSecret: 'OAuth consumer secret', saveKey: '保存密钥', connect: '连接（会打开一次浏览器）',

@@ -1,5 +1,10 @@
 'use strict';
 
+// Background sync and its upkeep run every few minutes; a run of successful ones is one log row
+const ROUTINE = new Set(['sync.blog', 'sync.blogs', 'maintain.after']);
+const routineOk = l => (ROUTINE.has(l.kind) || l.kind === 'routine') && l.msg === 'succeeded' && l.level === 'info';
+const kindName = k => { const key = 'jk_' + String(k).replace(/\./g, '_'); const v = t(key); return v === key ? k : v; };
+
 const ActivityPage = {
   async render(root) {
     this.root = root;
@@ -24,16 +29,34 @@ const ActivityPage = {
             } }, t('notCreated')) : null,
             ['failed', 'waiting'].includes(j.status) ? h('button', { class: 'ghost', onclick: async () => { await call('retryJob', { id: j.id }); this.render(root); } }, t('retry')) : null))))) : empty(t('noJobs'))),
       h('section', { class: 'card' }, h('h2', {}, t('log')),
-        h('table', { class: 'table log' }, h('tbody', {}, log.map(l => h('tr', { class: 'lv-' + l.level },
-          h('td', { class: 'muted small nowrap' }, fmtTime(l.at)), h('td', {}, l.kind), h('td', {}, l.msg),
-          h('td', { class: 'muted small' }, l.data?.blog ? blogName(l.data.blog) + (l.data.id ? ' / ' + l.data.id : '') : ''))))))
+        log.length ? h('table', { class: 'table log' }, h('tbody', {}, this.collapse(log).map(({ l, n, from }) => {
+          const [st, ...rest] = String(l.msg || '').split(': ');
+          const isStatus = STRINGS.en['js_' + st] != null;
+          return h('tr', { class: 'lv-' + l.level },
+            h('td', { class: 'muted small nowrap log-time' }, n > 1 && Math.floor(from / 60000) !== Math.floor(l.at / 60000) ? fmtTime(from) + ' – ' + (new Date(from).toDateString() === new Date(l.at).toDateString() ? new Date(l.at).toLocaleTimeString(LANG === 'zh' ? 'zh-CN' : 'en-GB', { hour: '2-digit', minute: '2-digit' }) : fmtTime(l.at)) : fmtTime(l.at)),
+            h('td', { class: 'nowrap' }, kindName(l.kind), n > 1 ? h('span', { class: 'muted small' }, ' ' + t('timesN', n)) : null),
+            h('td', {}, isStatus ? [h('span', { class: 'badge js-' + st }, t('js_' + st)), rest.length ? h('span', { class: 'muted small' }, ' ' + rest.join(': ')) : null] : l.msg),
+            h('td', { class: 'muted small right' }, l.data?.blog ? blogName(l.data.blog) + (l.data.id ? ' / ' + l.data.id : '') : ''));
+        }))) : empty(t('logEmpty'))),
     );
+  },
+  // Runs of the same routine entry (a sync every few minutes) read as one row with a count
+  collapse(log) {
+    const out = [];
+    for (const l of log) {
+      const last = out[out.length - 1];
+      if (last && routineOk(l) && routineOk(last.l)) { last.n++; last.l = { ...last.l, kind: 'routine' }; last.from = l.at; }
+      else if (last && last.l.kind === l.kind && last.l.msg === l.msg && last.l.level === l.level && !l.data?.id && !last.l.data?.id) { last.n++; last.from = l.at; }
+      else out.push({ l, n: 1, from: l.at });
+    }
+    return out;
   },
   describe(j) {
     const p = j.payload || {};
     const where = p.blog ? blogName(p.blog) + (p.id ? ' / ' + p.id : '') : '';
-    const names = { 'post.visibility': p.target === 'published' ? t('makePublic') : t('makePrivate'), 'post.tags': '#', 'post.reblog': t('reblogTo').replace('…', '') + ' ' + blogName(p.dest), 'sync.blog': '⟳', 'sync.blogs': '⟳', 'maintain.after': '⟳', 'post.publish': t('publish') };
-    return [names[j.kind] || j.kind, ' ', h('span', { class: 'muted' }, where)];
+    const detail = j.kind === 'post.visibility' ? ' · ' + (p.target === 'published' ? t('makePublic') : t('makePrivate'))
+      : j.kind === 'post.reblog' && p.dest ? ' → ' + blogName(p.dest) : '';
+    return [kindName(j.kind) + detail, ' ', h('span', { class: 'muted' }, where)];
   },
   refresh() { this.render(this.root); },
 };
