@@ -561,6 +561,7 @@ const WritePage = {
   async preview() {
     this.syncText();
     const c = await call('compileDraft', { doc: this.doc });
+    const tags = (await call('composeTags', this.opts)).tags.map(x => x.tag);
     const assetsById = this.assets;
     const blockById = new Map(this.doc.blocks.filter(b => b.type === 'image').map(b => [b.id, b]));
     const render = (width) => {
@@ -577,10 +578,13 @@ const WritePage = {
         });
         const after = trunc != null && r.blocks.includes(trunc) ? h('div', { class: 'npf-more' }, t('blockReadMore')) : null;
         return [h('div', { class: 'npf-row n' + r.blocks.length }, cells), after];
-      }));
+      }), tags.length ? h('div', { class: 'npf-tags' }, tags.map(tg => h('span', {}, '#' + tg))) : null);
     };
     const holder = h('div', { class: 'preview-holder' }, render(540));
-    const body = h('div', {}, chips([{ value: 540, label: t('wide') }, { value: 320, label: t('narrow') }], 540, w => holder.replaceChildren(render(w))),
+    const sizes = [{ value: 540, label: t('wide') }, { value: 320, label: t('narrow') }];
+    const pick = w => { holder.replaceChildren(render(w)); const next = chips(sizes, w, pick); sizeChips.replaceWith(next); sizeChips = next; };
+    let sizeChips = chips(sizes, 540, pick);
+    const body = h('div', {}, sizeChips,
       c.problems.length ? h('p', { class: 'warn-text' }, c.problems.map(p => t('prob_' + p.problem)).join(' · ')) : null, holder,
       h('p', { class: 'muted small' }, t('previewNote')));
     await modal(t('preview'), body, [{ label: t('close'), value: null }], { wide: true });
