@@ -94,6 +94,14 @@ function addFollowers(svc, api, { aiKey = () => null, fetchFn = fetch } = {}) {
   const now = svc.ctx.now;
   const cfg = () => ({ blogs: null, inspectLimit: 30, ai: false, protectFollowing: true, ...db.getMeta('followerGuard', {}) });
   const monitored = () => cfg().blogs || db.all('SELECT uuid FROM blogs WHERE is_primary = 1').map(b => b.uuid);
+  const guardOn = () => !!cfg().mode && cfg().mode !== 'off';
+  // Follower lists are collected once for both uses (FAN_RELATIONSHIP_SPEC 4): protection's blogs while it is on,
+  // and the fans module's blogs while it collects. Only protection's blogs get new followers inspected.
+  const fans = () => ({ collect: false, blogs: null, ...db.getMeta('audience', {}) });
+  const fanBlogs = () => fans().blogs || db.all('SELECT uuid FROM blogs WHERE is_primary = 1').map(b => b.uuid);
+  const scanBlogs = () => [...new Set([...(guardOn() ? monitored() : []), ...(fans().collect ? fanBlogs() : [])])];
+  const change = (blog, name, uuid, kind, extra = {}) => db.run('INSERT INTO audience_changes (blog, name, uuid, kind, at, since, note) VALUES (?, ?, ?, ?, ?, ?, ?)',
+    blog, name, uuid || null, kind, extra.at ?? now(), extra.since ?? null, extra.note ?? null);
   const protectedIds = () => new Set([
     ...db.all('SELECT uuid FROM allowlist').map(r => r.uuid),
     ...db.all('SELECT uuid FROM blogs').map(r => r.uuid),
@@ -112,18 +120,27 @@ function addFollowers(svc, api, { aiKey = () => null, fetchFn = fetch } = {}) {
         const users = r.users || [];
         db.tx(() => {
           for (const u of users) {
+            // the web API (browser relay) also gives the follower's uuid; the official list doesn't
+            const uuid = u.blog?.uuid || u.uuid || null;
             const ex = db.get('SELECT * FROM followers WHERE blog = ? AND name = ?', blog, u.name);
-            if (ex) db.run('UPDATE followers SET last_seen = ?, gone = 0 WHERE blog = ? AND name = ?', now(), blog, u.name);
-            else db.run('INSERT INTO followers (blog, name, first_seen, last_seen, baseline) VALUES (?, ?, ?, ?, ?)', blog, u.name, now(), now(), baseline ? 1 : 0);
+            if (ex) {
+              if (ex.gone_at) change(blog, u.name, ex.uuid || uuid, 'back', { since: ex.gone_at });
+              db.run('UPDATE followers SET last_seen = ?, gone = 0, gone_at = NULL, check_note = NULL, uuid = COALESCE(uuid, ?) WHERE blog = ? AND name = ?', now(), uuid, blog, u.name);
+            } else {
+              db.run('INSERT INTO followers (blog, name, uuid, first_seen, last_seen, baseline) VALUES (?, ?, ?, ?, ?, ?)', blog, u.name, uuid, now(), now(), baseline ? 1 : 0);
+              if (!baseline) change(blog, u.name, uuid, 'follow');
+            }
           }
         });
         offset += users.length;
         // offsets shift when people follow during the scan; overlap a little and rely on the name dedupe
         if (users.length < 20) {
           if (baseline) db.setMeta('followerBaseline:' + blog, now());
-          db.run('UPDATE followers SET gone = 1 WHERE blog = ? AND last_seen < ?', blog, started);
+          // not seen in a complete walk: "missing", checked one by one (audience.verify); never a confirmed unfollow by itself
+          db.run('UPDATE followers SET gone = 1 WHERE blog = ? AND last_seen < ? AND gone = 0', blog, started);
           db.setMeta('followerScan:' + blog, { at: now(), complete: true, count: offset });
-          planInspect();
+          if (guardOn()) planInspect();
+          svc.afterFollowerScan?.(blog);
           return { status: 'succeeded', result: { followers: offset, baseline } };
         }
       }
@@ -132,14 +149,17 @@ function addFollowers(svc, api, { aiKey = () => null, fetchFn = fetch } = {}) {
   };
   svc.handlers['follower.following'] = {
     async run(job, ctx) {
-      const ids = [];
+      const ids = [], names = [];
       for (let offset = 0; offset < 5000; offset += 20) {
         const r = await ctx.tumblr.following(offset, 20);
         const list = r.blogs || [];
         ids.push(...list.map(b => b.uuid).filter(Boolean));
+        names.push(...list.map(b => b.name).filter(Boolean));
         if (list.length < 20) break;
       }
       db.setMeta('following', ids);
+      db.setMeta('followingNames', names);
+      db.setMeta('followingAt', now());
       return { status: 'succeeded', result: { following: ids.length } };
     },
   };
@@ -149,10 +169,10 @@ function addFollowers(svc, api, { aiKey = () => null, fetchFn = fetch } = {}) {
       const { blog, name } = job.payload;
       let info;
       try { info = await ctx.tumblr.publicInfo(name); }
-      catch (e) { if (e instanceof HttpError && e.status === 404) { db.run(`UPDATE followers SET uuid = '' WHERE blog = ? AND name = ?`, blog, name); return { status: 'skipped', error: 'blog not found' }; } throw e; }
+      catch (e) { if (e instanceof HttpError && e.status === 404) { db.run(`UPDATE followers SET uuid = COALESCE(uuid, ''), inspected = 1 WHERE blog = ? AND name = ?`, blog, name); return { status: 'skipped', error: 'blog not found' }; } throw e; }
       const uuid = info?.blog?.uuid;
-      if (!uuid) return { status: 'skipped', error: 'no stable id' };
-      db.run('UPDATE followers SET uuid = ? WHERE blog = ? AND name = ?', uuid, blog, name);
+      if (!uuid) { db.run('UPDATE followers SET inspected = 1 WHERE blog = ? AND name = ?', blog, name); return { status: 'skipped', error: 'no stable id' }; }
+      db.run('UPDATE followers SET uuid = ?, inspected = 1 WHERE blog = ? AND name = ?', uuid, blog, name);
       if (protectedIds().has(uuid)) { upsertCase(uuid, name, 'allowed', null, { assessment: 'protected' }); return { status: 'succeeded', result: { protected: true } }; }
       const old = db.get('SELECT * FROM follower_cases WHERE uuid = ?', uuid);
       if (old && ['allowed', 'dismissed', 'spam'].includes(old.status)) return { status: 'unchanged' }; // a known case is reused
@@ -243,20 +263,28 @@ function addFollowers(svc, api, { aiKey = () => null, fetchFn = fetch } = {}) {
   }
 
   // Called by the maintenance pass
-  svc.followerPass = () => {
-    const c = cfg();
-    if (c.mode === 'off' || !c.mode) return 0;
-    if (!db.get(`SELECT id FROM jobs WHERE kind = 'follower.following' AND status IN ('pending', 'running', 'waiting')`)) jobs.add('follower.following', {}, { priority: 7 });
-    for (const blog of monitored()) {
+  // Protection scans every pass (new followers are its point); collection alone reads the lists every 6 hours.
+  svc.followerPass = ({ force = false } = {}) => {
+    const blogs = scanBlogs();
+    if (!blogs.length) return 0;
+    const due = key => force || guardOn() || (db.getMeta(key, {})?.at || 0) < now() - 6 * 3600e3;
+    if (due('followingScan') && !db.get(`SELECT id FROM jobs WHERE kind = 'follower.following' AND status IN ('pending', 'running', 'waiting')`)) {
+      jobs.add('follower.following', {}, { priority: 7 });
+      db.setMeta('followingScan', { at: now() });
+    }
+    for (const blog of blogs) {
+      if (!due('followerScan:' + blog)) continue;
       if (!db.get(`SELECT id FROM jobs WHERE kind = 'follower.scan' AND scope = ? AND status IN ('pending', 'running', 'waiting')`, 'followers:' + blog)) jobs.add('follower.scan', { blog }, { priority: 7, scope: 'followers:' + blog });
     }
-    return planInspect();
+    return guardOn() ? planInspect() : 0;
   };
   // inspect a bounded number of new, unresolved followers
   function planInspect() {
     const c = cfg();
-    const fresh = db.all(`SELECT blog, name FROM followers f WHERE baseline = 0 AND uuid IS NULL AND gone = 0
-      AND NOT EXISTS (SELECT 1 FROM jobs j WHERE j.kind = 'follower.inspect' AND j.scope = 'inspect:' || f.name) ORDER BY first_seen LIMIT ?`, c.inspectLimit);
+    const mine = new Set(monitored());
+    const fresh = db.all(`SELECT blog, name FROM followers f WHERE baseline = 0 AND inspected = 0 AND gone = 0
+      AND NOT EXISTS (SELECT 1 FROM jobs j WHERE j.kind = 'follower.inspect' AND j.scope = 'inspect:' || f.name) ORDER BY first_seen LIMIT ?`, c.inspectLimit * 4)
+      .filter(f => mine.has(f.blog)).slice(0, c.inspectLimit);
     for (const f of fresh) jobs.add('follower.inspect', { blog: f.blog, name: f.name }, { priority: 8, scope: 'inspect:' + f.name });
     return fresh.length;
   }
@@ -279,7 +307,7 @@ function addFollowers(svc, api, { aiKey = () => null, fetchFn = fetch } = {}) {
       const c = { ...cfg(), ...patch };
       if (c.mode === 'auto') throw new Error('automatic blocking is not available until the evidence patterns pass an evaluation');
       db.setMeta('followerGuard', c);
-      if (c.mode && c.mode !== 'off') svc.followerPass();
+      if (c.mode && c.mode !== 'off') svc.followerPass({ force: true });
       return api.followerGuard();
     },
     followerCases({ status = 'review', limit = 100 } = {}) {
@@ -319,7 +347,7 @@ function addFollowers(svc, api, { aiKey = () => null, fetchFn = fetch } = {}) {
       db.run('UPDATE follower_cases SET assessment = ?, updated_at = ? WHERE uuid = ?', J(a), now(), uuid);
       return true;
     },
-    scanFollowers() { return svc.followerPass(); },
+    scanFollowers() { return svc.followerPass({ force: true }); },
   });
 }
 

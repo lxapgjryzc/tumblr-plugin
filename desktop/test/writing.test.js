@@ -48,6 +48,39 @@ test('compile: order, rows, read-more, code-point formatting (A23, A43)', () => 
   assert.deepEqual(c2.problems, [{ block: 'i2', problem: 'missing_image' }]);
 });
 
+test('compile: empty text blocks anywhere are dropped, indexes follow (BUG-20261108-02/03)', () => {
+  const assets = new Map([['a1', { exists: true, mime: 'image/png' }], ['a2', { exists: true, mime: 'image/png' }]]);
+  // the composer's unused lines above the text: Tumblr drops them, so they are never sent
+  const lead = compile(normaliseDoc({ blocks: [{ id: 'e1', type: 'text', text: '' }, { id: 'e2', type: 'text', text: '  ' }, { id: 't', type: 'text', text: 'hi' }, { id: 'i', type: 'image', asset: 'a1' }], rows: [] }), assets);
+  assert.deepEqual(lead.content.map(b => b.type + ':' + (b.text ?? '')), ['text:hi', 'image:']);
+  assert.deepEqual(lead.layout, []);
+  const only = compile(normaliseDoc({ blocks: [{ id: 'e', type: 'text', text: '' }, { id: 'i', type: 'image', asset: 'a1' }], rows: [] }), assets);
+  assert.deepEqual(only.content.map(b => b.type), ['image']);
+  // in the middle, with a row and a read-more after it: row and cut point refer to the blocks actually sent
+  const mid = compile(normaliseDoc({ blocks: [
+    { id: 't1', type: 'text', text: 'a' }, { id: 'e', type: 'text', text: '' }, { id: 'i1', type: 'image', asset: 'a1' }, { id: 'i2', type: 'image', asset: 'a2' },
+    { id: 'rm', type: 'readmore' }, { id: 'e2', type: 'text', text: '' }, { id: 't2', type: 'text', text: 'b' },
+  ], rows: [['i1', 'i2']] }), assets);
+  assert.deepEqual(mid.content.map(b => b.type), ['text', 'image', 'image', 'text']);
+  assert.deepEqual(mid.layout[0].display.map(r => r.blocks), [[0], [1, 2], [3]]);
+  assert.equal(mid.layout[0].truncate_after, 2);
+  assert.deepEqual(compile(normaliseDoc({ blocks: [{ id: 'e', type: 'text', text: '' }], rows: [] })).problems, [{ problem: 'empty' }]);
+});
+
+test('publish: empty lines above the text do not keep the post in verification (BUG-20261108-02/03)', async () => {
+  const { fake, svc, api, run } = setup();
+  svc.pass(); await run();
+  const d = api.newDraft({ blog: 't:art' });
+  const a = api.addAsset({ draftId: d.id, mime: 'image/png', bytes: PNG, width: 1, height: 1 });
+  const doc = { v: 1, blocks: [{ id: 'e1', type: 'text', text: '' }, { id: 'e2', type: 'text', text: '' }, { id: 't', type: 'text', text: 'caption' }, { id: 'i', type: 'image', asset: a.id }], rows: [] };
+  api.saveDraft({ id: d.id, doc, options: { categoryIds: [] }, revision: d.revision, blog: 't:art' });
+  api.publish({ id: d.id, mode: 'published' });
+  await run();
+  assert.deepEqual(svc.jobs.list({}).filter(j => j.kind === 'post.publish').map(j => [j.status, j.error]), [['succeeded', null]]);
+  const created = [...fake.posts.values()].filter(p => p.blog.uuid === 't:art');
+  assert.deepEqual(created.map(p => p.content.map(b => b.type)), [['text', 'image']]);
+});
+
 test('rows: moving an image away splits the row; rows never exceed 3 or join non-neighbours (A40)', () => {
   const doc = normaliseDoc({ blocks: [
     { id: 'i1', type: 'image' }, { id: 't', type: 'text', text: 'x' }, { id: 'i2', type: 'image' }, { id: 'i3', type: 'image' },

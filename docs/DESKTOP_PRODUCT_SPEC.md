@@ -1,16 +1,26 @@
-# Tumblr Studio: desktop personal publishing design
+# Tumblr Studio: local web application and personal publishing design
 
 Design date: 2026-11-06. Working product name; not a rename of the shipped extension.
 
+**Functional workflow revision (2026-11-07):** [FUNCTIONAL_WORKFLOWS_SPEC.md](FUNCTIONAL_WORKFLOWS_SPEC.md) defines integrated original editing and interaction handling, capability validation and FW01–FW12. The user delegates technical presentation choices; home layout, publishing defaults and automation setup guesses were not confirmed. Runtime, business behaviour and complete workflows require separate evidence. An external link plus manual marking is transitional, not accepted integrated replying. Do not promise an unverified send transport or complete private messaging.
+
+**Confirmed runtime revision (2026-11-07; pending implementation):** the user selected option 1: an independent local background service with an on-demand web interface in an ordinary browser. The purpose is to let Chrome fully exit between interactive sessions and reduce resident memory. [LOCAL_WEB_APP_SPEC.md](LOCAL_WEB_APP_SPEC.md) defines lifecycle, authentication, profile isolation, migration, resource measurement and LW01–LW18 acceptance. This supersedes requirements for a native desktop window, closing that window to a tray, and composing without a browser UI. Accepted jobs and core automation must continue without any browser, extension, Electron or embedded web renderer running. Existing feature requirements remain in scope; this update changes documentation only, with implementation assigned to Claude.
+
+**Confirmed Chrome identities (2026-11-07):** profile1 is the user's daily work profile; profile10 is reserved for AI-agent testing. Explicitly route local UI launch, Tumblr links, OAuth/reconnect and optional companion/relay to the correct profile. Never use the active/default/last-used profile as a fallback. Verify actual profile-directory mappings before use. Work and test backends have separate data, credentials, sessions, callback correlation, ports and pairings; AI testing defaults to fake Tumblr and must not operate or close profile1. See LOCAL_WEB_APP_SPEC.md section 2.1 and LW15–LW18. A missing or unverifiable profile stops that browser step rather than crossing the boundary.
+
+The historical filename and `desktop/` source path remain to preserve links. In current requirements, "application" means the local backend plus its browser interface; "application stopped" means the backend has stopped, not that a browser tab was closed. Historical implementation evidence below describes the Electron build unless a newer runtime acceptance result is explicitly recorded.
+
+**Follower-management expansion (user request, 2026-11-07):** [FAN_RELATIONSHIP_SPEC.md](FAN_RELATIONSHIP_SPEC.md) designs one Fans & interactions module covering relationship follow-up, follower changes and the existing follower-protection functionality. All three areas and their integration are requested; the detailed UI, defaults and delivery phases are proposals. This is a design addition, not a claim that the expanded module is implemented. Protection execution and automation gates remain governed by [FOLLOWER_GUARD_SPEC.md](FOLLOWER_GUARD_SPEC.md).
+
 **Confirmed product ownership (2026-11-06):** Tumblr Studio is the primary application; the extension is its browser companion. Each business capability has one owner in the application. Keep extension features only where browser/page access is necessary or makes an in-context action substantially more convenient. Section 4.3 supersedes the standalone extension manager and parallel automation design; a takeover toggle alone does not fulfil this requirement. This is a requirements update, not a claim that the migration is implemented.
 
-**Confirmed reblog revision (2026-11-06):** [REBLOG_POLICY.md](REBLOG_POLICY.md) defines the global contract for desktop, extension and collection: a reblog freezes its creation-time content and ordered tags. Never edit those fields afterward. Source content/image/layout changes produce a new revision and a new reblog, preserving previous versions; tag-only changes do not produce a revision or trigger another reblog. The next content-version reblog uses its creation-time tags. This supersedes tag propagation, drift repair and one-copy-per-source assumptions. Explicit visibility management remains separate. Implementation of this revision is pending.
+**Confirmed reblog revision (2026-11-06, including the later tag clarification):** [REBLOG_POLICY.md](REBLOG_POLICY.md) governs all components. Reblog body, images, layout and content-version identity stay frozen. Owned-source reblogs synchronise original tags, including order, under the existing enabled policy; other-author/material reblogs keep creation-time tags. Content changes can produce a new version reblog; tag-only changes never do. Preserve submitted tag history separately from current observed tags. Visibility stays separate; older immutable-tag tests do not establish current acceptance.
 
 > **Implementation status (2026-11-06):** stages 1–4 have code in [desktop/](../desktop/), not full product acceptance. Read [the status and acceptance gaps](DESKTOP_IMPLEMENTATION_STATUS.md) alongside [the implementation README](../desktop/README.md). Implementation choices do not silently waive confirmed requirements; label preservation, mutation ownership and uncertain-create recovery remain open gates.
 
-This is the desktop product's requirements and acceptance contract. Implemented, blocked and deferred capabilities are tracked separately in the status document. [SPEC.md](SPEC.md) remains the historical extension specification. This document takes precedence for the desktop product where the two disagree. Read [PRODUCT_WORKFLOWS_ZH.md](PRODUCT_WORKFLOWS_ZH.md) for user-facing flows, [FOLLOWER_GUARD_SPEC.md](FOLLOWER_GUARD_SPEC.md) for follower protection, and [STAGE0_RESULTS.md](STAGE0_RESULTS.md) for completed adapter probes and outstanding gaps. Probe results are not acceptance of an implemented desktop product. Confirmed requirements remain distinct from implementation proposals and configurable preferences.
+This is the local application's requirements and acceptance contract. Implemented, blocked and deferred capabilities are tracked separately in the status document. [SPEC.md](SPEC.md) remains the historical extension specification. This document takes precedence for the local application where the two disagree. Read [PRODUCT_WORKFLOWS_ZH.md](PRODUCT_WORKFLOWS_ZH.md) for user-facing flows, [FOLLOWER_GUARD_SPEC.md](FOLLOWER_GUARD_SPEC.md) for follower protection, and [STAGE0_RESULTS.md](STAGE0_RESULTS.md) for completed adapter probes and outstanding gaps. Probe results are not acceptance of the complete application or its new runtime. Confirmed requirements remain distinct from implementation proposals and configurable preferences.
 
-**Confirmed requirements:** a local application whose publishing and routine automation work with the browser fully exited; a companion browser extension; a personal sharing experience; bulk visibility changes; age-based hiding with manual exceptions; tag exclusions for automatic reblogs; general category tags before template tags; a reliable Tumblr-compatible visual composer with optional Markdown conveniences; AI-assisted protection from spam followers; and side-blog management of main-blog posts reblogged into a side blog. The user explicitly deferred the unusual case of two side blogs managing the same main-blog post.
+**Confirmed requirements:** a local application with an on-demand browser interface, an independent background service whose accepted publishing jobs and routine automation continue with the browser fully exited, and an optional companion browser extension; a personal sharing experience; bulk visibility changes; age-based hiding with manual exceptions; tag exclusions for automatic reblogs; general category tags before template tags; a reliable Tumblr-compatible visual composer with optional Markdown conveniences; AI-assisted protection from spam followers; and side-blog management of main-blog posts reblogged into a side blog. The user explicitly deferred the unusual case of two side blogs managing the same main-blog post.
 
 **Confirmed in the resumed discussion (2026-11-06):** prioritise local writing, management and browsing. Age-based hiding reduces the accumulation of old posts on the blog homepage and must support hiding the user's original posts, including main-blog originals managed from a side blog. It is triggered only by publication age, not by creation of a reblog. The user may manually keep popular posts public; this is a durable exception, not an automatic popularity threshold. A public-theme redesign is not a first-release requirement.
 
@@ -28,7 +38,7 @@ This is the desktop product's requirements and acceptance contract. Implemented,
 
 ## 1. Product position
 
-A personal publishing desk for Tumblr: write diaries and illustrated posts, organise them by topic, decide what stays on public display, and maintain a quieter audience. The desktop application is the daily workspace; Tumblr supplies hosting, distribution and social interactions.
+A personal publishing desk for Tumblr: write diaries and illustrated posts, organise them by topic, decide what stays on public display, and maintain a quieter audience. The local web interface is the daily workspace, opened only when needed; its independent backend owns data and automation. Tumblr supplies hosting, distribution and social interactions.
 
 The intended experience borrows the image cards and category browsing of a personal sharing platform, with a chronological timeline for text-heavy entries. The core loop is:
 
@@ -42,28 +52,29 @@ There are two distinct presentation surfaces:
 
 | Surface | First-release requirement |
 |---|---|
-| Desktop personal home | Image cards / chronological timeline, category tabs, draft continuation, published and hidden content, management-blog navigation |
+| Local web personal home | Image cards / chronological timeline, category tabs, draft continuation, published and hidden content, management-blog navigation |
 | Public Tumblr blog | Real Tumblr posts with consistent category tags and intentional visibility; existing Tumblr URLs and attribution are retained |
 
-A matching public Tumblr theme is outside the confirmed first-release scope and may be discussed later. A desktop layout does not change the Tumblr dashboard or mobile app for visitors. Theme-only filtering must never implement hiding: the remote post's visibility must actually change. Do not add a separate social network, friends-only audience system, recommendation engine or public hosting service to this release.
+A matching public Tumblr theme is outside the confirmed first-release scope and may be discussed later. The local interface does not change the Tumblr dashboard or mobile app for visitors. Theme-only filtering must never implement hiding: the remote post's visibility must actually change. Do not add a separate social network, friends-only audience system, recommendation engine or public hosting service to this release.
 
 ## 2. What changes from the existing project
 
 The reviewed working tree reports version 0.9.5. It already contains user changes; preserve those during implementation.
 
-| Existing design / implementation | Desktop decision |
+| Existing design / implementation | Local application decision |
 |---|---|
-| Chrome MV3 manager page; session requests through `www.tumblr.com/api` | Native desktop window, direct authenticated Tumblr adapter, optional browser companion |
-| Manager-tab jobs and `chrome.alarms` background passes | One durable desktop job service, independent of any window or browser tab |
+| Chrome MV3 manager page; session requests through `www.tumblr.com/api` | Local web interface, direct authenticated backend Tumblr adapter, optional browser companion |
+| Electron window hosting the local interface and service | Reuse the UI and business logic; move service ownership into an independent backend and replace Electron-specific adapters |
+| Manager-tab jobs and `chrome.alarms` background passes | One durable local job service, independent of any window or browser tab |
 | `autoRecent`: image posts, fixed day presets, `recentHidden`, automatic restoration when disabled | All eligible content types; custom days; persistent exceptions; explicit restoration workflow |
-| `copyKeys` / `syncCopies`: original controls copies; copies cannot be selected | Logical groups with immutable reblog content/tags; manage actual originals and explicit display policies separately |
+| `copyKeys` / `syncCopies`: original controls copies; copies cannot be selected | Logical groups with frozen reblog bodies; dedicated owned-source tag sync, versions and visibility are separate operations |
 | `autoMaintain`: new sharing-side-blog posts reblogged to main | Explicit routes delivering new source revisions as new reblogs, with exclusions and per-version deduplication |
 | `sortTagsFair`: work / characters / relations before other tags | General categories form a fixed prefix; template ordering runs only within its segment |
 | Native Tumblr composition | Reliable local visual composition, structured drafts and attachments, Tumblr-compatible preview/publishing, optional Markdown input |
 | Material collection, packs, tag cleanup, AI image sorting, browser helpers | App owns management, data and jobs; extension retains browser helpers and contextual entry points only. Preserve existing data during migration; no material-library expansion is implied |
 | No follower-protection subsystem | New follower inbox, evidence-based classification, allowlist, blocking and capability-gated reporting |
 
-Relevant implementation references: [core](../src/core.js), [background](../extension/background.js), [manager](../extension/manager.js), and [extension manifest](../extension/manifest.json). Reuse the pure tagging and pack logic where suitable. Do not simply wrap the extension manager in a desktop window: that would retain the browser-session dependency and the wrong management authority.
+Relevant implementation references: [core](../src/core.js), [background](../extension/background.js), [companion](../extension/companion.js), and [extension manifest](../extension/manifest.json). Reuse the pure tagging and pack logic where suitable. Keep business execution in the independent local backend; moving it back into a manager tab or extension would restore the browser-session dependency and the wrong management authority.
 
 ## 3. Original location, management blog and display instances
 
@@ -79,7 +90,7 @@ Changing management never changes authorship, recreates an original post, change
 
 **Platform baseline:** an existing reblog is a separate post managed by its reblogging blog, retaining the content it reblogged. Editing, deleting or hiding the original does not update or withdraw that existing reblog. The [official reblog help](https://help.tumblr.com/reblogs/) explicitly documents edit/delete independence; the user's clarification and stage-0 record also cover hiding. This is a design input, not an exploratory test gate. A local content group is an organisational link, never a live content reference whose children inherit every original change.
 
-The application must preserve an existing reblog's own content, layout and ordered tags as a historical snapshot. Neither automatic propagation nor manual bulk tag/body editing may rewrite it. Source content/image/layout changes create a new source revision and, under an enabled route or explicit action, a new reblog; tag-only changes do neither. The next content-version reblog captures the tags selected at its creation. Visibility operations enumerate exact selected instances separately and preserve each instance's own payload. Never substitute the latest original for an old snapshot or delete/recreate a historical reblog to simulate synchronisation.
+The application preserves each reblog's historical body, images and layout. Direct batch tag edits target originals; dedicated owned-source tag sync may subsequently update their owned reblogs' tags and order without changing content versions. Other-author/material tags stay fixed. Content changes create a new observed revision and, under enabled routes or explicit action, a new reblog; tag-only changes do neither. Visibility preserves the selected instance's current payload. Never substitute the latest original body for an old snapshot or delete/recreate it to simulate sync.
 
 ```mermaid
 flowchart LR
@@ -103,38 +114,39 @@ flowchart LR
 
 Assignment itself is local organisation; it neither overwrites remote fields nor schedules a new reblog. Reconciliation preserves historical differences. Only explicit original edits, selected display policies and enabled version-delivery routes authorise their respective remote operations.
 
-Management is counted by distinct eligible blogs, not reblog count. Several source revisions reblogged into the same sharing side blog still yield one candidate manager. Historical snapshot differences are expected; reconciliation cannot turn them into tag/body repair jobs.
+Management is counted by distinct eligible blogs, not reblog count. Multiple revisions in the same side blog yield one manager. Historical body differences never become repair jobs; owned-source tag sync is governed separately by REBLOG_POLICY.md.
 
 ### 3.3 What the management blog controls
 
 - The content item appears in the side blog's **Managed here / 归我管理** view, even if its actual original is on main. Main's **Displayed here / 在此展示** view still contains its original, labelled with the management blog.
-- Category and template selections for current work apply to the actual writable original and future publication plans. A management view can edit a main-blog original while listing existing reblogs as excluded historical snapshots. Their tags never receive the update. Tag-only changes do not schedule another reblog; the next content revision captures current tags when delivered.
-- Management assignment is organisational authority, not authority to propagate a historical reblog's tags. Preserve each snapshot's own tags in its view. Externally edited snapshots are recorded as external changes, not repaired from the original or used to overwrite it.
+- Category and template selections apply to the actual writable original and future plans. Existing owned-source reblogs subsequently receive tags through dedicated sync, not direct batch selection; their bodies stay fixed. Tag-only changes never schedule another reblog.
+- Management assignment alone authorises no remote writes. Show observed tags and pending sync separately. Owned-source tag updates follow REBLOG_POLICY.md; other-author/material tags never become repair targets.
 - Text editing routes to the actual writable original when it is the user's own original. A reblog's added commentary is frozen with that snapshot. Moving management does not turn its caption into the original body.
 - Each display instance keeps its own observed remote state and manual display policy. Section 7 defines independent-blog and linked-group expiry configurations; the user has not chosen a personal default. Do not assume side blogs keep a permanent public archive. Never use a reblog's current `private`/`published` state as an instruction to overwrite the whole group.
 - For visibility only, the management screen offers **Apply to all my linked posts**, listing the exact versions and instances. Body/tag edits cannot use this action to rewrite existing reblogs. Each instance can have a separate display policy.
-- Keep every historical reblog's creation-time tags, including extra tags and their order. Category/template changes can affect a new publication plan; turning routes off never changes already created snapshots.
+- Keep creation-time submitted tags as history and current observed tags separately. Owned-source tags may synchronise; disabling routes does not itself rewrite posts or enable another policy.
 
-Remove “original always wins” and content/tag drift repair. Selection is action-specific: reblogs can be inspected and selected for explicit visibility actions, but are excluded from body/tag mutations as frozen snapshots.
+Remove generic copy/body drift repair. Reblogs can be selected for visibility; direct batch body/tag edits target originals. Dedicated owned-source tag sync is the bounded exception for tags, never bodies.
 
-## 4. Desktop runtime and browser companion
+## 4. Local web runtime and browser companion
 
 ### 4.1 Runtime contract
 
-The browser may be completely terminated. After initial authorisation, the desktop must still be able to synchronise owned posts, publish supported posts, edit tags and visibility, reblog, inspect followers and block confirmed spam followers. These are release gates, not a fallback mode.
+The browser interface is needed for interactive composition and management. After the backend has durably accepted work, the browser may be completely terminated: supported publication, post synchronisation, tag/visibility jobs, reblogs and permitted follower actions must continue through the independent backend. Existing capability and authorisation gates still apply. Browser-independent execution is a release gate, not a fallback mode; interactive composition with every browser terminated is no longer required. See [LOCAL_WEB_APP_SPEC.md](LOCAL_WEB_APP_SPEC.md) for the full runtime and migration contract.
 
 | Situation | Behaviour |
 |---|---|
-| Desktop open, browser exited, online | Core publishing and automation run normally through the official API adapter |
-| Window closed to tray | Desktop jobs continue; tray menu clearly exposes Pause and Quit |
-| Desktop fully quit, PC asleep or powered off | Local scans and edits stop; resume and reconcile on the next start |
-| Offline | Cached content and local drafts remain usable; remote operations wait visibly |
+| Backend running, local page open, online | Compose/manage in the browser; the backend owns storage, credentials and execution |
+| Local page closed or every browser process exited | Accepted jobs and enabled automation continue through the official API adapter; no hidden browser/renderer is retained or reopened |
+| Backend explicitly stopped, PC asleep or powered off | Local scans and edits stop; resume and reconcile on the next start. Closing a browser tab is not this action |
+| Offline, backend running | Local UI assets, cached content and draft saving remain usable; remote operations wait visibly |
 | Authorisation expired or revoked | Save local work; pause affected remote tasks and show Reconnect |
 | Browser-only capability unavailable | Show the specific limitation; never call an unperformed operation successful |
+| Multiple tabs or repeated launcher activation in one environment | Reuse that environment's backend and mutation queue; detect stale draft revisions, never start another scheduler or attach the isolated test environment to the work backend |
 
-Already submitted Tumblr queue/scheduled posts are separate from local jobs. Their server-side publication does not depend on the desktop staying open. Local expiry and follower checks do.
+Already submitted Tumblr queue/scheduled posts are separate from local jobs. Their server-side publication does not depend on the local backend running. Local expiry and follower checks do. Backend-confirmed drafts, attachments and jobs survive closing the browser; unacknowledged browser input must not be presented as saved or accepted.
 
-Proposed schedule: every 10 minutes while the desktop service runs, plus startup/network recovery and relevant rule changes. Show last success, backlog, coverage and next attempt. No claim of exact-to-the-second hiding while a computer is offline. Launch at Windows sign-in is optional and off initially.
+Proposed schedule: every 10 minutes while the local backend runs, plus startup/network recovery and relevant rule changes. Show last success, backlog, coverage and next attempt. No claim of exact-to-the-second hiding while a computer is offline. Launch at Windows sign-in is optional and off initially; when enabled, start only the backend. Provide everyday launch, Open interface, Pause automation and Stop backend controls without requiring a terminal. Browser exit must not be implemented by hiding an Electron/WebView window. Record comparable old/new memory and idle-CPU evidence under LOCAL_WEB_APP_SPEC.md section 6; no unmeasured MB target or saving is claimed.
 
 ### 4.2 Authentication and capability validation
 
@@ -142,13 +154,15 @@ Use the documented Tumblr OAuth API for core operations. [STAGE0_RESULTS.md](STA
 
 Stage 0 validated user-owned application credentials and a loopback callback. Do not bundle a shared secret into a publicly distributed client or assume an undocumented secretless flow. Use the operating-system credential store; browser cookies, web-client tokens and AI keys do not belong in ordinary exports or logs. [OAuth documentation](https://github.com/tumblr/docs/blob/master/api.md#oauth2-authorization)
 
+OAuth credentials and refresh execution belong to the backend, independently of the local browser's access session or Tumblr website cookies. Closing/reopening the assigned profile or clearing local site data must not erase that environment's backend drafts/data or invalidate otherwise valid Tumblr credentials. Tests may clear only the test instance's site data in profile10. Work/test access credentials and OAuth callbacks must be bound to their initiating backend/request and cannot cross environments. Replace Electron-specific credential protection with an equivalent local adapter, not plaintext storage. Serve the local interface and APIs only on loopback with Host/Origin/session checks and cross-site request protection; the ordinary browser gets no privileged IPC, arbitrary filesystem/shell access or backend secrets. File/media/backup flows need explicit browser-compatible adapters, as defined in LOCAL_WEB_APP_SPEC.md sections 3–5.
+
 Refresh tokens rotate on every refresh in the validated adapter. Use one refresh writer per account and atomically replace the encrypted credential record containing both tokens, expiry and generation before dependent requests use the new generation. Read expiry from the response. A failed local commit stops dependent work. Atomic local replacement does not make server refresh plus local persistence one transaction: a lost response/crash before durable receipt may require reconnection; do not blindly replay a possibly consumed refresh token. Test these recovery paths with injected failures and fixtures.
 
 Record capabilities per adapter/account/blog: supported, unsupported, unverified, authentication required. Verify the writable fields on representative posts, especially older formats, labels and reblog controls. A browser fallback for an advanced unsupported operation is explicit. It cannot be used to claim that browser-independent core operation passed.
 
 ### 4.3 Companion responsibilities
 
-The application is the product; the extension is an accessory, not a second management client. A feature stays in the extension only when it needs the current webpage/browser or benefits materially from an in-context shortcut. Reusing a shared tag picker in Tumblr's editor is useful page integration; duplicating pack administration, classification settings, jobs or logs is not.
+The local application (backend plus browser UI) is the product; the extension is an optional accessory, not a second management client. The local UI and supported core jobs must work without the extension installed. A feature stays in the extension only when it needs the current webpage/browser or benefits materially from an in-context shortcut. Reusing a shared tag picker in Tumblr's editor is useful page integration; duplicating pack administration, classification settings, jobs or logs is not. Open in Studio and management links now open the relevant local web page; the backend, not any open page, remains the owner of requests and results.
 
 | Capability | Application responsibility | Extension responsibility |
 |---|---|---|
@@ -165,23 +179,21 @@ Tumblr's own editor/publish controls remain Tumblr's; inserting tags into an uns
 
 The application owns categories, packs, blog roles, route policies, AI configuration and durable activity. The extension may cache versioned, read-only snapshots for page assistance, showing unavailable/stale state where relevant; it must not keep separately editable copies or refresh an independent account-wide library. A small browser-only preference control is acceptable if its scope is explicit and it does not duplicate the app's settings model.
 
-When the app is fully quit or disconnected, browser-local helpers can continue and cached suggestions remain usable. App-dependent actions show Open/Connect Studio and cannot claim to be queued until the app durably acknowledges them. Do not introduce a second persistent extension business queue or silently resume standalone manager/automation. A browser-only remote action is an explicit, validated adapter for an app-owned operation, with one operation ID and its receipt/uncertainty reported to the app; it is not a general fallback for core API writes. Native user actions in Tumblr remain outside the app's executor.
+When the backend is stopped or disconnected, browser-local helpers can continue and cached suggestions remain usable. App-dependent actions show Start/Connect Studio and cannot claim to be queued until the backend durably acknowledges them. Merely closing the local UI does not make a running backend unavailable. Do not introduce a second persistent extension business queue or silently resume standalone manager/automation. A browser-only remote action is an explicit, validated adapter for an app-owned operation, with one operation ID and its receipt/uncertainty reported to the app; it is not a general fallback for core API writes. Native user actions in Tumblr remain outside the app's executor.
 
 Current delivery still has the legacy manager, export/import and a takeover guard; it is not the target companion. The recorded write guard is useful migration protection but does not remove duplicated screens, data ownership or algorithms. The live bridge and full companion acceptance remain pending. Final product behaviour must not offer a toggle to restore an independent plugin manager/scheduler.
 
-Recommended bridge: extension service worker → Native Messaging host → the already running desktop's local IPC endpoint. Chrome starts the messaging host; that host is a connector, not the desktop scheduler. Its lifetime must not determine whether desktop jobs continue. Register the extension's permitted origin and validate callers and messages. [Chrome Native Messaging](https://developer.chrome.com/docs/extensions/develop/concepts/native-messaging)
+For migration, prefer adapting the existing paired loopback bridge to the independent backend; a Native Messaging connector remains an implementation alternative, not a required desktop host. Keep extension pairing separate from the local web session and validate permitted callers. Pair work-profile1 and test-profile10 installations independently with their respective backend; an extension ID or a self-reported profile name alone does not prove the correct installation. Neither an extension worker, connector nor browser page owns the scheduler. Optional relay can use only its already open, explicitly paired profile. If profile1 is closed while profile10 is online, work tasks use the official API or wait according to capability, never borrowing the test session. Loss of the intended session does not justify keeping or opening a browser. An uncertain write is reconciled before any fallback resend.
 
-The bridge must check protocol version, paired account/blog identities and operation IDs. It must not accept arbitrary URLs to fetch, shell commands, arbitrary file paths or page-supplied code. The desktop UI and imported post content are not privileged execution contexts. Keep credentials in the connection layer. A normal installation handles bridge registration; end users should not need developer tools for daily use.
+The bridge must check protocol version, paired account/blog identities and operation IDs. It must not accept arbitrary URLs to fetch, shell commands, arbitrary file paths or page-supplied code. The local web UI and imported post content are not privileged execution contexts. Keep credentials in the backend connection layer. A normal installation handles any required connector setup; end users should not need developer tools for daily use.
 
-### 4.4 AI connection convenience: CC Switch
+### 4.4 Manual AI connection settings
 
-The desired setup flow is to reuse an existing CC Switch configuration instead of repeatedly typing an AI base URL, model and credential. The application owns this integration; the browser companion has no separate AI settings or credentials. Offer a read-only CC Switch configuration source with a visible provider/profile selection and manual configuration as fallback. Read only the selected connection details; do not rewrite CC Switch's settings or expose credentials in the renderer, logs or ordinary exports.
-
-Implementation must first establish the installed CC Switch version's supported configuration access and available fields. Do not assume every profile exposes a model or uses the protocol the current app supports. Display the selected source/provider/model and show missing fields or incompatibility explicitly. A saved manual configuration must not be silently replaced. If the user selects following a CC Switch profile, refresh that profile for new operations while keeping each in-flight operation bound to its starting configuration; unavailable/invalid configuration pauses affected AI work rather than switching to an unrelated provider.
-
-Current source inspection shows manual `base`, `model` and key settings, with follower AI using `base + /chat/completions`; no CC Switch reader is implemented. Successful configuration discovery is not proof of endpoint/model compatibility. Verify connection and the capabilities needed by the relevant task, with an explicit test action rather than silent AI calls merely on opening Settings. This is a pending integration requirement, not a claim that today's build needs no manual setup.
+Confirmed again on 2026-11-07: CC Switch support is not needed. Keep manually entered API address, model and locally protected key in application Settings. Do not read CC Switch or start local AI clients. A57 is withdrawn, not an outstanding task. Verify required endpoint capabilities explicitly; the companion has no separate AI configuration or credentials.
 
 ## 5. Information architecture
+
+**Content-page usability revision (2026-11-07):** the user finds the Posts page awkward and its “Categories & tags” filter inadequate. [CONTENT_BROWSER_UX_SPEC.md](CONTENT_BROWSER_UX_SPEC.md) records the observed interface/source problems, proposed layout and interaction rules, delivery priorities and CU01–CU20 acceptance scenarios for Claude. It is a requirements/design handoff, not implemented behaviour. The proposal separates work/physical-post scope, visible composable filters, selection and batch actions; it also defines query/scroll restoration, exact-instance details and local sync coverage. Detailed defaults are design recommendations, distinct from the user's confirmed request to improve usability.
 
 **Version maintenance requirement (2026-11-06):** the application provides a single “Versions and reblogs / 版本与转发” view per work, reachable from its card or any instance. Implement REBLOG_POLICY.md section 2.1 and R12–R17: per-version/per-blog history, explicit source-versus-delivery status, snapshot comparison, scoped batch visibility/deletion, local notes and controlled delivery recovery. A version list alone is not complete maintenance. A one-off “keep latest public reblog, hide older public reblogs” preview respects Keep visible, unknown outcomes and per-blog delivery; it must not introduce automatic old-version cleanup or republish a private version. The companion only opens this app-owned view.
 
@@ -235,7 +247,7 @@ NPF formatting indexes count Unicode code points; test emoji and combined charac
 
 Imported Tumblr posts retain their structured remote content and layout. Unsupported blocks remain preserved and visibly limited; metadata-only edits must preserve the actual body. If the remote body changed since the last published revision, show a conflict and keep both versions. Never silently overwrite a Tumblr/mobile edit with an older local document. A capability inventory must distinguish adapter limitations from deliberately deferred implementation; do not equate “not implemented yet” with “Tumblr does not support it”.
 
-Current delivery does not edit already published bodies in the desktop; published drafts are read-only and body editing stays on Tumblr. This is a delivery gap against the editing design, not evidence that the API cannot support it. Tags and visibility remain subject to the community-label gate.
+Published-original body editing is required by FUNCTIONAL_WORKFLOWS_SPEC.md section 3.2 and FW02–FW04. Historical delivery left published drafts read-only and editing on Tumblr; this is a delivery gap, not an accepted endpoint or an API limitation. Current implementation needs fresh evidence. Tags and visibility retain applicable community-label gates.
 
 ### 6.1a Image arrangement without mandatory dragging
 
@@ -273,9 +285,9 @@ Persist stable group/category IDs, group membership, display names, actual Tumbl
 - Actual submitted tag order is **general category tags → template tags → extra hand-written tags**, with stable deduplication that keeps the earliest segment's spelling.
 - Example: `fanart, my art, example series, character alpha, alpha beta, weekend sketch`.
 - Existing template fairness/popularity logic can order template tags. It cannot move a character tag ahead of the category prefix or reshuffle manually ordered extra tags.
-- General categories are protected from automatic weak-tag cleanup. Explicit edits to eligible originals may remove them without forcing a replacement; existing reblog tags remain immutable.
+- General categories are protected from automatic weak-tag cleanup. Original edits may remove them without forcing replacement; owned-source reblogs follow dedicated tag sync, while other-author/material tags stay fixed.
 - A category also supplied by a pack appears once, in the category prefix. Keep provenance locally so removing one template does not remove a category still explicitly selected.
-- Changing a category's configured tag affects future composition. Renaming it on eligible old originals requires a separate previewed batch operation; existing reblogs are excluded. A category/tag-only edit does not create a content revision or trigger another reblog. The next content-version reblog uses then-current tags.
+- Changing a configured tag affects future composition. Renaming it on old originals needs a previewed batch; direct reblog selection is excluded. Preview subsequent owned-source tag-sync effects under existing rules. Tag-only changes create neither content versions nor new reblogs.
 - Markdown headings and inline `#words` are body text, not implicit tags.
 - The browser template panel uses the same composition policy and distinguishes its inserted tags from user-entered tags. An explicit “Arrange category first” action can move a chosen category ahead of pre-existing editor tags; no unrelated tags are deleted.
 
@@ -283,9 +295,9 @@ Keep the existing first-20 / first-30 search-position indicators, updated after 
 
 ### 6.3 Combined filtering and category migration
 
-Filtering must support multiple selected category/tag conditions simultaneously, for example 同人 AND 习作 AND 猹鱼日绘. Default to all selected conditions matching, visibly stated; a free-text search or a single-tag filter is not this capability. Use full tag identities, not substring matches. Preserve template and manual tags in the same searchable post without forcing a compound category into the configuration.
+Filtering must support multiple selected category/tag conditions simultaneously, for example 同人 AND 习作 AND 猹鱼日绘. The original default was all selected tags matching. The 2026-11-07 [content-browser proposal](CONTENT_BROWSER_UX_SPEC.md) replaces that flat interaction with any-of within each category group by default, an explicit all-of option per group, AND between groups, and explicit tag inclusion/exclusion. Legacy flat filters retain all-of semantics when migrated. Show the actual expression; a free-text search or a single-tag filter is not this capability. Use full tag identities, not substring matches. Preserve template and manual tags in the same searchable post without forcing a compound category into the configuration.
 
-In **Managed here**, category filtering evaluates the current original/current work classification and identifies that scope. In **Displayed here**, all conditions must match the same physical instance's own observed tags, including historical reblogs; never union tags from different versions or substitute the current original's classification. Missing source classification is unknown/unclassified, not guessed from a reblog. Category mapping changes must not rewrite or relabel historical snapshot data as though a new tag had existed there.
+In **Managed here**, category filtering evaluates the current original/current work classification and identifies that scope. In **Displayed here**, the complete filter expression is evaluated against the same physical instance's own observed tags, including historical reblogs; never union tags from different versions or substitute the current original's classification. Missing source data is unknown, distinct from a known empty/unclassified tag set, and is not guessed from a reblog. Category mapping changes must not rewrite or relabel historical snapshot data as though a new tag had existed there. Follow the latest revision at the top of REBLOG_POLICY.md: owned-source reblog tags may subsequently synchronise; until observed, that pending change is not filter data. Frozen content-version identity remains separate from current tags.
 
 Migrate the existing flat category list additively: retain IDs, actual tags, order, saved draft/default selections and custom entries. Place entries with no confirmed group in a visible ungrouped area; no silent deletion, invented course/role assignments or remote retagging. Preserve existing `photo`/`writing` options and locally edited mappings. Backups/imports must include group definitions and selected IDs. This change needs storage, editor, filtering and migration work; the existing flat list and tag deduplication alone do not implement it.
 
@@ -321,6 +333,8 @@ Hiding an original leaves existing reblogs intact. A single-instance action stat
 Stage 0 observed visitor visibility settling after roughly one second in one run and seventy seconds in another. These are observations, not a maximum delay. Distinguish “submitted”, “private state confirmed; public view pending”, and a timestamped visitor check. Do not promise immediate or global disappearance. A timeout/network/authentication error is not proof of nonvisibility. Preserve completed per-instance results when other group members remain public, protected or unknown.
 
 ### 7.2 Bulk action contract
+
+The 2026-11-07 [content-browser proposal](CONTENT_BROWSER_UX_SPEC.md) makes selection explicit: distinguish loaded results from all matching synchronised identities, clear selection on an applied scope/filter change, and freeze identities before batch preview. Works resolve to their own originals; physical-post selections remain exact instances. Expanding to linked posts is visible and deliberate. Filtering itself is read-only and must never queue a mutation.
 
 Filter by management blog, display blog, category/tag, date, original/reblog, remote state, exception and hide reason. Select the current page or all matching synchronised records explicitly. Display incomplete sync coverage rather than presenting a partial cache as the whole blog.
 
@@ -395,7 +409,7 @@ Automatic delivery defaults to publishing immediately. Manual “file into side 
 - Use the same comparator in preview, manual route checks, background scans and the final pre-write check. Preserve stored tag spelling when making unrelated edits.
 - A failed tag read means unknown eligibility: defer the reblog.
 - Re-read state, tags, management, reblog permission and destination membership immediately before sending. New exclusions invalidate unsubmitted local jobs.
-- Adding an exclusion does not edit, delete or hide existing snapshots. It blocks eligible future version deliveries; existing snapshots never receive route-driven content/tag edits regardless of exclusions. Explicit visibility/deletion actions remain separate.
+- Changing an exclusion configuration does not itself edit, delete or hide existing snapshots; it changes future delivery eligibility. Dedicated owned-source tag sync is separate: changing the original's actual tags may still synchronise those tags without creating a version. Visibility/deletion remain explicit separate actions.
 - Already submitted Tumblr queue/scheduled copies are remote posts, not cancellable local intents. List them separately when rules change and offer an explicit move-to-draft operation; do not promise the rule will intercept their publication while the desktop is off.
 - Removing an exclusion does not flood the destination with historical skipped entries. Offer a previewed backfill; new eligible source posts proceed normally.
 
@@ -405,7 +419,7 @@ Keep a durable mapping keyed by source identity + observed content revision ID +
 
 A creation request with a lost response is `outcome_unknown`: reconcile the destination before any retry. Local operation IDs alone do not make Tumblr creation idempotent. If reconciliation finds several possible matches, require resolution rather than sending another POST.
 
-There are no copy tag/body repair jobs. A successful original edit and delivery of its new revision are separate outcomes; failed delivery leaves every historical snapshot intact. Re-read the source before sending and verify the actual created snapshot; do not patch a new reblog's content/tags to hide a mismatch. Do not temporarily turn reblog permission on to bypass a refusal: record it and retain the setting.
+There are no generic body/copy-repair jobs; dedicated owned-source tag sync is allowed by REBLOG_POLICY.md. Original editing and new-version delivery are separate outcomes. Re-read the source and verify a created snapshot; do not use tag sync to hide an unverified creation mismatch or change its body. Do not temporarily enable reblog permission to bypass refusal.
 
 ## 9. New-follower protection
 
@@ -421,7 +435,7 @@ Classifier errors or unavailable AI must never prevent writing, ordinary post ma
 
 ### 10.1 One mutation authority
 
-The desktop owns one durable queue for publishing, metadata changes, expiry, reblogging, follower actions and supported secondary modules. UI windows and the companion submit requests to it. Serialize writes for the same account/post/group and coordinate account-wide rate limits. User actions can run before a background backlog after the current atomic step.
+The independent local backend owns one durable queue for publishing, metadata changes, expiry, reblogging, follower actions and supported secondary modules. Browser pages and the companion submit requests to it. Serialize writes for the same account/post/group and coordinate account-wide rate limits. User actions can run before a background backlog after the current atomic step. Page close, refresh or connection loss does not cancel durably accepted work; reconnect using stable operation identities and authoritative backend state. Within each environment, multiple tabs and repeated startup must not create additional schedulers or credential refresh writers. The isolated test backend uses its own data and test adapter/authorisation, never the work backend's credentials or jobs; profile10 is not permission to mutate a real account.
 
 Persist an intent before its first remote write, with scope, IDs, expected baseline, rule/management revision, operation type and outcome. Track at least: pending, running, waiting for network/auth/browser, verifying, outcome unknown, succeeded, unchanged, skipped, failed, cancelled. Record a result for every target. Pending intent never substitutes for observed remote state.
 
@@ -468,6 +482,8 @@ Backup must consistently snapshot the database and the referenced local attachme
 
 ## 11. Migration and preserved features
 
+**Runtime migration (2026-11-07):** apply LOCAL_WEB_APP_SPEC.md section 5 before replacing the Electron delivery. Reuse the existing UI, database and business services; replace only the host/transport/system adapters as needed. Preserve backups, draft attachments, credentials where safely reusable, rule choices, operation identities and unresolved outcomes. Prevent old and new executors from managing the same data directory simultaneously. Migration does not itself authorise remote writes or enable previously disabled rules. The extension migration below remains applicable.
+
 1. Provide a versioned companion export of known non-secret extension data: settings, roles, packs, template choices, tag caches, recent-hidden records, collection/material metadata and applicable logs. Preserve unknown non-secret fields within supported schemas for future recovery. Never dump the entire browser profile or authentication storage.
 2. Validate account/blog identities and show counts, unsupported fields and conflicts. Keep the original sanitised export for rollback. Import in a database transaction; repeating the same export is idempotent.
 3. Preserve both the old `collection` shape and the newer `materials` shape when present. These caches do not contain complete Markdown, original media bytes or a full body archive; do not invent the missing content.
@@ -477,20 +493,22 @@ Backup must consistently snapshot the database and the referenced local attachme
 7. Preserve existing material data, packs, favourites, tag suggestions, interface localisation and user settings. Interface localisation is not the excluded translation-writing assistant. Retained collection/AI functionality belongs in the application; the plugin may only supply in-page entry points. New material-library expansion remains deferred. Moving existing responsibilities does not authorise new features or reblog content/tag rewrites. List each retained capability as migrated, explicitly unavailable pending migration, or separately retired by user decision; do not silently drop it or preserve a second active plugin implementation as the final design.
 8. Use additive schema migrations and an installation rollback path. Do not destroy the original extension data after a successful import.
 
-9. Migrate reblog semantics under REBLOG_POLICY.md: invalidate unsent copy tag/body repair jobs, reconcile already sent unknown jobs, retain each historical payload, and baseline sources without mass reblogging. Unknown historical version mappings stay unknown. Collection/AI/template/tag-cleanup operations must also stop writing to existing reblog content or tags; existing data is preserved.
+9. Migrate under REBLOG_POLICY.md: invalidate conflicting unsent body/copy-repair jobs, reconcile unknown sent jobs, preserve bodies and version history, and baseline without mass reblogging. Preserve permitted owned-source tag-sync policy and queued intent; migration does not enable it or send writes. Material AI/tag cleanup cannot rewrite existing material reblogs.
 
 10. Replace the extension's manager with a small companion surface: Open Studio, connection state, browser-only controls and migration export where still needed. Retire plugin-owned admin screens, editable business settings, AI provider credentials and mutation alarms after preserving/importing their data and handling in-flight operations. Normalise every browser entry point to the same app-owned action and shared result. The takeover switch is transitional, not a permanent choice between two products.
 
-Browser-local helpers can continue while the desktop is absent. Losing the bridge never resumes standalone business writes; reconnecting never replays an unacknowledged browser request as a second app job. Keep historical exports for rollback without automatically reactivating the old scheduler.
+Browser-local helpers can continue while the backend is absent. Losing the bridge never resumes standalone business writes; reconnecting never replays an unacknowledged browser request as a second app job. Keep historical exports for rollback without automatically reactivating the old scheduler.
 
 ## 12. Implementation order for Claude
+
+The immediate runtime handoff is LOCAL_WEB_APP_SPEC.md: independent backend and lifecycle controls → browser-compatible UI/communication/system adapters with explicit work/test profile binding → guarded data migration and packaging → LW01–LW18 and resource evidence. Reuse existing stage 1–4 logic and passed adapter evidence. This runtime revision does not restart the whole product implementation or waive outstanding feature acceptance.
 
 | Stage | Deliverable | Exit condition |
 |---|---|---|
 | 0: capability validation | Report available in STAGE0_RESULTS.md | Reuse passed probe evidence; block/unblock, label preservation and legacy editing remain tracked gates for their dependent features. No repeat A38 discovery experiment |
-| 1: local foundation | Desktop shell, local database, durable jobs, credential adapter, import and backups | Restarts preserve intent/data; no duplicate scheduler; no implicit remote changes on import |
+| 1: local foundation | Independent backend, local web UI and launcher, local database, durable jobs, credential adapter, import and backups | Browser exit leaves no renderer dependency; restarts preserve intent/data; no duplicate scheduler; no implicit remote changes on import |
 | 2: management and visibility | Logical groups, side-blog authority, bulk operations, expiry and exceptions | Main-origin/side-managed scenario and independent display policies pass; ambiguous ownership remains untouched |
-| 3: daily publishing | Visual editor, stable image arrangement, native feature capability inventory, optional Markdown input, categories, templates, distribution exclusions | Browser-independent end-to-end composition and repeat-safe publication pass |
+| 3: daily publishing | Visual editor, stable image arrangement, native feature capability inventory, optional Markdown input, categories, templates, distribution exclusions | End-to-end composition in the local web UI and repeat-safe backend publication after browser exit pass |
 | 4: follower protection | New-follower scan, evidence inbox, AI classification, auto-blocking, report handling | Precision/correction/capability checks in the follower specification pass |
 | 5: optional follow-up scope | Public theme design if requested, fuller collection UI, advanced formats | Build only after the daily workflows above are usable and that scope is selected |
 
@@ -502,17 +520,17 @@ The table defines exit conditions, not completed milestones. Code now exists for
 
 Stage 0 must use controlled/test content and explicitly authorised test actions; do not test reporting by filing a false report against a real or test account. A working block endpoint is not evidence that reporting works.
 
-Validate the implemented desktop shell, local store, single-writer credentials, durable dependency queue, sync checkpoints, verification states and restart recovery against their exit conditions. Use fixtures for stale reads, private-post counts, token-commit failure and reblog independence. Outstanding adapter gates block their dependent release features, not the whole local foundation. Run additional live probes only for an unresolved adapter behaviour with a concrete implementation consequence and explicit authorisation; known platform rules do not need discovery tests.
+Validate the independent backend and browser interface, local store, single-writer credentials, durable dependency queue, sync checkpoints, verification states and restart recovery against their exit conditions. Use fixtures for stale reads, private-post counts, token-commit failure and reblog independence. Outstanding adapter gates block their dependent release features, not the whole local foundation. Run additional live probes only for an unresolved adapter behaviour with a concrete implementation consequence and explicit authorisation; known platform rules do not need discovery tests.
 
 ## 13. Acceptance scenarios
 
 | ID | Scenario and required result |
 |---|---|
-| A01 | Terminate every browser process after authorisation; publish and verify a supported text/image post from the desktop |
-| A02 | With browser exited, run expiry, reblog and follower/block checks; core tasks never request a browser session token |
-| A03 | Close the window to tray, then fully Quit; automation continues only in the first case, and overdue work resumes visibly on launch |
+| A01 | Compose in the local web UI and durably submit a supported text/image publication including attachments; with every browser exited before backend execution, the backend publishes/verifies once and the reopened UI shows the same job/result (LW02; fixture-controlled timing and LW18 profile-safe test conditions) |
+| A02 | With all browsers exited and no extension, Electron or embedded renderer running, run supported expiry, reblog and permitted follower/block checks under their existing capability gates; core tasks never require a browser session token. Meet LW03 under LW18 without closing the user's work profile |
+| A03 | Close all local pages, then explicitly pause/stop the backend: page close leaves jobs running, pause holds new and queued automatic work after the current in-flight step, backend stop stops execution, and restart/sleep recovery reconciles overdue work without duplicates. Optional sign-in startup opens no browser (LW04) |
 | A04 | Main original A is reblogged by sharing side S as B: one content item, manager S, original still Main/A, both original URLs unchanged |
-| A05 | Edit category/templates in S's management view: update the actual owned original A; existing reblogs keep their tags, and tag-only changes create no new revision or reblog. A later content revision can be reblogged with then-current tags |
+| A05 | Edit categories/templates on actual owned original A; dedicated sync updates owned-source reblog tags while retaining bodies and versions. No tag-only revision or new reblog |
 | A06 | Side original is reblogged to main: it stays side-managed; a main-origin work already on main is not reblogged back to main again |
 | A07 | Material-blog collection never takes management. Two eligible side blogs for a main original cause no automatic group edits or new copies |
 | A08 | Assign/reassign management locally: no automatic publication, body replacement, reblog-chain rewriting or visibility copying |
@@ -521,7 +539,7 @@ Validate the implemented desktop shell, local store, single-writer credentials, 
 | A11 | Long-term-visible exceptions survive application restart, rule edits, tag sync, ownership transfer and full resync |
 | A12 | Manual hidden posts and draft/queued posts are not republished by expiry, disabling rules or extending a duration |
 | A13 | Restore auto-hidden posts lists only verified owned changes; an externally changed post is excluded |
-| A14 | A side-managed main original expires under a rule targeting that original; linked-version visibility follows the explicitly selected scope, and original tag edits preserve both visibility and every reblog's frozen tags |
+| A14 | A side-managed main original expires under its selected rule; linked visibility uses explicit scope. Owned-source tag sync preserves bodies, versions and visibility |
 | A15 | An external keep-visible/hidden change is respected; an uncertain competing write becomes a conflict |
 | A16 | More than one API page of overdue posts and new route candidates is processed across interruptions without gaps |
 | A17 | `diary` exclusion matches `Diary`, not a longer unrelated tag; failed tag reads defer; adding an exclusion before send prevents that reblog |
@@ -529,13 +547,13 @@ Validate the implemented desktop shell, local store, single-writer credentials, 
 | A19 | Restart/timeout/renamed blog/rule revision does not duplicate the same source revision; a deleted version is not recreated, but a genuinely new source revision remains eligible |
 | A20 | A refused reblog leaves reblog permissions unchanged |
 | A21 | Posted tags retain category → template → manual order; duplicate `fanart` appears once; heat sorting never moves the prefix |
-| A22 | Changing a pack or category while a batch runs does not mutate its frozen plan or any existing reblog tags; new safety constraints still invalidate stale jobs |
+| A22 | Configuration changes do not mutate submitted plans or directly rewrite posts; stale unsent plans are rechecked. Actual original tag edits and subsequent sync follow their own queued rules |
 | A23 | Visual composition with Chinese, emoji, nested formatting and interleaved images matches the compiled preview and retains the complete structured local document |
 | A24 | Unsupported imported/remote blocks are preserved or explicitly blocked; optional Markdown conversion never silently drops content or executes raw HTML |
 | A25 | A remote/mobile body edit conflicts with an older local revision; metadata edits preserve that remote body |
 | A26 | A lost create response never triggers blind reposting; partial distribution resumes against the existing original |
 | A27 | Visibility and state changes are re-read; an HTTP success with the wrong state is a verification failure |
-| A28 | Import twice, restart both extension and desktop, restore backup into a clean directory: data persists, one mutation owner remains, no posts publish on migration |
+| A28 | Import twice, restart extension/backend and browser UI, restore backup into a clean directory: data persists, one mutation owner remains, no posts publish on migration |
 | A29 | Old category/material/AI settings survive staged migration; secrets and personal account examples are absent from repository fixtures/exports |
 | A30 | All follower-module acceptance scenarios pass, including innocent adult/fandom/empty blogs and an unavailable report transport |
 | A31 | Creating/discovering a reblog or changing management alone never hides an original before its configured age deadline |
@@ -545,7 +563,7 @@ Validate the implemented desktop shell, local store, single-writer credentials, 
 | A35 | Switching modes/scopes invalidates stale jobs, previews inherited independent rules, and never removes manual exceptions |
 | A36 | Keep-visible selected while expiry is queued supersedes the queued hide; selection during an in-flight write is reconciled and any partial outcome remains visible |
 | A37 | Expiring-soon sorting shows the note-count observation time and does not sum shared engagement across copies |
-| A38 | **Exploratory live probe withdrawn.** Test application behaviour with fixtures: original edits/hiding/deletion leave cached reblog payload/state intact; group actions enumerate and write only their selected owned instances. Native reblog independence is a known design input, not a stage-0 discovery gate |
+| A38 | **Exploratory live probe withdrawn.** Fixtures verify original body edits/hiding/deletion do not propagate body/state to reblogs; dedicated tag sync is separate. Group actions write only selected instances; no new platform discovery gate |
 | A39 | Offline keep-visible choice persists immediately, but a currently private post remains labelled private/pending until remote publication is verified |
 | A40 | With dragging unused, insert several images among paragraphs, make a supported row, reorder, replace and undo; no content disappears or changes position unexpectedly |
 | A41 | Combined create/upload failure, lost receipt and draft changes during an attempt preserve the frozen image occurrences, row groups and text positions; no blind resend. If separate uploads are later used, also test out-of-order completion and completion after deletion |
@@ -554,17 +572,35 @@ Validate the implemented desktop shell, local store, single-writer credentials, 
 | A44 | Per-blog remembered defaults reduce repeat selection without overwriting an existing draft's deliberate choices or silently changing visible publication scope |
 | A45 | Material expansion, followed-feed browsing, a standalone capture inbox and translation-writing assistance are absent from the first-release requirement set |
 | A46 | Compose, arrange, save and publish a supported rich post without opening a Markdown panel or editing markup; native features are not limited by Markdown expressiveness |
-| A47 | All R01–R11 in REBLOG_POLICY.md pass across desktop, extension and collection; old copy-repair and post-creation AI/tag rewrite paths cannot mutate frozen snapshots |
+| A47 | Current R01–R11 pass: no generic body repair or material AI/tag rewrite; dedicated owned-source tag sync changes tags only. Old immutable-tag tests do not establish the revised contract |
 | A48 | All category dimensions are optional; course membership and finish level never infer study/formal or original/fanart. A course assignment can be formal original work; a fanart post can be a study |
 | A49 | Grouped choices compile to ordinary tags in group/category → template → extra order; shared `fanart` appears once in the prefix, display-name edits do not change tag mappings, and empty classification does not block publishing |
 | A50 | Combined 同人 AND 习作 AND course filtering works; Displayed here requires every condition on the same instance's own tags, with no cross-version union or substitution from the latest original |
-| A51 | Flat-category migration and backup/restore retain category IDs, tags, order, custom entries, draft/default choices and optional photo/writing choices; no remote edits occur. Category/tag-only edits neither mutate old reblogs nor trigger new versions |
+| A51 | Category migration/restore preserve IDs, mappings, order, choices and photo/writing without remote edits. Later original tag edits may sync owned-source tags but never create versions or change historical bodies |
 | A52 | The extension contains no second composer, full manager, pack/category administration, AI executor or business scheduler; each retained feature has the single owner listed in section 4.3 |
 | A53 | A browser contextual action reaches one app-owned preview/job/result, with account/source identity validated. Repeated clicks, connection loss and reconnect do not duplicate jobs; browser acknowledgement alone is never remote success |
-| A54 | With the app quit, page-local hiding and cached suggestions can work, while app actions show unavailable/Open Studio. No plugin automation resumes, no separate business queue accepts work, and core app tasks still run with the browser exited |
+| A54 | With the backend stopped, page-local hiding and cached suggestions can work, while app actions show unavailable/Start Studio. With only the local UI closed, the backend remains available. No plugin automation resumes or separate business queue accepts work; core backend tasks still run with every browser exited |
 | A55 | Migration preserves existing settings/packs/material data and reports feature availability, removes duplicate editable settings/admin surfaces and legacy alarms, and never silently drops a retained feature or reactivates the old plugin scheduler |
 | A56 | Version maintenance passes R12–R17: centralised per-work history/diff, exact-instance batch actions and deletion preview, conservative one-off old-version hiding, persistent local notes and retry/deduplication constraints |
-| A57 | Selecting a supported CC Switch profile supplies its available address/model/credential without retyping; missing fields and incompatible protocol/model are visible, manual settings remain usable, credentials are not exposed, and unavailable configuration never silently selects another provider |
+| A57 | **Withdrawn; reconfirmed 2026-11-07.** No CC Switch support. Retain manual API address/model/key and credential protection; do not reintroduce integration during refactoring |
+| A58 | Content-page layout and scope pass CU01: works versus physical posts, management versus location, honest blog scope and non-obscuring filters |
+| A59 | Composable classification/tag filtering passes CU02–CU08: any/all/exclude, whole-tag normalisation, distinct empty/unknown values and no cross-version matching or duplicate works |
+| A60 | Query coverage and input pass CU09–CU10 and CU16: all synchronised candidates, honest counts, preserved uncommitted input, IME handling and distinct empty/error/incomplete states |
+| A61 | Selection and batch boundaries pass CU11–CU12 and CU17: visible scope, loaded/all distinction, fixed identities, explicit linked expansion and no writes from filtering |
+| A62 | Exact-instance details and browsing restoration pass CU13 and CU18; entering from an old reblog does not show another instance's payload |
+| A63 | Quick filters and asynchronous updates pass CU14–CU15; every visible condition applies, stale responses cannot replace current results |
+| A64 | Second delivery: saved queries and category-mapping migration pass CU19 without changing existing query meaning or publishing defaults |
+| A65 | Second delivery: candidate counts, list/grid modes and complete-image/continuous browsing pass CU20 |
+| A66 | Local launch, repeated startup, port conflicts, everyday packaging and offline UI loading pass LW01 and LW14; no developer runtime installation is required |
+| A67 | Backend-held OAuth and durable drafts/data survive reopening the assigned profile and clearing test-instance site data; actual save/connection state and interrupted uploads pass LW05–LW06 without touching work-profile data |
+| A68 | Multiple clients, stable task identities, stale draft revisions and reconnect/restart recovery pass LW07–LW08, with one scheduler and credential refresh writer |
+| A69 | Migration, compatible backup recovery and prevention of concurrent old/new execution pass LW09; rule choices and unresolved jobs survive without extra remote writes |
+| A70 | Optional companion behaviour and browser-compatible file/media/settings/backup adapters pass LW10 and LW12; no Electron UI dependency remains |
+| A71 | Loopback binding, local access sessions, Host/Origin validation, cross-site request protection and separate extension pairing pass LW11 |
+| A72 | Same-machine old/new resident memory, idle CPU, open-page and repeated-open/close evidence passes LW13 under LW18 profile boundaries; no tool-owned renderer remains when browsers exit, no invented saving or MB cap |
+| A73 | Explicit profile1 work launch and profile10 AI-test launch, Tumblr/OAuth links, callback correlation, profile verification and no fallback to another profile pass LW15 |
+| A74 | Work/test backend data, authorisation, sessions, jobs and per-profile companion pairings pass LW16–LW17; work tasks never borrow an online profile10 session when profile1 is offline |
+| A75 | AI automation and resource testing pass LW18: operate only verified profile10, leave work windows/data intact, do not kill Chrome globally, and distinguish test-profile closure from all-browser exit evidence |
 
-The implementation is complete only when the chosen capabilities are demonstrated and unsupported cases are visible. Reuse documented platform rules and existing adapter results; fixtures verify application behaviour without repeating live discovery experiments. This handoff records confirmed requirements, proposed mechanisms and setup choices. Completed probes and remaining gaps are listed in STAGE0_RESULTS.md; full desktop acceptance is still pending. No unspecified automation scope is silently activated.
+Complete delivery additionally requires FW01–FW12, with runtime, business and complete-workflow evidence recorded separately. Visible limitations do not make unimplemented required editing or integrated replying complete; interim releases must list those gaps. Reuse documented platform rules and existing adapter evidence without repeating live discovery experiments. This handoff distinguishes confirmed requirements from design proposals. Historical Electron evidence does not establish the new runtime; previous tag-immutability evidence does not establish current tag-sync rules. No unspecified automation scope is activated.
 

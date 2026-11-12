@@ -3,14 +3,15 @@
 
 const FollowersPage = {
   tab: 'review',
-  async render(root) {
+  async render(root, params = {}) {
     this.root = root;
+    if (params.embedded != null) this.embedded = params.embedded;
     const g = await call('followerGuard');
     const d = g.digest, c = g.config;
     const tabs = ['review', 'new', 'spam', 'blocked', 'allowed'];
     const rows = await call('followerCases', { status: this.tab });
     root.replaceChildren(
-      h('header', { class: 'page-head' }, h('h1', {}, t('navFollowers')),
+      h('header', { class: 'page-head' + (this.embedded ? ' sub' : '') }, this.embedded ? h('p', { class: 'muted small' }, t('fnProtectIntro')) : h('h1', {}, t('navFollowers')),
         h('div', { class: 'head-actions' }, c.mode && c.mode !== 'off' ? h('button', { onclick: async () => { await call('scanFollowers'); toast(t('syncNow') + ' ✓'); } }, t('scanNow')) : null)),
       h('section', { class: 'card' },
         h('div', { class: 'digest' },
@@ -81,5 +82,5 @@ const FollowersPage = {
       h('button', { class: 'ghost', onclick: async () => { await call('dismissFollower', { uuid: r.uuid }); done(); } }, t('fgLater')),
     ];
   },
-  refresh(ev) { if (ev.type === 'pass') this.render(this.root); },
+  refresh(ev) { if (ev.type === 'pass') this.render(this.root); },  // standalone only; inside Fans the page refreshes itself
 };

@@ -1,20 +1,82 @@
 # Tumblr Studio: implementation status and acceptance gaps
 
-Updated: 2026-11-06. This records the implementation handoff and a targeted local source review. It does not replace the requirements in [DESKTOP_PRODUCT_SPEC.md](DESKTOP_PRODUCT_SPEC.md), approve deferred scope, or authorise account mutations.
+## Functional workflow handoff (2026-11-07; acceptance pending)
+
+[FUNCTIONAL_WORKFLOWS_SPEC.md](FUNCTIONAL_WORKFLOWS_SPEC.md) adds FW01–FW12 for complete original editing, integrated interactions and separate runtime/business/workflow evidence. The user delegates presentation choices; home/publishing/setup guesses were not confirmed. Official-page links and manual records are transitional, not integrated sending evidence. Validate reply transports early; private messaging remains unpromised. This documentation update ran no product acceptance and does not assess concurrent code changes. Record FW01–FW12 and FR23–FR24 as not verified until evidence exists.
+
+### Functional workflows implementation (app 0.6.0, extension 0.13.5, 2026-11-07)
+
+Built: editing published originals in the app's editor (`writing.js`: `decompile`, `editPublished`, `submitEdit`, `resolveEdit`, job `post.edit`), replies from an interaction (`replies.js`, job `reply.send`, browser-only relay request), the reply panel on Fans & interactions and the edit entry in Posts. Fixtures: `desktop/test/workflows.test.js` (10 tests), `test/smoke-companion.js` (relay rule for replies). Nothing was sent to the real account; no live reply or edit was made.
+
+**Action-level capability table** (documented = public API docs; found = seen in the web client's own scripts; built = code exists; fixture = in-memory tests; live = checked on the real account)
+
+| Action | Channel | Documented | Found | Built | Fixture | Live | Limits |
+|---|---|---|---|---|---|---|---|
+| Read notifications | official / browser | yes | — | yes (0.5.0) | yes | read 2026-11-07 (types: like, reblog, reblog_naked, follower, milestones) | no reply-type notification has been observed live yet; its field names are assumed (`reply_text`, `target_post_id`) |
+| Read replies under a post | browser `GET /v2/blog/{b}/post/{id}/replies`; official fallback `notes?mode=conversation` | notes: yes; replies: no | yes | yes | yes | read-only on a public post 2026-11-07: `timeline.elements[]` with `reply_id`, `blog{uuid,name}`, NPF `content`, `children` (threads); notes give `reply_text`, `blog_uuid`, float `timestamp` | the fallback has no reply ids or threads |
+| Send an ordinary reply to my post | browser only, `POST /v2/user/post/reply` {post_id, reblog_key, tumblelog, reply_text, reply_as} | no | yes (`postReply` in the web client) | yes | yes | **not verified**: no live send was authorised | top-level replies only; replying inside a thread (`parent_reply_id` / `target_reply_id`) is not built because those parameters are unverified; `reply_as` is sent as the blog name (unverified whether a uuid is expected) |
+| Reply to a mention, reblog or ask | — | — | — | hand-off only | yes | — | answered on Tumblr; the app opens the exact post and records the hand-off |
+| Read / send private messages | — | no | not looked for | no | — | — | out of scope this round; not promised |
+| Report | — | no | — | official menu hand-off (unchanged) | — | — | stays "pending" until the user confirms |
+| Edit a published original's body | official / browser full PUT; multipart PUT (official) when new images are added | yes | — | yes | yes | **not verified live** | layouts other than plain rows (asks, carousels, rows with text, reordered display) are refused with a reason; blocks the editor can't change are kept verbatim |
+
+**Delivery record** (runtime / function / complete workflow kept apart)
+
+| ID | Runtime evidence | Function evidence | Complete-workflow evidence | Status and remaining work |
+|---|---|---|---|---|
+| FW01 | — | existing publish tests (writing.test.js) | not run for FW01 | not verified; the new-post flow is unchanged in this round |
+| FW02 | — | workflows.test: same id and state after an edit, reblog refused as a target | test env (made-up data, Profile 10): Posts → Edit post → change → Update → verified banner → Back returns to the same work with the query kept | fixture + test-env UI only; "Edit the original" from a reblog is built but was not clicked through; not live |
+| FW03 | — | workflows.test: Tumblr changed meanwhile → nothing sent, both kept, take theirs / keep mine / bring my text back; lost PUT answer verified without a second PUT | — | fixture only; offline during editing is covered by autosave + `waiting` jobs, not separately tested |
+| FW04 | — | workflows.test: body edit → new source revision; tags-only edit → no revision, my reblog takes the tags, its body unchanged, no new reblog | — | fixture only; not live |
+| FW05 | — | workflows.test: thread with post, replies, person; send recorded with identity, target and text | test env: reply panel → send → "reply sent ✓" (demo fake) | **integrated send not live-verified**; channel found in the web client, never exercised on the real account |
+| FW06 | — | workflows.test: double click / same op id, lost answer found once, not visible → unknown (never resent), "It wasn't sent", crash while sending → unknown | — | fixture only |
+| FW07 | — | workflows.test: hand-off recorded separately; self-report separate | — | the official page opens in the page's own browser (the environment's profile); unsent text is kept in the app; not live |
+| FW08 | — | workflows.test: no browser → `waiting` with nothing sent, woken when the browser connects | — | fixture only; no browser is opened for it |
+| FW09 | — | workflows.test: a body edit keeps tags changed elsewhere; jobs run one at a time on fresh reads | — | partial: interleaving with visibility jobs not separately tested |
+| FW10 | — | workflows.test: failed / unknown sends keep the interaction open; confirmed closes only that interaction | — | fixture only |
+| FW11 | — | new tables live in `studio.db`, so backups carry them | — | backup/restore of edit drafts and reply operations not tested |
+| FW12 | this table | — | — | this record; runtime items from LOCAL_WEB_APP_SPEC keep their own record above |
+| FR23 | — | as FW05–FW08 | — | built, not live-verified |
+| FR24 | — | the panel distinguishes read, hand-off, self-report and checked sends; capability `reply.send` stays `unverified` until a send is seen under the post | — | built |
+
+To verify live (needs the user's go-ahead): one reply from the app to a real reply on the user's own post (the extension 0.13.5 must be reloaded in Profile 1 first), and one body edit of a chosen original.
+
+Current reblog requirements include the later owned-source tag-sync revision; older immutable-tag test descriptions below are historical evidence only. A57/CC Switch is withdrawn, reconfirmed 2026-11-07; manual API address/model/key remains. Do not restore withdrawn work during refactoring.
+
+Updated: 2026-11-07 (local-web runtime decision and content-page usability handoff; earlier implementation evidence retains its recorded dates). This records the implementation handoff and a targeted local source review. It does not replace the requirements in [DESKTOP_PRODUCT_SPEC.md](DESKTOP_PRODUCT_SPEC.md), approve deferred scope, or authorise account mutations.
+
+## Local-web runtime handoff (2026-11-07; pending implementation)
+
+The user selected an independent local background service with a web interface opened in an ordinary browser only when needed. [LOCAL_WEB_APP_SPEC.md](LOCAL_WEB_APP_SPEC.md) defines LW01–LW18; the main specification revises A01–A03 and adds A66–A75. The priority is browser-exited operation with lower resident overhead, retaining existing features and local data. No hidden Electron/WebView/browser process may be used as the background runtime.
+
+The user also specified Chrome profile1 for daily work and profile10 for AI-agent testing. Profile mapping, explicit launch/OAuth/link routing, isolated work/test backend data and credentials, callback correlation and per-profile companion pairing are new requirements, not verified implementation. LW15–LW18 cover these boundaries. AI tests may not operate or close work-profile windows, clear work site data or terminate Chrome globally; if only profile10 is closed, do not report the all-browser-exited scenario as passed.
+
+Source inspection shows that `desktop/src/main/main.js` currently boots the service inside Electron, creates its `BrowserWindow`, and intercepts close with `win.hide()`. Credentials and media processing also use Electron adapters, and the renderer is connected through the preload/IPC boundary. Existing service separation is reusable, but does not prove standalone backend launch or ordinary-browser UI compatibility. This is source evidence, not a process-memory measurement.
+
+Pending work: independent backend lifecycle and single-instance protection; browser UI/API and local access control; file/media/credential/launcher adapters; preserved data and guarded old/new cutover; everyday packaging; and same-machine old/new resource evidence. Browser close must leave accepted tasks running; explicit backend stop must stop execution. OAuth and authoritative data remain in the backend, and multiple tabs must share one queue and credential refresh writer. Existing reporting/capability limitations remain in force.
+
+This handoff changes documentation only. No application code, account state or runtime acceptance result changed, and no memory benchmark or actual profile-directory inspection was run. Record LW01–LW18 as **not run / implementation pending** until demonstrated; historical Electron test counts, packaged builds and adapter probes do not establish the new runtime's acceptance.
+
+## Content-page usability handoff (2026-11-07; pending implementation)
+
+[CONTENT_BROWSER_UX_SPEC.md](CONTENT_BROWSER_UX_SPEC.md) adds the Posts/filter redesign proposal and CU01–CU20 (main-spec A58–A65). Evidence for this review is read-only inspection of the running Posts page/filter dialog plus source inspection; no post mutation, batch submission or new product acceptance run was performed.
+
+Current gaps include all-of-only tag filtering, no tag suggestions/result preview in the modal, blog-scope wording that conceals the sharing-role restriction, no selection reset on filter changes, ambiguous loaded-versus-total selection, and no protection against obsolete query responses. The new document distinguishes observed UI facts from source-derived risks. The proposal is not delivered by this documentation change; track the first and second delivery batches separately and do not count existing grouped-category tests as acceptance of the redesigned filter.
 
 ## Evidence and completion language
 
 - `desktop/` contains the desktop implementation. The packaged executable exists at `desktop/dist/Tumblr Studio-win32-x64/Tumblr Studio.exe`. Distribute the complete application directory; the executable is not a standalone installer. Its presence is not evidence that the packaged app passed runtime acceptance.
 - The implementation handoff reports 23 passing desktop tests and passing extension tests, plus a read-only account sync of 6 blogs and 598 posts using 47 requests. These are reported results, not independently rerun results from this documentation review. Account-specific role settings stay in local data, not this specification.
 - The handoff reports automation off and existing-post edits held for community-label verification. Stage-0 adapter evidence is recorded separately in [STAGE0_RESULTS.md](STAGE0_RESULTS.md).
-- Stages 1–4 have implementation coverage; they are **not all accepted as complete**. Fixture tests, adapter probes, read-only account sync, packaged runtime tests and full product acceptance are different kinds of evidence. Track A01–A57, R01–R17 and the follower scenarios individually; a test count alone does not establish coverage. Existing R01–R11 fixture evidence does not cover the newly specified R12–R17 maintenance workflow.
+- Stages 1–4 have implementation coverage; they are **not all accepted as complete**. Fixture tests, adapter probes, read-only account sync, packaged runtime tests and full product acceptance are different kinds of evidence. Track A01–A75, LW01–LW18, CU01–CU20, R01–R17 and the follower scenarios individually; a test count alone does not establish coverage. Revised A01–A03 require new runtime evidence. Existing R01–R11 fixture evidence does not cover the newly specified R12–R17 maintenance workflow.
 
 ## Requirements versus current delivery
 
-**New global requirement (2026-11-06):** [REBLOG_POLICY.md](REBLOG_POLICY.md) supersedes copy synchronisation. Existing reblog content and tags are immutable; source content/image/layout changes require a new version reblog, while tag-only changes do not create a version or another reblog. Implemented 2026-11-06 with fixture/unit evidence (details in “Reblog policy and grouped categories” below); live acceptance not run. Record A47 and R01–R11 separately from earlier test results.
+**Current reblog requirement:** bodies and versions stay frozen; owned-source tags synchronise under existing policy, other-author/material tags stay fixed. See [REBLOG_POLICY.md](REBLOG_POLICY.md). Earlier R02/tag-immutability results below document the prior contract and cannot establish later-revision acceptance.
 
 | Area | Current implementation / handoff | Requirement or next acceptance step |
 |---|---|---|
+| Local-web runtime (confirmed 2026-11-07) | Implemented 2026-11-07 (app 0.5.0, `desktop/src/server`): independent Node backend, page in Chrome with session/Origin/CSRF/Host checks, launcher (.vbs) with Profile 1 / Profile 10 binding, separate work/test data, ports, sessions and pairing grants, data-folder lock shared with Electron, DPAPI vault reading the Electron files, pure-JS images. The user's work data now runs on it (credentials carried over, real sync confirmed, no page opened by the agent in Profile 1). Evidence: `web.test.js` (LW09 lock, LW11, LW12 images, LW16/LW17 by fixture), Profile 10 run of the test backend (all pages, image upload, draft conflict refused), memory: Electron in tray 5 processes ≈200 MB private working set / ≈465 MB private bytes; new backend idle 1 process ≈35 MB / ≈76 MB (same machine and data, 4–6 one-minute samples each, `desktop/tools/measure.ps1`); 10 page open/close cycles left no extra clients or memory. Not run: LW02 publish across browser exit, LW04 sleep/resume and autostart, LW05 OAuth in the test profile, real all-browsers-exited observation, real Profile 1 pairing by grant (the existing pairing still works) | Deliver LOCAL_WEB_APP_SPEC.md: independent backend, ordinary-browser interface, preserved data/auth, optional companion, work-profile1/test-profile10 isolation, guarded migration and LW01–LW18. Measure same-machine resource use; no numeric saving is yet demonstrated |
 | Reblog version maintenance | Implemented 2026-11-06 (“Versions & reblogs”, see below): history, comparison, preview-first exact-instance actions, one-off old-version hiding, deletion with tombstones, local notes, re-send through the normal checks | Fixture evidence only (`versions.test.js`); live acceptance not run. Not done: version and pending counts on the Posts grid cards (shown in the work details and the dialog) |
 | CC Switch AI setup | Dropped by the user on 2026-11-06 | The AI connection stays manual (address, model, key in Settings, key encrypted locally). Design 4.4 / A57 no longer apply; no CC Switch reader and no local AI clients |
 | Primary application and thin companion (confirmed 2026-11-06) | Implemented 2026-11-06 with fixture/smoke evidence (see A52–A55 below): manager page, alarms and background passes removed from the extension; materials, pairing, snapshot and typed requests in the app | Implement design section 4.3 and A52–A55: app-owned functionality/data/jobs, browser-local helpers and contextual entry points only, explicit migration of retained collection capabilities/data, no duplicate manager/admin/AI/scheduler. A write guard or manual export is not completion; no runtime changes are made by this documentation update |
@@ -25,10 +87,11 @@ Updated: 2026-11-06. This records the implementation handoff and a targeted loca
 | Existing-post body editing | Published drafts are read-only; tags and visibility have management actions, subject to the label gate | Body editing remains an unfulfilled design capability. Use Tumblr for now; do not silently remove the requirement or describe it as an API limitation |
 | Native content/layout coverage | The README describes implemented editor blocks and 2–3-image rows | Complete the read/preserve/create/edit capability inventory. Unimplemented layouts/features are not automatically unsupported by Tumblr |
 | Visitor visibility | Implemented 2026-11-06: a delayed visitor check through the public API (app key, no login) after each verified visibility change, retried while the view settles; `unknown` on errors; shown per instance with its time | Fixture evidence only (`visitor.test.js`). It is not the blog's theme page; never shown as a promise |
-| Browser companion | Loopback bridge with in-app pairing, read-only snapshot, Open / Collect with Tumblr Studio, data import; the extension sends no writes | Run pairing, snapshot refresh, Open and Collect in the real browser against the packaged app |
+| Browser companion | Loopback bridge with in-app pairing, read-only snapshot, Open / Collect with Tumblr Studio, data import; the extension sends no writes | Adapt pairing and contextual links to the independent backend/local web UI, preserving one owner; run pairing, snapshot refresh, Open and Collect against the new delivery, and verify core operation without the extension |
+| Fans & interactions | Implemented 2026-11-07 (app 0.5.0, FAN_RELATIONSHIP_SPEC stages A+B): Today / Interactions / People / Changes & stats / Account protection; notifications collection with gaps, followed_by checks, local notes, stars, labels, reminders, workflow states | Fixture evidence (`audience.test.js`, FR02–FR08, FR10–FR14 in part) plus a live read-only look at the notifications and followed_by answers (web client). The official-API read of notifications and the browser relay route need a live run after the extension is reloaded. Stages C/D not built |
 | Follower protection | Baseline, public evidence, review, allowlist and manual block/unblock flow; automatic blocking unavailable | Review mode is the specified pre-evaluation stage, not completion of the low-burden automation requirement. Evaluate bounded patterns under the follower specification before enabling automation; real block/unblock validation remains open |
 | Reporting | Opens Tumblr; keeps reports pending until user confirmation | Record user-confirmed reporting separately from machine-verified submission. Automatic reporting has no validated transport and remains unavailable |
-| Delivery | Packaged Windows application directory exists | A single installer is not implemented. Validate launch and required runtime files on a machine without separately installed Node |
+| Delivery | Packaged Electron Windows application directory exists; new local-web packaging is pending | Deliver an everyday launcher and independent backend without requiring a developer runtime installation; validate open/pause/stop, optional backend-only sign-in startup, updates and data preservation under LW01/LW04/LW14 |
 
 ## Reblog policy and grouped categories (2026-11-06)
 

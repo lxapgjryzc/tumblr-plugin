@@ -76,6 +76,12 @@ test('migration 11 removes ads stored as posts, with their items and revisions',
   openDb(file).close?.();
   const raw = new DatabaseSync(file);
   raw.exec('UPDATE schema_version SET v = 10');
+  // undo the later migrations too, so they can run again on top
+  raw.exec(`DROP TABLE people; DROP TABLE reminders; DROP TABLE audience_changes; DROP TABLE audience_counts; DROP TABLE interactions;
+    ALTER TABLE followers DROP COLUMN inspected; ALTER TABLE followers DROP COLUMN gone_at; ALTER TABLE followers DROP COLUMN checked_at; ALTER TABLE followers DROP COLUMN check_note;
+    DROP TABLE reply_ops; DROP TABLE reply_drafts;
+    ALTER TABLE drafts DROP COLUMN kind; ALTER TABLE drafts DROP COLUMN target_blog; ALTER TABLE drafts DROP COLUMN target_id;
+    ALTER TABLE drafts DROP COLUMN base; ALTER TABLE drafts DROP COLUMN conflict; ALTER TABLE drafts DROP COLUMN stash;`);
   const add = (id, payload) => {
     const item = raw.prepare("INSERT INTO items (origin_blog, origin_id) VALUES ('t:b', ?)").run(id).lastInsertRowid;
     raw.prepare("INSERT INTO posts (blog, id, kind, state, payload, item_id) VALUES ('t:b', ?, 'original', 'published', ?, ?)").run(id, JSON.stringify(payload), item);
@@ -92,4 +98,51 @@ test('migration 11 removes ads stored as posts, with their items and revisions',
   assert.deepEqual(db.all('SELECT origin_id FROM items ORDER BY origin_id').map(r => r.origin_id), ['1', '2']);
   db.close?.();
   fs.rmSync(dir, { recursive: true, force: true });
+});
+
+test('settings transfer: same account, ids remapped, rules and routes arrive off, no key, repeatable', async () => {
+  const { exportSettings, planSettings, applySettings } = require('../src/service/data');
+  const blogs = [{ uuid: 't:main', name: 'm', primary: true }, { uuid: 't:art', name: 'a' }, { uuid: 't:ref', name: 'r' }];
+  const mk = async () => {
+    const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'studio-s-'));
+    const svc = createService({ dataDir: dir, tumblr: makeFake({ blogs }) });
+    svc.pass(); for (let i = 0; i < 5; i++) await svc.jobs.drain(svc.ctx);
+    return { dir, svc };
+  };
+  const a = await mk(), b = await mk();
+  const db = a.svc.db;
+  db.setMeta('account', { name: 'me' }); b.svc.db.setMeta('account', { name: 'me' });
+  db.setMeta('settings', { rules: { cold: false }, ai: { base: 'https://ai.example/v1', model: 'm', key: 'secret' } });
+  db.run(`UPDATE blogs SET role = 'material' WHERE uuid = 't:ref'`);
+  const gid = Number(db.run(`INSERT INTO category_groups (key, name, ord) VALUES (NULL, 'Mine', 9)`).lastInsertRowid);
+  // a category only here, with a high id so the other side must give it a new one
+  db.run(`INSERT INTO categories (id, name, tag, ord, group_id) VALUES (99, 'Sketch', 'my sketch', 0, ?)`, gid);
+  db.setMeta('blogDefaults', { 't:art': { categoryIds: [99], pack: null, picks: [] } });
+  db.run(`INSERT INTO expiry_rules (mode, blog, enabled, days, scope, updated_at) VALUES ('linked', 't:art', 1, 7, 'images', 1)`);
+  db.run(`INSERT INTO routes (sources, dest, enabled, since, updated_at) VALUES ('["t:art"]', 't:main', 1, 1, 1)`);
+  db.run(`INSERT INTO policies (blog, id, display, updated_at) VALUES ('t:art', '5', 'keep_visible', 1)`);
+
+  const exp = JSON.parse(JSON.stringify(exportSettings(db)));
+  assert.ok(!JSON.stringify(exp).includes('secret'), 'no key');
+  assert.equal(planSettings(b.svc.db, exp).otherAccount, false);
+  applySettings(b.svc.db, exp, { dataDir: b.dir });
+  applySettings(b.svc.db, exp, { dataDir: b.dir });
+  const t = b.svc.db;
+  assert.equal(t.get(`SELECT role FROM blogs WHERE uuid = 't:ref'`).role, 'material');
+  assert.deepEqual(t.getMeta('settings').rules, { cold: false });
+  assert.equal(t.getMeta('settings').ai.model, 'm');
+  const cat = t.all(`SELECT * FROM categories WHERE tag = 'my sketch'`);
+  assert.equal(cat.length, 1);
+  assert.equal(t.get('SELECT name FROM category_groups WHERE id = ?', cat[0].group_id).name, 'Mine');
+  assert.deepEqual(t.getMeta('blogDefaults')['t:art'].categoryIds, [cat[0].id]);
+  assert.equal(t.all('SELECT * FROM categories').length, db.all('SELECT * FROM categories').length);
+  const rules = t.all('SELECT * FROM expiry_rules'), routes = t.all('SELECT * FROM routes');
+  assert.equal(rules.length, 1); assert.equal(rules[0].enabled, 0);
+  assert.equal(routes.length, 1); assert.equal(routes[0].enabled, 0);
+  assert.equal(t.get(`SELECT display FROM policies WHERE blog = 't:art' AND id = '5'`).display, 'keep_visible');
+  assert.equal(t.get(`SELECT count(*) n FROM jobs WHERE kind NOT LIKE 'sync%' AND status = 'pending'`).n, 0, 'nothing queued');
+
+  t.setMeta('account', { name: 'someone-else' });
+  assert.equal(planSettings(t, exp).otherAccount, true);
+  assert.throws(() => applySettings(t, exp, { dataDir: b.dir }), /signed in as/);
 });

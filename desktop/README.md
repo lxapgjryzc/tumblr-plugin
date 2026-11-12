@@ -10,13 +10,29 @@ Implementation coverage is not full product acceptance. See [implementation stat
 
 **Reblog policy:** [REBLOG_POLICY.md](../docs/REBLOG_POLICY.md) freezes every reblog's creation-time content and tags. Implemented 2026-11-06 (fixture-tested, see the status document): only a new source body (text, images, layout) is a new version and gets its own reblog; tag-only changes send nothing; existing snapshots are never edited.
 
-Packaged Windows build: open `dist/Tumblr Studio-win32-x64/Tumblr Studio.exe`. Keep the entire packaged directory together; it includes the runtime and needs no separately installed Node. This is an application directory, not a single-file installer. The commands below are for development.
+**Runtime (since 0.5.0, [LOCAL_WEB_APP_SPEC.md](../docs/LOCAL_WEB_APP_SPEC.md)):** an independent local background service (plain Node, no browser engine) plus the interface as a local web page opened in Chrome only when needed. Closing the page or Chrome doesn't stop the service.
+
+Work Chrome profile (0.6.2): not fixed in code. The first `Tumblr Studio.vbs` on a computer lists Chrome's profiles and asks for a number (`launcher.js` exit code 3, then `launcher.js bind <n>`); the choice is `browser.json` in the work data folder, read at each open. The test environment stays on Profile 10.
+
+Packaged build: `npm run pack` makes `dist/Tumblr Studio/` (with `--shortcuts`: a desktop and Start-menu shortcut). Keep the folder together; it carries its own Node runtime (`runtime/node.exe`).
+
+| Entry | What it does |
+|---|---|
+| `Tumblr Studio.vbs` (the shortcut) | Work: start or reuse the backend on 127.0.0.1:47823 (data `%APPDATA%\Tumblr Studio`), open the page in Chrome **Profile 1** with a one-time sign-in code |
+| `Stop Tumblr Studio.vbs` | Stop the work backend (also Settings → Background service). Queued jobs wait, nothing is cancelled |
+| `Tumblr Studio Test.vbs` | AI testing: a separate backend on :47825, data `%APPDATA%\Tumblr Studio Test`, the made-up account, Chrome **Profile 10** |
+
+- `src/server/`: `main.js` (backend entry), `web.js` (HTTP: interface, `/api/call`, `/api/events` SSE, `/asset/<id>`, companion page, extension bridge, `/control/*` for the launcher), `launcher.js`, `env.js` (work/test), `chrome.js` (profile binding: checked against Chrome's `Local State`, stored in the data folder as `browser.json`; no fallback), `vault.js` (DPAPI through PowerShell; reads and rewrites the Electron-era files, keeping `*.electron-backup`), `media.js` (jpeg-js/pngjs instead of nativeImage), `lock.js` (`studio.lock`: one executor per data folder, also taken by the Electron shell), `autostart.js` (HKCU Run, backend only, off by default). `nativehost.js` + `nativereg.js`: Chrome native messaging host that only runs `Tumblr Studio.vbs open`, so the paired extension's toolbar icon can start the app; the installed work backend writes `native-host.json`/`.bat` to the data folder and the HKCU NativeMessagingHosts key, for the paired extension id only.
+- Access: loopback only; Host must be this server; data needs the session cookie (`studio_<env>`, HttpOnly, SameSite=Strict, from a one-time code only the launcher can get with the data folder's `control.token`); changes also need the page's own Origin and the `X-Studio` header. The renderer is unchanged apart from `web.js` (window.studio over HTTP) and the Settings → Background service card.
+- Toolbar icon (0.6.1 / extension 0.13.6): it opens the app, not the companion page. An open app tab in that browser is switched to; otherwise the extension sends `focus` with `fresh: true` and the backend opens a page itself with its own one-time sign-in code, so the icon works after the 30-day session lapses without the extension ever holding a code or cookie (a paired extension could already make the app open a page through `focus`). Unpaired → the companion page; backend down → the extension's own `companion.html`. The companion page is in the icon's right-click menu and in Settings → local service.
+- Extension pairing needs a one-time grant that the app's own companion page (signed in, same Chrome profile) fetches, so a pairing belongs to the backend of that profile; a paired extension only talks to its own port.
+- The Electron shell (`npm run start`, `npm run pack:electron`) is kept for development screenshots (`STUDIO_SNAP`) and takes the same data-folder lock.
 
 ```
 cd desktop
 npm install
-npm start          # the app; closing the window keeps it in the tray, Quit is in the tray menu
-npm test           # service tests against an in-memory Tumblr (node:test, Node 24+)
+npm test           # service and backend tests against an in-memory Tumblr (node:test, Node 24+)
+npm run serve      # the test backend from source (made-up data); open it with: node src/server/launcher.js open --env test
 ```
 
 First start: **Settings → Tumblr connection**. Register an app at <https://www.tumblr.com/oauth/apps> with the OAuth2 redirect URL `http://localhost:8765/callback`, paste its key and secret, then **Connect**. If the stage 0 probe was authorised on this computer, **Use the stage-0 test authorisation** takes that over instead.
@@ -26,9 +42,11 @@ Data lives in `%APPDATA%\Tumblr Studio`:
 | File | Contents |
 |---|---|
 | `studio.db` | SQLite store: blogs, posts, works, display policies, rules, routes, jobs, drafts, follower cases |
-| `credentials.bin`, `ai.bin` | OAuth tokens and the AI key, encrypted for this Windows user (Electron safeStorage / DPAPI) |
+| `credentials.bin`, `ai.bin` | OAuth tokens and the AI key, encrypted for this Windows user (DPAPI; Electron-era files are rewritten on first start) |
+| `studio.lock`, `control.token`, `sessions.json`, `browser.json`, `backend.log` | The running backend's lock, the launcher's key, hashed page sessions, the Chrome profile binding, a short log |
 | `assets/` | Images added to drafts, stored by content hash |
-| `backups/`, `imports/` | Backups made in Settings → Data, and copies of imported extension exports |
+| `logs/` | Diagnostic log `diag-YYYY-MM-DD.log` (JSON lines, 14 days, 25 MB a day; `src/service/diag.js`): page actions with outcome and duration, Tumblr requests (official ones and every write or failure through the browser), job state changes, Activity entries, page errors, backend start/stop/crashes, notes from Settings → Problem report. Never tokens, keys, cookies, codes or image bytes. `diagnostics-*.txt` are exports from that card |
+| `backups/`, `imports/` | Backups made in Settings → Data, and copies of imported extension exports and settings files |
 
 Development aids: `STUDIO_FAKE=1` runs against a made-up demo account (no network); `STUDIO_DATA=<dir>` uses another data folder; `STUDIO_SNAP=<png>` (with optional `STUDIO_PAGE`, `STUDIO_JS`) saves a screenshot and quits.
 
@@ -47,7 +65,7 @@ Development aids: `STUDIO_FAKE=1` runs against a made-up demo account (no networ
   - `routes.js`: automatic reblogs by source revision (`deliveries`).
   - `writing.js`: drafts, compile to NPF, grouped categories (`categories.default.json`), packs, publishing.
   - `followers.js`: follower protection.
-  - `data.js`: extension import, backup and restore.
+  - `data.js`: extension import, backup and restore, and settings transfer to another computer (`tumblr-studio-settings`: same account only, no keys or histories; categories matched by tag and ids remapped; display rules, routes and automatic collecting arrive switched off).
   - `api.js`: the request surface used by the window.
   - `core.js`: loads the extension's `src/core.js` so tag logic is shared.
 - `src/main/`: the Electron main process (window, tray, IPC) and the preload bridge.
@@ -80,7 +98,7 @@ Development aids: `STUDIO_FAKE=1` runs against a made-up demo account (no networ
 - **Writing**:
   - General categories in optional groups ([design 6.2–6.3](../docs/DESKTOP_PRODUCT_SPEC.md#62-tag-composition)): creative subject, intended role, course, record type and expression form (photo/writing), seeded once from `src/service/categories.default.json` (data, editable in the app). Every group may stay empty, also at publication. Display names are separate from tags (renaming never changes a tag). Selected tags are composed in group order, then category order. The old flat list migrates additively: same ids, tags, names and order, a category whose tag matches a seeded one joins that group, anything else stays in a visible “Ungrouped” area.
     - Default tags reuse tags already used on Tumblr (sampled 2026-11-06): 原创 `original art` (bare `original` is mixed), 同人 `fanart`, 习作 `art study` (bare `study` is studyblr), 过程记录 `wip`, 日记 `diary`, Photo `photography`, Writing `writing`; course names stay in full (no Tumblr use, no clash). Departure from design 6.2: the user does not use 正式作品 or 学习笔记, so they are not seeded. A one-time upgrade (`was` / `retired` in the defaults file, meta `categoryTagsUpgraded`) moves a category that still has a default name and an earlier default tag to the new tag, and removes a retired default only if it is untouched and no draft or blog default selects it. It changes local data only; old posts keep their tags (Tag upkeep's previewed retag can rename them).
-  - Posts → “Categories & tags”: several conditions at once, all must hold, matched on whole tags. Managed here checks the current original; Displayed here checks each physical post's own tags (a historical reblog is never credited with its original's tags).
+  - Posts filter (docs/CONTENT_BROWSER_UX_SPEC.md, first batch): one service query (`src/service/query.js`) feeds the list, its total, the per-option “results after adding” counts, tag suggestions and “select every match”, so they can't disagree. Works (one unit per work, judged by its current original; a work whose original can't be read is one card with unknown data that never matches tag conditions and is never edited through a reblog) or Blog posts (each post by its own tags). Inside a category group: any (default) or all; groups, tag include (all/any), tag exclude, “not set in this group”, “no tags” and other conditions combine with AND. Whole-tag `core.key` identity on both sides; text search is a literal substring. Older `tags: [...]` conditions still mean “all of them”. A collapsible filter pane beside the results, a condition bar, quick filters that only fill in ordinary conditions (“Expiring soon” is now one, combinable with tags), newest-query-wins loading, selection dropped when the query changes, card click opens / checkbox selects, “select the N loaded” vs “select all N matches” (frozen), linked posts only added by ticking them, one per-post preview before tag edits, and a right-hand detail pane that highlights the exact instance.
   - A visual block editor. Text with bold, italic, strike, links and subtypes; images; links; read-more.
   - Images are placed with buttons: insert here, ↑/↓, move to a chosen paragraph, side by side (2–3 adjacent), separate, replace with an alt-text check. Dragging is not used anywhere.
   - Undo and redo, autosave with revisions, and a compiled preview at wide and phone widths.
@@ -104,6 +122,13 @@ Development aids: `STUDIO_FAKE=1` runs against a made-up demo account (no networ
   - Public evidence is split into own words and reblogged words, then checked against deterministic spam/scam patterns, with an optional AI explanation validated against a strict schema.
   - Allowlist ("Normal account"). Block and unblock per blog, verified against the block list. External blocks are never undone.
   - Reporting goes through Tumblr's own menu and stays "pending" until you confirm it.
+- **Fans & interactions** (`src/service/audience.js`, page `fans.js`, docs/FAN_RELATIONSHIP_SPEC.md; replaces the New followers page, whose protection is now the Account protection tab):
+  - Reads each chosen blog's notifications (`/v2/blog/{blog}/notifications`, rollups off, paged by `before`; checked live 2026-11-07 through the web client). Same-second page edges are read again and deduped by notification id; a page that doesn't move back ends the walk and records a gap. The first read backfills 30 days as history, so nothing from before switching on is a to-do.
+  - Today: replies, mentions, asks and reblogs with words or tags (tags kept in order), starred people first; likes, plain reblogs and new followers are a summary. Done / No reply needed / Tomorrow / I replied are local states with undo; nothing is marked or sent on Tumblr.
+  - People: one record per blog uuid across my blogs (name-only followers are looked up once when you first save a note or star). Nickname, labels, note, star, mute, reminders, name history, interaction history, relationship per blog and mutual (main blog + account following). A star is never the protection allowlist.
+  - Changes: follower lists are collected once for protection and this module (scans every 6 h when only this module needs them). Someone missing from a complete walk is checked with `/followed_by`; only a "no" makes it an unfollow, recorded as an interval; errors stay "being checked". Follower counts are stored as observations and compared only with an earlier observation.
+  - Switches are independent: collection never inspects or blocks; protection keeps its own blogs and adding a fans blog never widens blocking.
+  - Not built yet (spec stages C/D): saved views, weekly summary, opt-in "no contact lately" reminders, AI summaries/drafts, grouping several events of one person and post, the browser companion's "Open this person in Studio".
 - **Data**:
   - Import of the extension's export: roles, packs, tag statistics, rules and AI settings. `recentOnly` becomes switched-off, image-only rules. The extension's hidden posts are remembered.
   - Backup with checksums. Restore at next start keeps the old data aside and pauses automation.
@@ -143,7 +168,7 @@ These describe the implementation's choices and limitations. Optional mechanism 
 6. **Follower protection is review-only.**
    - Automatic blocking is shown as unavailable. The brief itself requires an evaluated pattern set first, and none exists yet.
    - Reporting has no API, so the app opens the blog and records your confirmation. It never claims a report was submitted.
-7. **Editing an already published post's body** isn't in the editor. A published draft becomes read-only, and tags and visibility are changed from Posts. Body edits stay on Tumblr for now, so a newer Tumblr version is never overwritten.
+7. **Editing a published original** (since 0.6.0, `writing.js` `decompile` / `post.edit`): the post is read fresh from Tumblr and opened in the same editor; an unfinished edit of the same post is resumed. Blocks the editor can't change (video, audio, polls, text with colours or mentions) are kept verbatim and shown locked; existing images keep their Tumblr media; new images go up in a multipart PUT. Layouts other than plain rows (asks, carousels, rows with text, reordered display) are refused with a reason rather than flattened. Before sending, Tumblr's current version is compared with the edit's base: a changed body (or tags changed on both sides) sends nothing and keeps both versions for the user to choose. State never changes in an edit; tags change only if edited (general categories first); a body change is a new source revision for enabled routes, a tag change makes my reblogs follow (copytags). A published draft of a *new* post still becomes read-only; its later edits go through Posts → Edit post.
 8. **Browser relay for reads and edits (user request, 2026-11-06).**
    - A new app's official quota (1000 requests an hour) ran out during bulk tag and visibility work, because each verified edit costs a read, a PUT and at least one verify read. While the paired extension polls the bridge, reads of the account's own posts, full-post edits (PUT), follower lists, the account's likes (material scans) and public tag search (`/v2/tagged`, tag heat), and single posts and notes on any blog (read only, for material checks) go through the browser's tumblr.com session instead, and they don't count against the budget.
    - The app still builds every request, owns the job and verifies the result. The extension checks each request against a fixed list, the pairing account and the account's blogs, sends it, and returns the raw answer.
@@ -152,6 +177,7 @@ These describe the implementation's choices and limitations. Optional mechanism 
    - Creates and deletes stay official, because their reconciliation is written for it. Visitor checks stay official too, because they need a logged-out view.
    - If the browser is not connected, signed out, logged into another account, limited (429) or never picks the request up, that request goes the official way, and the browser is left alone for a while. Settings → Tumblr connection can turn the relay off.
 9. **Layout presets:** rows of 2–3 adjacent images. Other NPF layouts found on imported posts are kept as they are (edits always send the stored layout back).
+10. **Replies from the app** (since 0.6.0, `replies.js`): Tumblr has no public API for sending a reply; the web client's own `POST /v2/user/post/reply` (found in its scripts 2026-11-07) is sent only through the paired browser (`browserOnly`, extension 0.13.5 checks: own blog as `reply_as`, fixed fields, plain text). Without the browser the send waits; it never goes another way. Every send is an operation with the page's id (a repeat is the same send), a create job: confirmed only when the reply is seen under the post, otherwise unknown until found or until the user says it wasn't sent. Only top-level replies under my own posts; mentions, reblogs and asks hand off to the exact page. Not live-verified yet.
 
 ## Open gates
 

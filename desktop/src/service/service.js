@@ -14,7 +14,7 @@ const routes = require('./routes');
 const PASS_MS = 10 * 60e3;
 const SOURCE_FULL_MS = 6 * 3600e3;
 
-function createService({ dataDir, db: givenDb, tumblr, creds = null, now = Date.now, extraHandlers = {}, onEvent = () => {} }) {
+function createService({ dataDir, db: givenDb, tumblr, creds = null, now = Date.now, extraHandlers = {}, onEvent = () => {}, diag = null }) {
   const db = givenDb || openDb(path.join(dataDir, 'studio.db'));
   const ctx = { db, tumblr, creds, now, service: null };
   routes.baseline(db, now());
@@ -78,6 +78,8 @@ function createService({ dataDir, db: givenDb, tumblr, creds = null, now = Date.
 
   const jobs = makeJobs(db, {
     handlers, now,
+    // routine syncs that succeed are left out of the diagnostic log (every 10 minutes, many blogs)
+    trace: diag && ((j, f) => { if (j.kind === 'sync.blog' && ['succeeded', 'pending', 'running'].includes(f.status)) return; diag.job(j, f); }),
     onChange: id => emit('job', id),
     log: (job, out) => {
       const level = ['failed', 'unknown'].includes(out.status) ? 'warn' : 'info';
@@ -112,7 +114,7 @@ function createService({ dataDir, db: givenDb, tumblr, creds = null, now = Date.
     soonTimer = setTimeout(() => { if (!db.getMeta('paused', false) && creds?.status?.() === 'connected') pass(); }, ms);
   }
 
-  const svc = { db, jobs, ctx, handlers, pass, passSoon, start, stop, emit, hooks };
+  const svc = { db, jobs, ctx, handlers, pass, passSoon, start, stop, emit, hooks, diag };
   ctx.service = svc;
   require('./copytags').addCopyTags(svc);
   return svc;

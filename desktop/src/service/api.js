@@ -8,10 +8,12 @@ const routes = require('./routes');
 const groups = require('./groups');
 const sync = require('./sync');
 const C = require('./core');
+const { makeQuery } = require('./query');
 
 function makeApi(svc, { creds, openUrl = () => {}, importStage0 = null, extra = {} } = {}) {
   const { db, jobs } = svc;
   const now = svc.ctx.now;
+  const query = makeQuery(db, now);
 
   // Run fn inside a savepoint and roll it back: previews of a rule that isn't saved yet
   function dryRun(fn) {
@@ -80,39 +82,11 @@ function makeApi(svc, { creds, openUrl = () => {}, importStage0 = null, extra = 
     setAutomation(patch) { db.setMeta('automation', { ...db.getMeta('automation', {}), ...patch }); svc.passSoon?.(); return api.status(); },
 
     // ----- posts -----
-    // view: managed (one card per content item, filed under its management blog) | displayed (physical posts)
-    // tags: conditions that must ALL hold, on whole tags (key identity, no substrings). In the managed view they
-    // are checked on the work's current original; in the displayed view on each physical post's own tags, so a
-    // historical reblog matches only by what it carries itself.
-    posts({ view = 'managed', blog = null, state = null, kind = null, q = '', tag = '', tags = [], sort = 'new', limit = 60, offset = 0, share = false } = {}) {
-      const where = [`p.state != 'gone'`], a = [];
-      if (share) where.push(view === 'managed' ? `(SELECT role FROM blogs WHERE uuid = i.manager) = 'share'` : `(SELECT role FROM blogs WHERE uuid = p.blog) = 'share'`);
-      if (view === 'managed') {
-        where.push(`(i.external = 1 OR (p.blog = i.origin_blog AND p.id = i.origin_id) OR NOT EXISTS (SELECT 1 FROM posts o WHERE o.blog = i.origin_blog AND o.id = i.origin_id AND o.state != 'gone'))`);
-        if (blog) { where.push('i.manager = ?'); a.push(blog); }
-      } else if (blog) { where.push('p.blog = ?'); a.push(blog); }
-      if (state) { where.push('p.state = ?'); a.push(state); }
-      if (kind) { where.push('p.kind = ?'); a.push(kind); }
-      if (q) { where.push('(p.summary LIKE ? OR p.tags LIKE ?)'); a.push('%' + q + '%', '%' + q + '%'); }
-      for (const tg of [...(tag ? [tag] : []), ...(tags || [])].map(x => C.key(C.norm(String(x)).trim())).filter(Boolean)) {
-        where.push(`EXISTS (SELECT 1 FROM json_each(p.tags) j WHERE lower(trim(j.value)) = ?)`); a.push(tg);
-      }
-      const order = sort === 'notes' ? 'p.notes DESC NULLS LAST' : sort === 'old' ? 'p.published_at ASC' : 'COALESCE(p.published_at, p.synced_at) DESC';
-      const rows = db.all(`SELECT p.blog, p.id, p.kind, p.state, p.published_at, p.tags, p.notes, p.notes_at, p.summary, p.thumb, p.has_images, p.legacy, p.pinned,
-          p.item_id, i.manager, i.status AS item_status, i.external, b.name AS blog_name, mb.name AS manager_name, po.display, po.auto_hide IS NOT NULL AS auto_hidden,
-          po.conflict IS NOT NULL AS conflicted,
-          (SELECT COUNT(*) FROM posts c WHERE c.item_id = p.item_id AND c.state != 'gone') AS copies,
-          -- the work's source (its owned original): how many content versions, and reblogs still on their way
-          (SELECT COUNT(*) FROM source_revisions sr WHERE sr.blog = COALESCE(i.origin_blog, p.blog) AND sr.id = COALESCE(i.origin_id, p.id)) AS versions,
-          (SELECT COUNT(*) FROM deliveries d WHERE d.src_blog = COALESCE(i.origin_blog, p.blog) AND d.src_id = COALESCE(i.origin_id, p.id) AND d.status = 'pending') AS deliv_pending,
-          (SELECT COUNT(*) FROM deliveries d WHERE d.src_blog = COALESCE(i.origin_blog, p.blog) AND d.src_id = COALESCE(i.origin_id, p.id) AND d.status = 'unknown') AS deliv_unknown
-        FROM posts p LEFT JOIN items i ON i.id = p.item_id JOIN blogs b ON b.uuid = p.blog LEFT JOIN blogs mb ON mb.uuid = i.manager
-        LEFT JOIN policies po ON po.blog = p.blog AND po.id = p.id
-        WHERE ${where.join(' AND ')} ORDER BY ${order} LIMIT ? OFFSET ?`, ...a, limit, offset);
-      const total = db.get(`SELECT COUNT(*) n FROM posts p LEFT JOIN items i ON i.id = p.item_id WHERE ${where.join(' AND ')}`, ...a).n;
-      const ev = new Map(display.evaluate(db, now()).map(r => [r.blog + '/' + r.id, r]));
-      return { total, rows: rows.map(r => ({ ...postRow(r), expiry: ev.get(r.blog + '/' + r.id) || null })) };
-    },
+    // One query definition for the list, its counts, tag suggestions and "select every match" (query.js).
+    // Older callers' shapes (tags: [...] all required, share: bool) still mean what they meant.
+    posts(q = {}) { return query.page(q); },
+    postsMatch(q = {}) { return query.ids(q); },
+    tagCandidates(q = {}) { return query.tagCandidates(q); },
     item({ id }) {
       const it = groups.item(db, id);
       if (!it) return null;
@@ -142,10 +116,10 @@ function makeApi(svc, { creds, openUrl = () => {}, importStage0 = null, extra = 
     // ----- visibility -----
     // targets: [{ blog, id }] exact instances. Preview first, then apply with the same frozen list.
     visibilityPreview({ targets, target }) {
-      const out = { change: [], already: [], unsupported: [], copies: [] };
+      const out = { change: [], already: [], unsupported: [], copies: [], gone: 0 };
       for (const t of targets) {
         const p = db.get('SELECT blog, id, state, legacy, item_id, summary FROM posts WHERE blog = ? AND id = ?', t.blog, String(t.id));
-        if (!p) continue;
+        if (!p || p.state === 'gone') { out.gone++; continue; }
         if (p.legacy || !['published', 'private'].includes(p.state)) out.unsupported.push(p);
         else if (p.state === target) out.already.push(p);
         else out.change.push(p);
@@ -163,9 +137,27 @@ function makeApi(svc, { creds, openUrl = () => {}, importStage0 = null, extra = 
       db.tx(() => { for (const t of targets) display.setDisplay(db, t.blog, t.id, 'follow_rule', now()); });
       return { ok: true };
     },
-    // all linked owned instances of the given items
+    // all linked owned instances of the given items, with what the page needs to list them before adding any
     linked({ items }) {
-      return db.all(`SELECT blog, id, state, kind FROM posts WHERE item_id IN (${items.map(() => '?').join(',')}) AND state != 'gone'`, ...items);
+      if (!items?.length) return [];
+      return db.all(`SELECT p.blog, p.id, p.state, p.kind, p.item_id, p.summary, p.thumb, p.published_at, b.name AS blog_name,
+          (SELECT rev FROM deliveries d WHERE d.dest_blog = p.blog AND d.dest_id = p.id) AS rev
+        FROM posts p JOIN blogs b ON b.uuid = p.blog WHERE p.item_id IN (${items.map(() => '?').join(',')}) AND p.state != 'gone' ORDER BY p.item_id, p.kind = 'reblog', p.published_at`, ...items);
+    },
+    // What "Keep visible" / "Back to the rule" would do to these exact posts: keep visible publishes private ones;
+    // back to the rule can make a post due for hiding right away. Nothing is changed here.
+    policyPreview({ targets, action }) {
+      const ev = new Map(display.evaluate(db, now()).map(r => [r.blog + '/' + r.id, r]));
+      const out = { targets: 0, gone: 0, willPublish: [], dueNow: [], noRule: 0 };
+      for (const t of targets) {
+        const p = db.get('SELECT blog, id, state, summary FROM posts WHERE blog = ? AND id = ?', t.blog, String(t.id));
+        if (!p || p.state === 'gone') { out.gone++; continue; }
+        out.targets++;
+        if (action === 'keep' && p.state === 'private') out.willPublish.push(p);
+        const e = ev.get(p.blog + '/' + p.id);
+        if (action === 'rule') { if (!e) out.noRule++; else if (p.state === 'published' && e.due && e.due <= now()) out.dueNow.push(p); }
+      }
+      return out;
     },
     resolveConflict({ blog, id, display: disp }) {
       const p = display.policyOf(db, blog, id);
@@ -193,11 +185,28 @@ function makeApi(svc, { creds, openUrl = () => {}, importStage0 = null, extra = 
       }
       return { originals: edit.length, snapshots: snapshots.length, tags: [...counts.values()].sort((a, b) => b.n - a.n || a.tag.localeCompare(b.tag)) };
     },
+    // Per-post difference an edit would make (only originals; reblogs are listed apart), for the one confirmation
+    tagsPlan({ targets, add = [], remove = [] }) {
+      const { edit, snapshots } = api.tagsPreview({ targets });
+      const rm = new Set(remove.map(C.key));
+      const out = { change: [], same: 0, snapshots: snapshots.length, gone: targets.length - edit.length - snapshots.length,
+        copiesFollow: !!db.getMeta('automation', {}).routes };
+      for (const p of edit) {
+        const tags = P(db.get('SELECT tags FROM posts WHERE blog = ? AND id = ?', p.blog, String(p.id))?.tags, []);
+        const have = new Set(tags.map(C.key));
+        const plus = add.filter(a => !have.has(C.key(a)) && !rm.has(C.key(a)));
+        const minus = tags.filter(tg => rm.has(C.key(tg)));
+        if (plus.length || minus.length) out.change.push({ blog: p.blog, id: p.id, summary: p.summary, add: plus, remove: minus,
+          reblogs: db.get(`SELECT COUNT(*) n FROM posts c WHERE c.item_id = (SELECT item_id FROM posts WHERE blog = ? AND id = ?) AND c.kind = 'reblog' AND c.state != 'gone'`, p.blog, String(p.id)).n });
+        else out.same++;
+      }
+      return out;
+    },
     applyTags({ targets, add = [], remove = [] }) {
       const { edit, snapshots } = api.tagsPreview({ targets });
       const batch = jobs.batch('Edit tags', { targets: edit, add, remove, snapshots: snapshots.length });
       for (const t of edit) jobs.add('post.tags', { blog: t.blog, id: String(t.id), add, remove }, { priority: 1, scope: `post:${t.blog}:${t.id}`, batch });
-      return { queued: edit.length, snapshots: snapshots.length, labelsOk: ['pass', 'not_used'].includes(db.capStatus('edit.labels')) };
+      return { batch, queued: edit.length, snapshots: snapshots.length, labelsOk: ['pass', 'not_used'].includes(db.capStatus('edit.labels')) };
     },
 
     // ----- expiry rules -----

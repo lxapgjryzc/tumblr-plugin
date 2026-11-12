@@ -53,7 +53,21 @@ const SettingsPage = {
     }));
 
     const data = this.dataCard ? this.dataCard(card) : null;
-    root.replaceChildren(h('header', { class: 'page-head' }, h('h1', {}, t('settingsTitle'))), h('div', { class: 'grid2' }, conn, roles, auto, data, lang));
+    // the local web backend: what is running, start with Windows, stop (closing pages never stops it)
+    let backend = null;
+    if (window.studio.web) {
+      const si = await call('serverInfo');
+      backend = card(t('svcTitle'),
+        h('p', { class: 'muted small' }, t('svcInfo', si.test ? t('svcTest') : t('svcWork'), si.port, si.profile, si.version)),
+        h('p', { class: 'muted small' }, t('svcHint')),
+        h('p', { class: 'muted small' }, t('svcCompanionHint'), ' ', h('a', { href: '/companion/', target: '_blank', rel: 'noopener' }, t('svcCompanion'))),
+        si.autostart != null ? toggle(si.autostart, async v => { try { await call('setAutostart', v); } finally { this.render(root); } }, t('svcAutostart')) : null,
+        h('div', { class: 'actions' }, h('button', { class: 'ghost danger', onclick: async () => {
+          const ok = await modal(t('svcStop'), h('p', {}, t('svcStopQ')), [{ label: t('cancel'), value: false }, { label: t('svcStop'), value: true, class: 'danger' }]);
+          if (ok) await call('stopServer');
+        } }, t('svcStop'))));
+    }
+    root.replaceChildren(h('header', { class: 'page-head' }, h('h1', {}, t('settingsTitle'))), h('div', { class: 'grid2' }, conn, roles, auto, backend, data, lang));
   },
 };
 
@@ -81,7 +95,51 @@ SettingsPage.dataCard = function (card) {
       h('div', { class: 'actions' }, h('button', { onclick: async () => { await call('setAi', { base, model, key }); toast('✓', 'ok'); } }, t('save')),
         st.hasKey ? h('button', { class: 'ghost danger', onclick: async () => { await call('forgetAiKey'); this.render(this.root); } }, t('forgetKey')) : null));
   })();
-  return [box, ai];
+  // Problems met in daily use: mark the moment, export one file to hand over (diag.js)
+  let note = '';
+  const diag = card(t('diagTitle'), h('p', { class: 'muted' }, t('diagHint')),
+    h('textarea', { class: 'reply-text', rows: 3, placeholder: t('diagNotePh'), oninput: e => { note = e.target.value; } }),
+    h('div', { class: 'actions' },
+      h('button', { onclick: async () => { if (!note.trim()) return toast(t('diagNoteEmpty')); await call('diagNote', { note }); toast(t('diagNoted'), 'ok'); } }, t('diagNote')),
+      h('button', { class: 'primary', onclick: async e => {
+        e.target.disabled = true;
+        try { const r = await call('diagExport', { note }); toast(t('diagExported', r.file), 'ok', 12000); out.textContent = r.file; }
+        catch (err) { toast(cleanErr(err), 'error'); } finally { e.target.disabled = false; }
+      } }, t('diagExport')),
+      h('button', { class: 'ghost', onclick: () => call('diagFolder') }, t('openFolder'))));
+  const out = h('p', { class: 'muted small', style: { userSelect: 'all' } });
+  diag.append(out, h('p', { class: 'muted small' }, t('diagPrivacy')));
+  // Moving to another computer: settings only, no keys or sign-in (data.js exportSettings)
+  const move = card(t('moveTitle'), h('p', { class: 'muted' }, t('moveHint')),
+    h('div', { class: 'actions' },
+      h('button', { onclick: async () => {
+        const exp = await call('settingsExport');
+        const a = h('a', { href: URL.createObjectURL(new Blob([JSON.stringify(exp, null, 2)], { type: 'application/json' })),
+          download: 'tumblr-studio-settings-' + exp.exported.slice(0, 10) + '.json' });
+        document.body.append(a); a.click(); a.remove();
+        toast(t('moveExported'), 'ok', 8000);
+      } }, t('moveExport')),
+      h('button', { onclick: () => this.importFile() }, t('moveImport'))));
+  return [box, ai, diag, move];
+};
+
+SettingsPage.importSettings = async function (text) {
+    let p;
+    try { p = await call('settingsPreview', { text }); } catch (err) { return toast(cleanErr(err), 'error'); }
+    if (p.otherAccount) return toast(t('moveOtherAccount', p.account, p.here), 'error', 10000);
+    const body = h('div', {},
+      h('p', { class: 'muted small' }, t('moveFrom', p.account || '?', (p.exported || '').slice(0, 16).replace('T', ' '))),
+      h('ul', { class: 'plain' },
+        h('li', {}, t('impRoles', p.roles)), h('li', {}, t('impPacks', p.packs)), h('li', {}, t('impStats', p.tagStats)),
+        h('li', {}, t('moveCats', p.categories)), h('li', {}, t('moveRules', p.rules, p.routes)),
+        p.display ? h('li', {}, t('moveDisplay', p.display)) : null,
+        p.ai ? h('li', {}, t('impAi')) : null),
+      h('p', { class: 'banner warn' }, t('moveOff')),
+      h('p', { class: 'muted' }, t('impSafe')));
+    const ok = await modal(t('moveImport'), body, [{ label: t('cancel'), value: false }, { label: t('apply'), value: true, class: 'primary' }]);
+    if (!ok) return;
+    try { await call('settingsApply', { text }); toast('✓', 'ok'); } catch (err) { toast(cleanErr(err), 'error'); }
+    this.render(this.root);
 };
 
 SettingsPage.importFile = function () {
@@ -90,6 +148,10 @@ SettingsPage.importFile = function () {
     const f = input.files[0];
     if (!f) return;
     const text = await f.text();
+    let format = null;
+    try { format = JSON.parse(text).format; } catch { return toast(t('importBadFile'), 'error'); }
+    if (format === 'tumblr-studio-settings') return this.importSettings(text);
+    if (format !== 'tth-export') return toast(t('importBadFile'), 'error');
     const p = await call('importPreview', { text });
     const body = h('div', {},
       h('ul', { class: 'plain' },

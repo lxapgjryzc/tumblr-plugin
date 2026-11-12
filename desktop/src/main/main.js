@@ -6,23 +6,8 @@ const { app, BrowserWindow, Tray, Menu, ipcMain, shell, safeStorage, nativeImage
 const path = require('node:path');
 const fs = require('node:fs');
 const { spawnSync } = require('node:child_process');
-const { Credentials } = require('../service/auth');
-const { makeTumblr, Budget } = require('../service/tumblr');
-const { createService } = require('../service/service');
-const { makeApi } = require('../service/api');
-const { openDb } = require('../service/db');
-const { addWriting } = require('../service/writing');
-const { addFollowers } = require('../service/followers');
-const { addData, restoreAtStartup } = require('../service/data');
-const { addMaterial } = require('../service/material');
-const { addTidy } = require('../service/tidy');
-const { addAiArt } = require('../service/aiart');
-const { addVersions } = require('../service/versions');
-const { addVisitor } = require('../service/visitor');
-const { addTakeover } = require('../service/takeover');
-const { makeBridge, PORTS } = require('../service/bridge');
-const { makeRelay } = require('../service/relay');
-let relay = null;
+const { bootStudio, bridgeHandler, listenFirst, PORTS } = require('../service/boot');
+const { takeLock } = require('../server/lock');
 const { makeCompanionPage } = require('../service/companion-page');
 const http = require('node:http');
 
@@ -54,47 +39,28 @@ function readStage0() {
 }
 
 function boot() {
-  let restored = null;
-  try { restored = restoreAtStartup(dataDir); } catch (e) { dialog.showErrorBox('Tumblr Studio', 'Restore failed / 恢复失败: ' + e.message); }
-  const db = openDb(path.join(dataDir, 'studio.db'));
-  if (restored) { db.setMeta('paused', true); db.log('info', 'data', 'restored from backup; automation paused', restored); }
-  const creds = new Credentials(path.join(dataDir, 'credentials.bin'), vault);
-  const budget = new Budget({ load: () => db.getMeta('budget', []), save: t => db.setMeta('budget', t) });
-  // the paired browser carries reads and edits while it is connected (service/relay.js); Settings can turn it off
-  relay = makeRelay({
-    enabled: () => !!db.getMeta('companion', null) && db.getMeta('settings', {}).browserRelay !== false,
-    onConnect: () => { db.log('info', 'relay', 'browser connected: reads and edits go through it'); svc?.jobs.wake('rate:'); }, // parked jobs go through the browser now
-    onCool: (why, ms) => db.log('warn', 'relay', `browser set aside for ${Math.round(ms / 60e3)} min (${why}): using the official API`),
-  });
-  let tumblr = makeTumblr({ creds, budget, relay });
-  if (process.env.STUDIO_FAKE) {
-    // Demo account for UI checks: no network, made-up blogs (see test/demo.js)
-    tumblr = require('../../test/demo').demoFake();
-    tumblr.relay = relay; // shows the browser-relay section (never connected in the demo)
-    creds.status = () => 'connected';
-    db.capability('edit.labels', 'not_used');
-  }
-  svc = createService({ db, tumblr, creds, onEvent: (type, data) => send('event', { type, data }) });
-  // once: originals edited before categories were kept in front get them moved there (their reblogs follow)
-  if (!db.getMeta('categoryFirstFixed')) {
-    const n = require('../service/ops').queueCategoryFirst(db, svc.jobs);
-    db.setMeta('categoryFirstFixed', Date.now());
-    if (n) db.log('info', 'post.tags', `general categories moved to the front of ${n} originals`, { n });
-  }
-  const extra = {};
-  addWriting(svc, extra, { dataDir });
-  const data = addData(svc, extra, { dataDir, vault, openPath: p => shell.openPath(p), relaunch: () => { quitting = true; app.relaunch(); app.exit(0); } });
-  addFollowers(svc, extra, { aiKey: data.aiKey });
-  addMaterial(svc, extra, { media, aiKey: data.aiKey });
-  addTidy(svc, extra);
-  addAiArt(svc, extra);
-  addVersions(svc, extra);
-  addVisitor(svc, extra);
-  addTakeover(svc, extra, { dataDir });
-  api = makeApi(svc, { creds, openUrl: u => shell.openExternal(u), importStage0: readStage0, extra });
+  // one executor per data folder, shared with the local web backend (src/server)
+  const lock = takeLock(dataDir, { kind: 'electron' });
+  if (lock.held) { dialog.showErrorBox('Tumblr Studio', 'This data is in use by the Tumblr Studio background service (' + (lock.held.kind || '?') + '). Stop it first. / 后台服务正在使用这份数据，请先停止它。'); app.exit(0); return false; }
+  ({ svc, api, relay, bridge } = bootStudio({
+    dataDir, vault, media, version: app.getVersion(), fake: !!process.env.STUDIO_FAKE,
+    onEvent: (type, data) => send('event', { type, data }),
+    openUrl: u => shell.openExternal(u), openPath: p => shell.openPath(p),
+    relaunch: () => { quitting = true; app.relaunch(); app.exit(0); },
+    readStage0,
+    approvePairing: async extId => {
+      if (win) { win.show(); win.focus(); }
+      const r = await dialog.showMessageBox(win, { type: 'question', buttons: ['Allow / 允许', 'Deny / 拒绝'], defaultId: 1, cancelId: 1,
+        message: 'Connect the browser extension? / 连接浏览器插件？',
+        detail: 'Extension id: ' + extId + '\nIt will read your categories, templates and tag library for suggestions on tumblr.com, and send requests (open a post, collect a post) that you see here in Activity.\n它会读取分类、模板和标签库用于网页上的提示，并发送请求（打开帖子、收集帖子），这些请求都会在“活动记录”里显示。' });
+      return r.response === 0;
+    },
+    onOpen: ({ item }) => { if (win) { win.show(); win.focus(); } send('event', { type: 'open', data: { item } }); },
+    onRestoreError: e => dialog.showErrorBox('Tumblr Studio', 'Restore failed / 恢复失败: ' + e.message),
+  }));
   startBridge();
-  creds.onChange(() => send('event', { type: 'auth' }));
   svc.start();
+  return true;
 }
 
 // Image decoding for the palette and the AI (the service itself has no image library): Tumblr's media are
@@ -125,43 +91,12 @@ const media = {
 const serveCompanion = makeCompanionPage([path.join(__dirname, '..', 'companion'), path.join(__dirname, '..', '..', '..', 'extension')]);
 
 // The browser companion's loopback endpoint (protocol in service/bridge.js). Pairing asks here, in the app.
-let bridgeServer = null;
+let bridgeServer = null, relay = null, bridge = null;
 function startBridge() {
   if (process.env.STUDIO_SNAP) return;
-  const bridge = makeBridge(svc, api, {
-    version: app.getVersion(),
-    relay,
-    approve: async extId => {
-      if (win) { win.show(); win.focus(); }
-      const r = await dialog.showMessageBox(win, { type: 'question', buttons: ['Allow / 允许', 'Deny / 拒绝'], defaultId: 1, cancelId: 1,
-        message: 'Connect the browser extension? / 连接浏览器插件？',
-        detail: 'Extension id: ' + extId + '\nIt will read your categories, templates and tag library for suggestions on tumblr.com, and send requests (open a post, collect a post) that you see here in Activity.\n它会读取分类、模板和标签库用于网页上的提示，并发送请求（打开帖子、收集帖子），这些请求都会在“活动记录”里显示。' });
-      return r.response === 0;
-    },
-    onOpen: ({ item }) => { if (win) { win.show(); win.focus(); } send('event', { type: 'open', data: { item } }); },
-  });
-  const server = http.createServer((req, res) => {
-    const reply = (status, json) => { res.writeHead(status, { 'Content-Type': 'application/json', 'Cache-Control': 'no-store' }); res.end(JSON.stringify(json)); };
-    if (req.method === 'GET') return serveCompanion(req, res);
-    if (req.method !== 'POST') return reply(405, { error: 'method' });
-    let size = 0; const chunks = [];
-    req.on('data', c => { size += c.length; if (size > 20 * 1024 * 1024) { reply(413, { error: 'too_large' }); req.destroy(); } else chunks.push(c); });
-    req.on('end', async () => {
-      if (res.writableEnded) return;
-      let body;
-      try { body = JSON.parse(Buffer.concat(chunks).toString('utf8') || '{}'); } catch { return reply(400, { error: 'json' }); }
-      try {
-        const out = await bridge.handle({ origin: req.headers.origin || '', host: req.headers.host || '', auth: req.headers.authorization || '', path: req.url, body });
-        reply(out.status, out.json);
-      } catch (e) { reply(500, { error: String(e.message || e) }); }
-    });
-  });
-  const tryPort = i => {
-    if (i >= PORTS.length) { svc.db.log('warn', 'companion', 'no free port for the browser companion'); return; }
-    server.once('error', () => tryPort(i + 1));
-    server.listen(PORTS[i], '127.0.0.1', () => { bridgeServer = server; svc.db.setMeta('companionPort', PORTS[i]); });
-  };
-  tryPort(0);
+  const handle = bridgeHandler(bridge);
+  const server = http.createServer((req, res) => (req.method === 'GET' ? serveCompanion(req, res) : handle(req, res)));
+  listenFirst(server, PORTS).then(port => { bridgeServer = server; svc.db.setMeta('companionPort', port); }, () => svc.db.log('warn', 'companion', 'no free port for the browser companion'));
 }
 
 function send(ch, data) { if (win && !win.isDestroyed()) win.webContents.send(ch, data); }
@@ -175,9 +110,10 @@ function createWindow() {
   win.removeMenu();
   win.loadFile(path.join(__dirname, '..', 'renderer', 'index.html'));
   win.once('ready-to-show', () => { if (!process.env.STUDIO_SNAP && !process.argv.includes('--hidden')) win.show(); });
-  // Screenshot for development checks: STUDIO_SNAP=out.png [STUDIO_PAGE=posts] [STUDIO_JS=code]
+  // Screenshot for development checks: STUDIO_SNAP=out.png [STUDIO_PAGE=posts] [STUDIO_JS=code] [STUDIO_SIZE=980x640]
   if (process.env.STUDIO_SNAP) {
     win.setPosition(-3000, 0); win.showInactive();
+    if (process.env.STUDIO_SIZE) { const [w, h] = process.env.STUDIO_SIZE.split('x').map(Number); win.setMinimumSize(Math.min(w, 980), Math.min(h, 640)); win.setSize(w, h); }
     win.webContents.on('console-message', (e) => { const m = e.message; const lv = e.level; if (lv === 'error' || lv === 3 || lv === 'warning') console.log('[renderer]', m); });
     win.webContents.once('did-finish-load', async () => {
       await new Promise(r => setTimeout(r, 2500));
@@ -210,7 +146,7 @@ function trayMenu() {
 
 app.on('second-instance', () => { if (win) { win.show(); win.focus(); } });
 app.whenReady().then(() => {
-  boot();
+  if (!boot()) return;
   ipcMain.handle('studio', async (_e, method, args) => {
     if (typeof api[method] !== 'function') throw new Error('unknown method ' + method);
     return api[method](args);

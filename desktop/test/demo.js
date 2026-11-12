@@ -33,6 +33,29 @@ function demoFake() {
   for (let i = 0; i < 5; i++) art('t:demo-sketch', 40 + i * 60, ['sketch', 'original'], { state: i === 4 ? 'private' : 'published' });
   for (let i = 0; i < 6; i++) fake.addPost('t:demo-ref', { timestamp: ts(2 + i * 3), tags: ['ref', 'lighting'], content: [], trail: [{ blog: { uuid: 't:other', name: 'someone' }, post: { id: String(9000 + i) }, content: [img(200 + i * 20, 'ref')] }], parent_tumblelog_uuid: 't:other', parent_post_id: String(9000 + i) });
   fake.addPost('t:demo-art', { state: 'draft', timestamp: 0, tags: ['wip'], content: [{ type: 'text', text: 'Work in progress' }] });
+  // fans & interactions: made-up followers and activity
+  const fans = ['demo-rain', 'demo-kite', 'demo-boat', 'demo-tree', 'demo-moss', 'demo-lark'];
+  fake.followerMap.set('t:demo-main', fans.slice(0, 5).map(name => ({ name, updated: 0 })));
+  fake.followerMap.set('t:demo-art', [{ name: 'demo-kite', updated: 0 }, { name: 'demo-lark', updated: 0 }]);
+  fans.forEach((name, i) => fake.infos.set(name, { uuid: 't:fan' + i }));
+  const target = fake.addPost('t:demo-main', { timestamp: ts(1), tags: ['lighting study'], content: [img(40, 'light'), { type: 'text', text: 'Lighting study' }] });
+  const n = (d, type, i, extra = {}) => ({ id: 'n' + d + type + i, type, timestamp: Math.floor((now - d * 3600e3) / 1000), target_tumblelog_uuid: 't:demo-main',
+    from_tumblelog_uuid: 't:fan' + i, from_tumblelog_name: fans[i], target_post_id: target.id_string, target_post_summary: 'Lighting study', ...extra });
+  // the discussion under it (replies are read through the browser in real use)
+  fake.replyStore.set(target.id_string, [{ id: 'r1', uuid: 't:fan0', name: 'demo-rain', text: 'The light here is lovely, which brush did you use?', at: now - 2 * 3600e3, children: [] }]);
+  // a post with blocks the editor keeps as they are (a mention, a video) next to a row of two images
+  fake.addPost('t:demo-art', { timestamp: ts(2), tags: ['original', 'example series'], content: [
+    { type: 'text', text: 'Two colour roughs for the cover' }, img(300, 'A'), img(330, 'B'),
+    { type: 'text', text: 'Thanks @demo-kite for the idea', formatting: [{ type: 'mention', start: 7, end: 17, blog: { uuid: 't:fan1', name: 'demo-kite' } }] },
+    { type: 'video', provider: 'youtube', url: 'https://www.youtube.com/watch?v=demo' }],
+  layout: [{ type: 'rows', display: [{ blocks: [0] }, { blocks: [1, 2] }, { blocks: [3] }, { blocks: [4] }] }] });
+  fake.notifs.set('t:demo-main', [
+    n(2, 'reply', 0, { reply_text: 'The light here is lovely, which brush did you use?' }),
+    n(3, 'reblog_naked', 1, { post_tags: ['that expression', 'want the process'], post_id: '777' }),
+    n(5, 'mention_in_post', 2, { reply_text: 'Inviting you to this month’s drawing event!' }),
+    n(6, 'like', 3), n(7, 'like', 4), n(30, 'reblog', 0, { added_text: 'saving this for later practice', post_id: '778' }),
+    n(50, 'follower', 5, { target_post_id: '' }),
+  ]);
   return fake;
 }
 

@@ -17,7 +17,7 @@ const PROTOCOL = 1;
 const PORTS = [47823, 47824, 47825];
 const sha = s => crypto.createHash('sha256').update(String(s)).digest('hex');
 
-function makeBridge(svc, api, { version = '0', relay = null, approve = async () => false, onOpen = () => {}, getPost = null } = {}) {
+function makeBridge(svc, api, { version = '0', relay = null, approve = async () => false, checkGrant = null, onOpen = () => {}, getPost = null } = {}) {
   const { db, jobs } = svc;
   const now = svc.ctx.now;
   const paired = () => db.getMeta('companion', null); // { extId, tokenHash, account, at }
@@ -65,8 +65,9 @@ function makeBridge(svc, api, { version = '0', relay = null, approve = async () 
       onOpen({ blog: b?.uuid || null, id: String(r.id || ''), item: row?.item_id || null });
       return { result: { opened: true, known: !!row } };
     },
-    // Bring the app forward (the companion page's "Open Tumblr Studio")
-    async focus() { onOpen({}); return { result: { opened: true } }; },
+    // Bring the app forward (the companion page's "Open Tumblr Studio"). `fresh`: the toolbar icon found no app
+    // tab in its browser, so a page is opened even if one is connected elsewhere (the app signs it in itself).
+    async focus(r) { onOpen({ fresh: r.fresh === true }); return { result: { opened: true } }; },
     // Collect a post onto the material blog: the app reads the post itself (identity only comes from the page)
     async collect(r) {
       if (!api.collect) throw Object.assign(new Error('collecting is not available'), { status: 400 });
@@ -114,12 +115,21 @@ function makeBridge(svc, api, { version = '0', relay = null, approve = async () 
       // The same unpacked extension has the same id in every Chrome profile, so the id alone can't say which
       // browser is paired: only the one holding the current token is (pairing another profile replaces it).
       const tokenOk = !!pr && !!auth && sha(String(auth).replace(/^Bearer\s+/i, '')) === pr.tokenHash;
-      return { status: 200, json: { v: PROTOCOL, app: 'tumblr-studio', version, paired: !!pr && pr.extId === ext[1] && tokenOk, account: account(), primary: primaryName() } };
+      return { status: 200, json: { v: PROTOCOL, app: 'tumblr-studio', version, paired: !!pr && pr.extId === ext[1] && tokenOk,
+        // connected, but to another browser (another Chrome profile, or another copy of the extension): says so, no details
+        elsewhere: !!pr && !(pr.extId === ext[1] && tokenOk), account: account(), primary: primaryName() } };
     }
     if (path === '/pair') {
       // the extension says which account its browser is logged into; a different account is refused
       if (body.primary && primaryName() && String(body.primary).toLowerCase() !== primaryName().toLowerCase()) return { status: 409, json: { error: 'other_account', primary: primaryName() } };
-      if (!(await approve(ext[1]))) return { status: 403, json: { error: 'declined' } };
+      // A pairing grant from a signed-in page of this app pairs at once. Otherwise the user confirms in the app,
+      // which shows the code the extension shows (any local program can call this port; the user's yes is the check).
+      const granted = !!checkGrant && !!body.grant && checkGrant(String(body.grant));
+      if (!granted) {
+        const code = /^\d{4}$/.test(String(body.code || '')) ? String(body.code) : null;
+        if (!code) return { status: 403, json: { error: 'grant_required' } };
+        if (!(await approve(ext[1], { code }))) return { status: 403, json: { error: 'declined' } };
+      }
       const token = crypto.randomBytes(24).toString('hex');
       db.setMeta('companion', { extId: ext[1], tokenHash: sha(token), primary: primaryName(), at: now() });
       db.log('info', 'companion', 'browser extension paired', { extId: ext[1] });

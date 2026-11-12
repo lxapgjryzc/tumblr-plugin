@@ -266,6 +266,8 @@ const reblog = {
     }
     if (!id) { mapSet(db, p, 'unknown', { tags }); return { status: 'unknown', error: 'no id in the response', nextAt: ctx.now() + 30_000, payload: { ...p, tags, sentAt: ctx.now() } }; }
     const v = await verifyCopy(ctx, p, id, tags);
+    // the new copy belongs to its original's work now (and may change which blog manages it)
+    require('./groups').rebuild(db, ctx.now());
     if (v.ok === false) {
       mapSet(db, p, 'conflict', { destId: id, tags, reason: !v.bodyOk ? 'the reblog does not hold the expected version of the original' : 'the reblog\'s tags differ from the ones sent' });
       return { status: 'succeeded', error: 'created, but not as expected (left as it is)', result: { dest_id: id, mismatch: true } };

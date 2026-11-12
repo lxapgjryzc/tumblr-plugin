@@ -61,6 +61,7 @@
     $('lang').value = state.prefs.lang || '';
     const hello = await host.hello();
     if (!hello?.running) { conn.className = 'conn off'; conn.textContent = t('cpNotRunning'); }
+    else if ((!state.paired || !hello.paired) && hello.elsewhere) { conn.className = 'conn warn'; conn.textContent = t('cpElsewhere', hello.account?.name || hello.primary || '?'); }
     else if (!state.paired || !hello.paired) { conn.className = 'conn warn'; conn.textContent = t('cpNotPaired', hello.account?.name || hello.primary || '?'); }
     else { conn.className = 'conn ok'; conn.textContent = t('cpPaired', state.primary || hello.primary || '?'); }
     $('pairBtn').hidden = !hello?.running || (state.paired && hello.paired);
@@ -74,8 +75,26 @@
   const actions = {
     async pair() {
       $('conn').textContent = t('cpPairing');
-      const r = await host.pair();
-      if (r?.error === 'other_account') alertBox(t('cpOtherAccount', r.primary || '?'));
+      // A pairing grant from the app page this companion page belongs to (signed in through the app's launcher in
+      // this browser profile): it ties the pairing to this profile's backend. The extension's own fallback page has none.
+      let grant = null, port = null;
+      if (location.protocol === 'http:') {
+        try {
+          const g = await (await fetch('/api/call', { method: 'POST', headers: { 'Content-Type': 'application/json', 'X-Studio': '1' }, body: JSON.stringify({ method: 'pairingGrant' }), credentials: 'same-origin' })).json();
+          if (g.ok) ({ grant, port } = g.value);
+        } catch {}
+      }
+      // No grant (this extension's own page, or the app page signed out): Tumblr Studio asks the user, with this code
+      let code = null;
+      if (!grant) {
+        code = String(1000 + Math.floor(Math.random() * 9000));
+        $('conn').textContent = t('cpPairConfirm', code);
+      }
+      const r = await host.pair(grant, port, code);
+      if (r?.error === 'declined') alertBox(t('cpPairDeclined'));
+      else if (r?.error === 'not_running') alertBox(t('studioNotRunning'));
+      else if (r?.error === 'grant_required' || r?.error === 'bad_grant') alertBox(t('cpPairFromApp'));
+      else if (r?.error === 'other_account') alertBox(t('cpOtherAccount', r.primary || '?'));
       else if (r?.error) alertBox(t('studioRefused', r.error));
       render();
     },
@@ -114,4 +133,6 @@
   host?.onChange(() => render());
   await render();
   host?.refresh();
+  // arrived from the extension's own page to connect: start pairing here at once
+  if (location.hash === '#pair' && !inExtension && host) { history.replaceState(null, '', location.pathname); actions.pair(); }
 })();

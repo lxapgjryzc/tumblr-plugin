@@ -2,6 +2,8 @@
 
 Design date: 2026-11-06. Companion to [DESKTOP_PRODUCT_SPEC.md](DESKTOP_PRODUCT_SPEC.md). This is an implementation design, not a deployed classifier or permission to take actions against current followers during development.
 
+**Product integration (user request, 2026-11-07):** follower protection becomes the Account protection area within the proposed [Fans & interactions module](FAN_RELATIONSHIP_SPEC.md), alongside relationship records, interaction follow-up and follower changes. The new document owns the combined navigation, shared discovery and migration plan; this document continues to own evidence policy, protection execution, correction and automation release gates. Integration does not create a second classifier, reset existing cases or enable new account actions. The broader module is a design, not an implemented feature.
+
 **Delivery status (2026-11-06):** `desktop/` implements baseline discovery, evidence review, allowlisting and manual block/unblock flows. Automatic blocking remains unavailable pending the quality evaluation below; real block/unblock acceptance is still unverified. Reports use Tumblr's UI and remain pending until user confirmation, which is not an automated transport receipt. Review mode is an intermediate delivery required by section 5, not removal of the automation goal or completion of every stage-4 acceptance check. See [implementation status and gaps](DESKTOP_IMPLEMENTATION_STATUS.md). No new account action is authorised by this update.
 
 ## 1. Outcome and scope

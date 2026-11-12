@@ -35,7 +35,7 @@ function makeCompanionOps(chrome) {
       return { ok: true };
     },
     hello: () => send({ type: 'studioHello' }),
-    pair: () => send({ type: 'studioPair' }),
+    pair: (grant, port, code) => send({ type: 'studioPair', grant: typeof grant === 'string' ? grant : null, port: Number(port) || null, code: /^\d{4}$/.test(String(code || '')) ? String(code) : null }),
     unpair: () => send({ type: 'studioUnpair' }),
     focus: () => send({ type: 'openStudio' }),
     refresh: () => send({ type: 'studioRefresh' }),

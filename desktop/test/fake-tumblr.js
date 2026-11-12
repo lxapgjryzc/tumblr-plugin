@@ -3,7 +3,7 @@
 // reblogged, reads right after a write may be stale, total_posts leaves out private posts.
 // All names and ids are made up.
 
-const { HttpError, NetError } = require('../src/service/errors');
+const { HttpError, NetError, WaitError } = require('../src/service/errors');
 
 function makeFake({ blogs = [], staleReads = 0, now = Date.now } = {}) {
   let seq = 1000000000000000000n;
@@ -61,10 +61,20 @@ function makeFake({ blogs = [], staleReads = 0, now = Date.now } = {}) {
       Object.assign(p, { content: body.content, layout: body.layout, state: body.state, tags: body.tags ? body.tags.split(',').filter(Boolean) : [] });
       return {};
     },
+    // multipart edit (new image files): each new image gets a made-up Tumblr media URL
+    async putPostFiles(blog, id, body, files = []) {
+      calls.push('putfiles:' + id);
+      const ids = new Set(files.map(f => f.identifier));
+      const content = (body.content || []).map(b => b.type === 'image' && ids.has(b.media?.[0]?.identifier)
+        ? { ...b, media: [{ url: `https://64.media.tumblr.com/new${b.media[0].identifier}/s540x810/x.jpg`, width: 540, height: 540 }] } : b);
+      return T.putPost(blog, id, { ...body, content });
+    },
     async createPost(blog, json, files = []) {
       calls.push('create:' + blog);
       check('POST');
-      const p = addPost(blog, { content: json.content, layout: json.layout || [], state: json.state || 'published', tags: (json.tags || '').split(',').filter(Boolean), _files: files.map(f => f.identifier) });
+      // like Tumblr: an empty text block is dropped on create (a later block takes its place)
+      const content = (json.content || []).filter(b => b.type !== 'text' || String(b.text || '').trim());
+      const p = addPost(blog, { content, layout: json.layout || [], state: json.state || 'published', tags: (json.tags || '').split(',').filter(Boolean), _files: files.map(f => f.identifier) });
       return p.id_string;
     },
     async reblog(dest, { parentBlog, parentId, reblogKey, state = 'published', tags = [], content = [] }) {
@@ -123,6 +133,22 @@ function makeFake({ blogs = [], staleReads = 0, now = Date.now } = {}) {
       const all = followerMap.get(blog) || [];
       return { total_users: all.length, users: all.slice(offset, offset + limit).map(clone) };
     },
+    // notifications: blog uuid -> newest-first list of raw (snake_case) notifications; paged like Tumblr (before = oldest timestamp)
+    notifs: new Map(),
+    async notifications(blog, { before = null } = {}) {
+      calls.push('notifications:' + blog + ':' + (before || ''));
+      check('GET');
+      const all = (T.notifs.get(blog) || []).slice().sort((a, b) => b.timestamp - a.timestamp);
+      const page = all.filter(n => before == null || n.timestamp <= Number(before)).slice(0, 50);
+      const last = page[page.length - 1];
+      return { notifications: page.map(clone), _links: page.length === 50 ? { next: { href: '/x', query_params: { rollups: 'false', before: String(last.timestamp) } } } : undefined };
+    },
+    async followedBy(blog, name) {
+      calls.push('followedBy:' + blog + ':' + name);
+      check('GET');
+      if (T.followedByFail?.has(name)) throw new HttpError('HTTP 404', { status: 404 });
+      return { followed_by: (followerMap.get(blog) || []).some(u => u.name === name) || !!T.hiddenFollowers?.has(name) };
+    },
     async following(offset = 0, limit = 20) { return { total_blogs: following.length, blogs: following.slice(offset, offset + limit) }; },
     async blocks(blog, offset = 0, limit = 20) {
       const all = [...(blockMap.get(blog) || [])].map(n => ({ name: n, uuid: infos.get(n)?.uuid }));
@@ -143,7 +169,35 @@ function makeFake({ blogs = [], staleReads = 0, now = Date.now } = {}) {
       return { posts: (i.posts || []).map(clone) };
     },
     budget: { stats: () => ({}) },
+    // Replies (web client only). browser: the paired browser is connected; replyStore: post id -> replies;
+    // replyLost: the next send lands but its answer is lost; replyHide: n reads that don't show new replies yet;
+    // replyRefuse: the next send is refused with that HTTP status
+    browser: true, replyStore: new Map(), replyLost: false, replyHide: 0, replyRefuse: 0, replySends: 0,
+    async replies(blog, id) {
+      calls.push('replies:' + id);
+      check('GET');
+      const list = (T.replyStore.get(String(id)) || []).filter(r => !(T.replyHide > 0 && r.fresh));
+      if (T.replyHide > 0) T.replyHide--;
+      else for (const r of T.replyStore.get(String(id)) || []) delete r.fresh;
+      return { source: T.browser ? 'replies' : 'notes', replies: clone(list.map(({ fresh, ...r }) => r)) };
+    },
+    async sendReply({ postId, postBlog, reblogKey, text, replyAs }) {
+      if (!T.browser) throw new WaitError('needs the signed-in browser (fake)');
+      calls.push('reply:' + postId + ':' + replyAs);
+      check('POST');
+      if (T.replyRefuse) { const st = T.replyRefuse; T.replyRefuse = 0; throw new HttpError('HTTP ' + st + ': replies are off', { status: st }); }
+      const p = posts.get(String(postId));
+      if (!p || p.reblog_key !== reblogKey || (p.blog.name !== postBlog && p.blog.uuid !== postBlog)) throw new HttpError('HTTP 404', { status: 404 });
+      T.replySends++;
+      const me = blogOf(replyAs);
+      const list = T.replyStore.get(String(postId)) || [];
+      list.push({ id: 'r' + nextId(), uuid: me?.uuid || null, name: me?.name || replyAs, text, at: now(), children: [], fresh: true });
+      T.replyStore.set(String(postId), list);
+      if (T.replyLost) { T.replyLost = false; throw new NetError('connection reset after send (fake)', { uncertain: true }); }
+      return {};
+    },
   };
+  T.relay = { stats: () => ({ enabled: true, connected: T.browser }) };
   return T;
 }
 

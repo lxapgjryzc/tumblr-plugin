@@ -15,16 +15,19 @@ const crypto = require('node:crypto');
 const { pathToFileURL } = require('node:url');
 const { J, P } = require('./db');
 const C = require('./core');
-const { upsertPost } = require('./posts');
+const { upsertPost, contentFingerprint, latestRevision, editBody: editBodyFrom } = require('./posts');
 const routes = require('./routes');
-const { fresh, verifyStep } = require('./ops');
-const { UnsupportedError, StaleError } = require('./errors');
+const { fresh, verifyStep, labelGate, categoryFirst } = require('./ops');
+const { UnsupportedError, StaleError, HttpError } = require('./errors');
 
 const DOC_VERSION = 1;
 const CONVERTER = 'npf-1';
 const MAX_ROW = 3; // images side by side; Tumblr's editor offers up to 3
 const SUBTYPES = ['heading1', 'heading2', 'quote', 'indented', 'chat', 'quirky', 'ordered-list-item', 'unordered-list-item'];
-const FORMATS = ['bold', 'italic', 'strikethrough', 'small', 'link', 'color'];
+const FORMATS = ['bold', 'italic', 'strikethrough', 'small', 'link', 'color', 'mention'];
+// What the editor can show and change inside a text block. A block with any other formatting (colour, mentions)
+// is kept exactly as it is (locked) when a published post is edited, so nothing is silently dropped.
+const EDITABLE_FORMATS = ['bold', 'italic', 'strikethrough', 'small', 'link'];
 // The flat list older versions seeded; kept only to recognise untouched seeds during the grouped migration
 const CATEGORY_SUGGESTIONS = [['Diary', 'diary'], ['Fanart', 'fanart'], ['Original', 'original'], ['Photo', 'photo'], ['Writing', 'writing']];
 const CATEGORY_DEFAULTS = path.join(__dirname, 'categories.default.json');
@@ -37,7 +40,7 @@ const emptyDoc = () => ({ v: DOC_VERSION, blocks: [{ id: 'b' + crypto.randomByte
 
 // Keep the document consistent: rows only hold existing, adjacent image blocks, 2..MAX_ROW per row
 function normaliseDoc(doc) {
-  const blocks = (doc.blocks || []).filter(b => b && b.id && ['text', 'image', 'link', 'readmore'].includes(b.type));
+  const blocks = (doc.blocks || []).filter(b => b && b.id && ['text', 'image', 'link', 'readmore', 'keep'].includes(b.type));
   const idx = new Map(blocks.map((b, i) => [b.id, i]));
   const used = new Set();
   const rows = [];
@@ -65,14 +68,26 @@ function compile(doc, assetsById = new Map()) {
   let truncateAfter = null;
   for (const b of doc.blocks) {
     if (b.type === 'readmore') { if (content.length) truncateAfter = content.length - 1; continue; }
+    // An empty text block (an unused editor line, wherever it is) is not content: Tumblr drops it on create,
+    // so sending it would only make the published post never match what was sent (BUG-20261108-02/03)
+    if (b.type === 'text' && !String(b.text || '').trim()) continue;
     map.set(b.id, content.length);
     if (b.type === 'text') {
       const blk = { type: 'text', text: String(b.text || '') };
       if (b.subtype && SUBTYPES.includes(b.subtype)) blk.subtype = b.subtype;
       const n = cpLen(blk.text);
       const f = (b.formatting || []).filter(x => FORMATS.includes(x.type) && x.start >= 0 && x.end <= n && x.start < x.end)
-        .map(x => ({ type: x.type, start: x.start, end: x.end, ...(x.type === 'link' ? { url: linkHref(x.url) } : {}), ...(x.type === 'color' ? { hex: x.hex } : {}) }));
+        .map(x => ({ type: x.type, start: x.start, end: x.end, ...(x.type === 'link' ? { url: linkHref(x.url) } : {}), ...(x.type === 'color' ? { hex: x.hex } : {}), ...(x.type === 'mention' ? { blog: x.blog } : {}) }));
       if (f.length) blk.formatting = f;
+      content.push(blk);
+    } else if (b.type === 'keep') {
+      // a block of a published post the editor doesn't handle (video, audio, poll, ...): sent back as it was
+      content.push(b.raw);
+    } else if (b.type === 'image' && Array.isArray(b.remote) && b.remote.length) {
+      // an image already on Tumblr (editing a published post): its own media list, nothing uploaded again
+      const blk = { ...(b.extra || {}), type: 'image', media: b.remote };
+      if (b.alt) blk.alt_text = String(b.alt);
+      if (b.caption) blk.caption = String(b.caption);
       content.push(blk);
     } else if (b.type === 'image') {
       const a = assetsById.get(b.asset);
@@ -83,14 +98,10 @@ function compile(doc, assetsById = new Map()) {
       content.push(blk);
     } else if (b.type === 'link') {
       if (!/^https?:\/\//i.test(b.url || '')) problems.push({ block: b.id, problem: 'bad_link' });
-      content.push({ type: 'link', url: linkHref(b.url), ...(b.title ? { title: String(b.title) } : {}) });
+      // a published link card keeps what Tumblr filled in (title, poster, ...) while its address is unchanged
+      const extra = b.extra && b.origUrl === b.url ? b.extra : {};
+      content.push({ ...extra, type: 'link', url: b.origUrl === b.url ? b.url : linkHref(b.url), ...(b.title ? { title: String(b.title) } : {}) });
     }
-  }
-  // empty trailing text blocks are dropped (an empty editor line is not content)
-  while (content.length && content[content.length - 1].type === 'text' && !content[content.length - 1].text.trim()) {
-    const id = [...map.entries()].find(([, i]) => i === content.length - 1)?.[0];
-    if (id) map.delete(id);
-    content.pop();
   }
   if (!content.length) problems.push({ problem: 'empty' });
   let layout = [];
@@ -111,6 +122,61 @@ function compile(doc, assetsById = new Map()) {
   return { content, layout, problems };
 }
 
+// A published original's NPF -> the editor's document, for editing it in place. Returns { doc } or
+// { unsupported: code } when the layout can't be shown faithfully (an ask, a carousel, rows in another order,
+// rows with text in them). Blocks the editor can't change are kept verbatim ('keep', or text marked `locked`),
+// and existing images keep their Tumblr media (`remote`): sending the document back changes only what was edited.
+function decompile(p) {
+  const content = p.content || [];
+  const layout = p.layout || [];
+  const other = layout.filter(l => l.type !== 'rows');
+  if (other.length) return { unsupported: 'layout_' + (other[0].type || 'other') };
+  const id = () => 'b' + crypto.randomBytes(5).toString('hex');
+  const blocks = content.map(b => {
+    if (b.type === 'text') {
+      const plainKeys = Object.keys(b).every(k => ['type', 'text', 'subtype', 'formatting'].includes(k));
+      const okSub = !b.subtype || SUBTYPES.includes(b.subtype);
+      if (!plainKeys || !okSub) return { id: id(), type: 'keep', raw: b, label: 'text' };
+      const fmt = (b.formatting || []).map(f => ({ ...f }));
+      const out = { id: id(), type: 'text', text: String(b.text || ''), ...(b.subtype ? { subtype: b.subtype } : {}), formatting: fmt };
+      if (fmt.some(f => !EDITABLE_FORMATS.includes(f.type))) out.locked = true;
+      return out;
+    }
+    if (b.type === 'image' && Array.isArray(b.media) && b.media.length) {
+      const { type, media, alt_text, caption, ...extra } = b;
+      return { id: id(), type: 'image', remote: media, alt: alt_text || '', caption: caption || '', extra };
+    }
+    if (b.type === 'link' && b.url) {
+      const { type, url, title, ...extra } = b;
+      return { id: id(), type: 'link', url, origUrl: url, ...(title ? { title } : {}), extra };
+    }
+    return { id: id(), type: 'keep', raw: b, label: b.type || 'block' };
+  });
+  const rows = [];
+  let truncate = null;
+  const rl = layout.find(l => l.type === 'rows');
+  if (rl) {
+    if (Object.keys(rl).some(k => !['type', 'display', 'truncate_after'].includes(k))) return { unsupported: 'layout_rows' };
+    truncate = rl.truncate_after ?? null;
+    const order = [];
+    for (const d of rl.display || []) {
+      const bl = d.blocks || [];
+      if (Object.keys(d).some(k => k !== 'blocks')) return { unsupported: 'layout_rows' };
+      if (bl.length > 1) {
+        const images = bl.every(i => blocks[i]?.type === 'image');
+        const adjacent = bl.every((x, k) => !k || x === bl[k - 1] + 1);
+        if (!images || !adjacent || bl.length > MAX_ROW) return { unsupported: 'layout_rows' };
+        rows.push(bl.map(i => blocks[i].id));
+      }
+      order.push(...bl);
+    }
+    if (JSON.stringify(order) !== JSON.stringify(content.map((_, i) => i))) return { unsupported: 'layout_order' };
+  }
+  if (truncate != null && truncate >= 0 && truncate < blocks.length - 1) blocks.splice(truncate + 1, 0, { id: id(), type: 'readmore' });
+  if (!blocks.length) blocks.push({ id: id(), type: 'text', text: '' });
+  return { doc: { v: DOC_VERSION, blocks, rows } };
+}
+
 // Final tag order: general categories → template tags → hand-written extras. Duplicates keep the earliest
 // segment's spelling. Returns [{ tag, from: 'category' | 'template' | 'extra' }].
 function composeTags({ categories = [], template = [], extra = [] }) {
@@ -120,7 +186,7 @@ function composeTags({ categories = [], template = [], extra = [] }) {
   return out;
 }
 
-function addWriting(svc, api, { dataDir }) {
+function addWriting(svc, api, { dataDir, assetUrl = null }) {
   const { db, jobs } = svc;
   const now = svc.ctx.now;
   const assetDir = path.join(dataDir, 'assets');
@@ -129,7 +195,8 @@ function addWriting(svc, api, { dataDir }) {
     const a = db.get('SELECT * FROM assets WHERE id = ?', id);
     if (!a) return null;
     const file = path.join(assetDir, a.file);
-    return { ...a, path: file, url: pathToFileURL(file).href, exists: fs.existsSync(file) };
+    // the web UI loads images from the backend (/asset/<id>); the Electron window could read the file directly
+    return { ...a, path: file, url: assetUrl ? assetUrl(a.id) : pathToFileURL(file).href, exists: fs.existsSync(file) };
   };
   const assetsOf = doc => new Map((doc.blocks || []).filter(b => b.type === 'image' && b.asset).map(b => [b.asset, assetRow(b.asset)]).filter(([, a]) => a));
 
@@ -201,8 +268,16 @@ function addWriting(svc, api, { dataDir }) {
     const doc = P(r.doc, emptyDoc());
     const assets = {};
     for (const [id, a] of assetsOf(doc)) assets[id] = { url: a.url, exists: a.exists, width: a.width, height: a.height, mime: a.mime };
-    return { ...r, doc, options: P(r.options, {}), assets };
+    const out = { ...r, doc, options: P(r.options, {}), assets, base: P(r.base), conflict: P(r.conflict), stash: P(r.stash) };
+    if (r.kind === 'edit') {
+      // the newest body this app has seen of the post (a sync, or another read), against the edit's base
+      const last = latestRevision(db, r.target_blog, r.target_id);
+      out.remoteChanged = !!(last && out.base && last.fingerprint !== out.base.fingerprint);
+      out.target = db.get('SELECT blog, id, state, item_id, kind FROM posts WHERE blog = ? AND id = ?', r.target_blog, r.target_id) || null;
+    }
+    return out;
   }
+  const nearUrl = media => (media || []).reduce((a, b) => (!a || Math.abs((b.width || 0) - 540) < Math.abs((a.width || 0) - 540) ? b : a), null)?.url || null;
   const titleOf = doc => (doc.blocks || []).find(b => b.type === 'text' && b.text?.trim())?.text.trim().slice(0, 60) || '';
 
   Object.assign(api, {
@@ -332,10 +407,11 @@ function addWriting(svc, api, { dataDir }) {
 
     // ----- drafts -----
     drafts() {
-      return db.all(`SELECT id, blog, doc, status, remote_blog, remote_id, updated_at FROM drafts WHERE status != 'published' ORDER BY updated_at DESC`).map(r => {
+      return db.all(`SELECT id, blog, doc, status, kind, target_blog, target_id, remote_blog, remote_id, updated_at FROM drafts WHERE status != 'published' ORDER BY updated_at DESC`).map(r => {
         const doc = P(r.doc, emptyDoc());
         const img = doc.blocks.find(b => b.type === 'image');
-        return { id: r.id, blog: r.blog, status: r.status, updated_at: r.updated_at, title: titleOf(doc), thumb: img ? assetRow(img.asset)?.url : null };
+        const thumb = img ? (img.remote ? nearUrl(img.remote) : assetRow(img.asset)?.url) : null;
+        return { id: r.id, blog: r.blog, status: r.status, kind: r.kind, target_id: r.target_id, updated_at: r.updated_at, title: titleOf(doc), thumb };
       });
     },
     draft({ id }) { return draftOut(db.get('SELECT * FROM drafts WHERE id = ?', id)); },
@@ -347,9 +423,13 @@ function addWriting(svc, api, { dataDir }) {
     },
     // Autosave. revision = the revision the editor started from; a mismatch means another save won.
     saveDraft({ id, doc, options, revision, blog }) {
-      const cur = db.get('SELECT revision, status FROM drafts WHERE id = ?', id);
+      const cur = db.get('SELECT revision, status, kind, target_blog FROM drafts WHERE id = ?', id);
       if (!cur) throw new Error('draft not found');
       if (cur.status === 'publishing') throw new Error('the draft is being published');
+      if (cur.kind === 'edit') {
+        if (cur.status !== 'editing') throw new Error('this edit is being sent or waits for your choice');
+        blog = cur.target_blog; // an edit stays on its post's blog
+      }
       if (revision != null && cur.revision !== revision) throw new Error('conflict: the draft was saved elsewhere (reload it)');
       const clean = normaliseDoc(doc);
       db.run('UPDATE drafts SET doc = ?, options = ?, blog = ?, revision = revision + 1, updated_at = ? WHERE id = ?', J(clean), J(options || {}), blog ?? null, now(), id);
@@ -358,6 +438,7 @@ function addWriting(svc, api, { dataDir }) {
     deleteDraft({ id }) {
       const d = db.get('SELECT status FROM drafts WHERE id = ?', id);
       if (d?.status === 'publishing') throw new Error('the draft is being published');
+      if (db.get(`SELECT id FROM jobs WHERE scope = ? AND status IN ('pending', 'running', 'verifying', 'waiting', 'unknown')`, `draft:${id}`)) throw new Error('its edit is still being sent');
       db.run('DELETE FROM drafts WHERE id = ?', id);
       return true;
     },
@@ -392,6 +473,7 @@ function addWriting(svc, api, { dataDir }) {
       if (!d) throw new Error('draft not found');
       if (d.status === 'publishing') throw new Error('already publishing');
       if (d.status === 'published') throw new Error('already published');
+      if (d.kind === 'edit') throw new Error('this is an edit of a published post: send it with “Update on Tumblr”');
       if (!d.blog) throw new Error('choose a blog');
       const doc = P(d.doc), opts = P(d.options, {});
       const c = compile(doc, assetsOf(doc));
@@ -409,10 +491,159 @@ function addWriting(svc, api, { dataDir }) {
     reopenDraft({ id }) {
       const open = db.get(`SELECT id FROM jobs WHERE scope = ? AND status IN ('pending', 'running', 'verifying', 'waiting', 'unknown')`, `draft:${id}`);
       if (open) throw new Error('the publish is still in progress or its outcome is unknown');
-      db.run(`UPDATE drafts SET status = 'editing' WHERE id = ? AND status IN ('publishing', 'failed')`, id);
+      db.run(`UPDATE drafts SET status = 'editing' WHERE id = ? AND status IN ('publishing', 'submitting', 'failed')`, id);
       return api.draft({ id });
     },
   });
+
+  // ----- editing a published original (FUNCTIONAL_WORKFLOWS_SPEC 3.2, FW02-FW04, FW09) -----
+  // The post is read fresh from Tumblr when the edit starts (never rebuilt from a local draft, so changes made
+  // on the web or phone are what you edit), kept as the edit's base, and checked again right before sending.
+  const OPEN_EDIT = ['editing', 'submitting', 'conflict', 'failed'];
+  const tagKeyE = tags => JSON.stringify((tags || []).map(C.key));
+  function baseOf(p, row) {
+    return { fingerprint: contentFingerprint(p.content, p.layout), tags: (row.tags || []).slice(), state: row.state, at: now(),
+      rev: latestRevision(db, row.blog, row.id)?.rev || null, blogName: p.blog?.name || null };
+  }
+  async function readForEdit(blog, id) {
+    const { p, row } = await fresh(svc.ctx, blog, id);
+    if (!row) throw new Error('the post could not be read');
+    if (row.kind !== 'original') throw new Error('a reblog is a frozen snapshot; edit its original instead');
+    if (row.legacy) throw new Error('this post is in Tumblr’s legacy format; edit it on Tumblr');
+    if (!['published', 'private', 'queue', 'draft'].includes(row.state)) throw new Error('the post is ' + row.state);
+    const res = decompile(p);
+    if (res.unsupported) throw new Error('unsupported:' + res.unsupported);
+    return { p, row, doc: res.doc };
+  }
+  Object.assign(api, {
+    // Start (or resume) editing one of my originals. An unfinished edit of the same post is resumed, never
+    // replaced: its text and images are what you left.
+    async editPublished({ blog, id }) {
+      const have = db.get(`SELECT id FROM drafts WHERE kind = 'edit' AND target_blog = ? AND target_id = ? AND status IN (${OPEN_EDIT.map(() => '?').join(',')}) ORDER BY id DESC LIMIT 1`, blog, String(id), ...OPEN_EDIT);
+      if (have) return api.draft({ id: have.id });
+      const { p, row, doc } = await readForEdit(blog, id);
+      const r = db.run(`INSERT INTO drafts (blog, doc, options, revision, status, kind, target_blog, target_id, base, created_at, updated_at)
+        VALUES (?, ?, ?, 1, 'editing', 'edit', ?, ?, ?, ?, ?)`, row.blog, J(doc), J({ tags: (row.tags || []).slice() }), row.blog, row.id, J(baseOf(p, row)), now(), now());
+      return api.draft({ id: Number(r.lastInsertRowid) });
+    },
+    // Send the edit: the same post, by id, with the edited body; state never changes here
+    submitEdit({ id }) {
+      const d = db.get('SELECT * FROM drafts WHERE id = ?', id);
+      if (!d || d.kind !== 'edit') throw new Error('not an edit of a published post');
+      if (d.status !== 'editing') throw new Error(d.status === 'conflict' ? 'Tumblr has a newer version: choose which one to keep first' : 'already being sent');
+      const doc = P(d.doc), opts = P(d.options, {});
+      const c = compile(doc, assetsOf(doc));
+      if (c.problems.length) throw new Error('fix first: ' + c.problems.map(x => x.problem).join(', '));
+      const base = P(d.base);
+      const tags = (opts.tags || []).map(C.norm).filter(Boolean);
+      db.run(`UPDATE drafts SET status = 'submitting', updated_at = ? WHERE id = ?`, now(), id);
+      const job = jobs.add('post.edit', { draft: id, revision: d.revision, blog: d.target_blog, id: d.target_id, base, doc, tags, startedAt: now() }, { priority: 1, scope: `draft:${id}` });
+      return { job };
+    },
+    // After a refused submit (Tumblr changed meanwhile). 'theirs': edit Tumblr's version (your text is kept
+    // aside and can be brought back); 'mine': keep your text, take Tumblr's version as the new base, and
+    // send again only when you choose to (nothing is sent here).
+    async resolveEdit({ id, use }) {
+      const d = db.get('SELECT * FROM drafts WHERE id = ?', id);
+      if (!d || d.kind !== 'edit' || d.status !== 'conflict') throw new Error('nothing to choose');
+      const { p, row, doc } = await readForEdit(d.target_blog, d.target_id);
+      if (use === 'theirs') {
+        db.run(`UPDATE drafts SET doc = ?, options = ?, base = ?, conflict = NULL, stash = ?, status = 'editing', revision = revision + 1, updated_at = ? WHERE id = ?`,
+          J(doc), J({ tags: row.tags.slice() }), J(baseOf(p, row)), J({ doc: P(d.doc), options: P(d.options, {}), at: now() }), now(), id);
+      } else if (use === 'mine') {
+        db.run(`UPDATE drafts SET base = ?, conflict = NULL, status = 'editing', revision = revision + 1, updated_at = ? WHERE id = ?`, J(baseOf(p, row)), now(), id);
+      } else throw new Error('choose mine or theirs');
+      return api.draft({ id });
+    },
+    // Bring back the text kept aside when Tumblr's version was taken (Tumblr's stays as the base)
+    restoreStash({ id }) {
+      const d = db.get('SELECT * FROM drafts WHERE id = ?', id);
+      const st = P(d?.stash);
+      if (!st || d.status !== 'editing') throw new Error('nothing kept aside');
+      db.run('UPDATE drafts SET doc = ?, options = ?, stash = NULL, revision = revision + 1, updated_at = ? WHERE id = ?', J(st.doc), J(st.options), now(), id);
+      return api.draft({ id });
+    },
+    // What Tumblr has now against what this edit started from (for the conflict view)
+    editRemote({ id }) {
+      const d = db.get('SELECT conflict, base FROM drafts WHERE id = ?', id);
+      return { conflict: P(d?.conflict), base: P(d?.base) };
+    },
+  });
+
+  function finishEdit(ctx, p, row) {
+    const rev = latestRevision(db, p.blog, p.id);
+    const tagsChanged = tagKeyE(row.tags) !== tagKeyE(p.base.tags);
+    const newRev = !!(rev && p.base.rev && rev.rev > p.base.rev) || (!!rev && rev.fingerprint !== p.base.fingerprint);
+    db.run(`UPDATE drafts SET status = 'published', remote_blog = ?, remote_id = ?, published_revision = ?, remote_fingerprint = ?, conflict = NULL, updated_at = ? WHERE id = ?`,
+      p.blog, p.id, rev?.rev || null, rev?.fingerprint || null, now(), p.draft);
+    // a tag change: my reblogs of this original take its tags (copytags, route automation); a body change is a
+    // new source revision, which only enabled routes deliver (routes.plan); old reblogs are never rewritten
+    if (tagsChanged) ctx.afterTags?.(p.blog, p.id);
+    const auto = db.getMeta('automation', {});
+    let planned = 0;
+    if (newRev && auto.routes && row.state === 'published') { require('./groups').rebuild(db, now()); planned = routes.plan(db, jobs, now()); }
+    return { rev: rev?.rev || null, newRevision: newRev, tagsChanged, planned };
+  }
+  svc.handlers['post.edit'] = {
+    async run(job, ctx) {
+      try { return await runEdit(job, ctx); }
+      catch (e) {
+        // a definite stop: back to the editor with everything kept; waiting (network, limits) keeps it queued
+        if (e instanceof UnsupportedError || e instanceof HttpError || e instanceof StaleError) db.run(`UPDATE drafts SET status = 'failed', updated_at = ? WHERE id = ? AND status = 'submitting'`, now(), job.payload.draft);
+        throw e;
+      }
+    },
+  };
+  async function runEdit(job, ctx) {
+    const p = job.payload;
+    const want = compile(p.doc, assetsOf(p.doc));
+    const images = c => (c || []).filter(b => b.type === 'image').length;
+    if (p.phase === 'verify') {
+      const { row } = await fresh(ctx, p.blog, p.id);
+      const got = P(db.get('SELECT payload FROM posts WHERE blog = ? AND id = ?', p.blog, String(p.id))?.payload, {}) || {};
+      const okBody = sameBody(want, got) && images(want.content) === images(got.content);
+      const okTags = tagKeyE(row.tags) === tagKeyE(p.expectTags);
+      const okState = row.state === p.expectState;
+      const why = [!okBody && bodyDiff(want, got), !okTags && 'the tags differ', !okState && `the post is ${row.state}, expected ${p.expectState}`].filter(Boolean).join('; ');
+      if (okBody && okTags && okState) return { status: 'succeeded', result: { id: p.id, ...finishEdit(ctx, p, row) } };
+      const out = verifyStep(ctx, job, false, null, `sent, but Tumblr doesn't show the edit: ${why}`);
+      if (out.status === 'failed') db.run(`UPDATE drafts SET status = 'failed', updated_at = ? WHERE id = ? AND status = 'submitting'`, now(), p.draft);
+      return out;
+    }
+    const d = db.get('SELECT status FROM drafts WHERE id = ?', p.draft);
+    if (!d) throw new StaleError('the edit was deleted');
+    if (want.problems.length) throw new UnsupportedError('cannot send: ' + want.problems.map(x => x.problem).join(', '));
+    labelGate(ctx);
+    const { p: cur, row } = await fresh(ctx, p.blog, p.id);
+    if (row.kind !== 'original') throw new UnsupportedError('not an original');
+    if (row.legacy) throw new UnsupportedError('legacy-format post');
+    const myTagsChanged = tagKeyE(p.tags) !== tagKeyE(p.base.tags);
+    const tagsOut = myTagsChanged ? categoryFirst(db, p.tags) : row.tags.slice();
+    // a retry after a lost answer: the edit is already there
+    if (sameBody(want, cur) && images(want.content) === images(cur.content) && want.content.every(b => b.type !== 'image' || !b.media?.[0]?.identifier)
+      && tagKeyE(row.tags) === tagKeyE(tagsOut)) {
+      return { status: 'verifying', payload: { ...p, phase: 'verify', verifyN: 0, expectTags: tagsOut, expectState: row.state }, nextAt: now() + 500 };
+    }
+    // Tumblr moved on since the edit started: nothing is sent, both versions are kept, you choose
+    const bodyMoved = contentFingerprint(cur.content, cur.layout) !== p.base.fingerprint;
+    const tagsMoved = tagKeyE(row.tags) !== tagKeyE(p.base.tags);
+    if (bodyMoved || (tagsMoved && myTagsChanged && tagKeyE(row.tags) !== tagKeyE(p.tags))) {
+      const why = bodyMoved ? 'body' : 'tags';
+      db.run(`UPDATE drafts SET status = 'conflict', conflict = ?, updated_at = ? WHERE id = ?`,
+        J({ why, content: cur.content || [], layout: cur.layout || [], tags: row.tags, state: row.state, at: now() }), now(), p.draft);
+      return { status: 'failed', error: `not sent: the post's ${why === 'body' ? 'text or images' : 'tags'} changed on Tumblr after you started editing` };
+    }
+    const files = [];
+    for (const b of p.doc.blocks.filter(b => b.type === 'image' && !(b.remote && b.remote.length))) {
+      const a = assetsOf(p.doc).get(b.asset);
+      files.push({ identifier: b.id, blob: new Blob([fs.readFileSync(a.path)], { type: a.mime }), filename: path.basename(a.path) });
+    }
+    // the full post as it is now, with the edited body (and tags only if you changed them); state as it is
+    const body = editBodyFrom(cur, { content: want.content, layout: want.layout, tags: tagsOut });
+    if (files.length) await ctx.tumblr.putPostFiles(p.blog, p.id, body, files);
+    else await ctx.tumblr.putPost(p.blog, p.id, body);
+    return { status: 'verifying', payload: { ...p, phase: 'verify', verifyN: 0, expectTags: tagsOut, expectState: row.state }, nextAt: now() + 2000 };
+  }
 
   // ----- the publish job -----
   const boxOf = state => (state === 'draft' ? 'draft' : state === 'queue' ? 'queue' : '');
@@ -557,4 +788,4 @@ function addWriting(svc, api, { dataDir }) {
   };
 }
 
-module.exports = { addWriting, compile, composeTags, normaliseDoc, emptyDoc, MAX_ROW };
+module.exports = { addWriting, compile, decompile, composeTags, normaliseDoc, emptyDoc, MAX_ROW };

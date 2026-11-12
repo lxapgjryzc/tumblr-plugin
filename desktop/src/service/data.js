@@ -6,6 +6,10 @@
 //    "hidden by the extension (unverified)". The original file is kept for rollback; importing twice is harmless.
 //  - backup: a consistent copy of the database (VACUUM INTO) plus the draft image files, with checksums.
 //  - restore: applied at the next start (the database can't be swapped while open), with automation paused.
+//  - settings transfer (format tumblr-studio-settings): this computer's settings, to set up the app on another
+//    computer for the same account. No keys, sign-in, posts, drafts, jobs or histories. Rules, routes and
+//    automatic collecting arrive switched off there, so two computers never run automation side by side by
+//    accident; nothing remote changes.
 
 const fs = require('node:fs');
 const path = require('node:path');
@@ -13,6 +17,7 @@ const crypto = require('node:crypto');
 const { J, P } = require('./db');
 const { writeAtomic } = require('./auth');
 const groups = require('./groups');
+const C = require('./core');
 
 const sha256 = file => crypto.createHash('sha256').update(fs.readFileSync(file)).digest('hex');
 const stamp = now => new Date(now).toISOString().replace(/[:.]/g, '-').slice(0, 19);
@@ -39,6 +44,138 @@ function planImport(db, exp) {
   };
 }
 
+// packs: one per id; a pack edited here is not replaced by an unedited one
+function mergePacks(db, incoming, source) {
+  const mine = db.getMeta('packs', []);
+  const idOf = p => { try { return (typeof p.raw === 'string' ? JSON.parse(p.raw) : p.raw)?.id; } catch { return null; } };
+  for (const p of incoming || []) {
+    const id = idOf(p);
+    if (!id) continue;
+    const i = mine.findIndex(x => idOf(x) === id);
+    if (i >= 0 && mine[i].edited && !p.edited) continue;
+    const row = { raw: p.raw, source: p.source || source, edited: !!p.edited };
+    if (i >= 0) mine[i] = row; else mine.push(row);
+  }
+  db.setMeta('packs', mine);
+}
+// tag statistics: newer sample wins
+function mergeStats(db, incoming) {
+  const stats = db.getMeta('tagStats', {});
+  for (const [k, v] of Object.entries(incoming || {})) if (!stats[k] || (v.at || 0) > (stats[k].at || 0)) stats[k] = v;
+  db.setMeta('tagStats', stats);
+}
+
+const SETTINGS_FORMAT = 'tumblr-studio-settings';
+
+function exportSettings(db, { now = Date.now(), version = null } = {}) {
+  const settings = { ...db.getMeta('settings', {}) };
+  if (settings.ai) { settings.ai = { ...settings.ai }; delete settings.ai.key; }
+  return {
+    format: SETTINGS_FORMAT, version: 1, app: version, exported: new Date(now).toISOString(),
+    account: db.getMeta('account', null)?.name || null,
+    note: 'Settings only: no keys, sign-in, posts, drafts, jobs or histories.',
+    settings, automation: db.getMeta('automation', {}),
+    packs: db.getMeta('packs', []), tagStats: db.getMeta('tagStats', {}), tplFavs: db.getMeta('tplFavs', []),
+    collect: db.getMeta('collect', null), followerGuard: db.getMeta('followerGuard', null), audience: db.getMeta('audience', null),
+    blogDefaults: db.getMeta('blogDefaults', {}),
+    roles: Object.fromEntries(db.all('SELECT uuid, name, role FROM blogs WHERE is_primary = 0 AND role IS NOT NULL').map(b => [b.uuid, { role: b.role, name: b.name }])),
+    categoryGroups: db.all('SELECT id, key, name, ord FROM category_groups ORDER BY ord, id').map(g => ({ ref: g.id, key: g.key, name: g.name, ord: g.ord })),
+    categories: db.all('SELECT id, name, tag, ord, group_id FROM categories ORDER BY ord, id').map(c => ({ ref: c.id, name: c.name, tag: c.tag, ord: c.ord, group: c.group_id })),
+    expiryRules: db.all('SELECT mode, blog, enabled, days, scope, kinds, targets, skip_pinned FROM expiry_rules').map(r => ({ ...r, kinds: P(r.kinds, []), targets: P(r.targets, []) })),
+    routes: db.all('SELECT sources, dest, enabled, exclude, delivery FROM routes').map(r => ({ ...r, sources: P(r.sources, []), exclude: P(r.exclude, []) })),
+    display: db.all(`SELECT blog, id, display FROM policies WHERE display IN ('keep_visible', 'keep_hidden')`),
+    allowlist: db.all('SELECT uuid, name, reason, at FROM allowlist'),
+  };
+}
+
+function planSettings(db, exp) {
+  if (!exp || exp.format !== SETTINGS_FORMAT) throw new Error('not a Tumblr Studio settings file');
+  const here = db.getMeta('account', null)?.name || null;
+  return {
+    exported: exp.exported, app: exp.app, account: exp.account, here,
+    otherAccount: !!(here && exp.account && here !== exp.account),
+    roles: Object.keys(exp.roles || {}).length, packs: (exp.packs || []).length, tagStats: Object.keys(exp.tagStats || {}).length,
+    categories: (exp.categories || []).length, rules: (exp.expiryRules || []).length, routes: (exp.routes || []).length,
+    display: (exp.display || []).length, ai: !!(exp.settings?.ai?.base || exp.settings?.ai?.model),
+  };
+}
+
+function applySettings(db, exp, { dataDir, now = Date.now() } = {}) {
+  const plan = planSettings(db, exp);
+  if (plan.otherAccount) throw new Error(`this file is from ${exp.account}, but this app is signed in as ${plan.here}`);
+  fs.mkdirSync(path.join(dataDir, 'imports'), { recursive: true });
+  const keep = path.join(dataDir, 'imports', 'settings-' + stamp(now) + '.json');
+  fs.writeFileSync(keep, JSON.stringify(exp));
+  db.tx(() => {
+    const cur = db.getMeta('settings', {});
+    const inc = exp.settings || {};
+    db.setMeta('settings', { ...cur, ...inc, ai: { ...(cur.ai || {}), ...(inc.ai || {}) } });
+    mergePacks(db, exp.packs, 'settings');
+    mergeStats(db, exp.tagStats);
+    if (Array.isArray(exp.tplFavs) && exp.tplFavs.length) {
+      const favs = db.getMeta('tplFavs', []);
+      const have = new Set(favs.map(f => JSON.stringify(f)));
+      for (const f of exp.tplFavs) if (!have.has(JSON.stringify(f))) favs.push(f);
+      db.setMeta('tplFavs', favs);
+    }
+    if (exp.followerGuard) db.setMeta('followerGuard', exp.followerGuard);
+    if (exp.audience) db.setMeta('audience', { ...db.getMeta('audience', {}), ...exp.audience, collect: false, enabledAt: null });
+    if (exp.collect?.blog) db.setMeta('collect', { ...db.getMeta('collect', {}), ...exp.collect, auto: false, since: 0 });
+    // roles: blogs not synced yet get theirs when they appear
+    const pending = db.getMeta('pendingRoles', {});
+    for (const [uuid, r] of Object.entries(exp.roles || {})) {
+      if (!['share', 'material'].includes(r?.role)) continue;
+      if (db.get('SELECT 1 FROM blogs WHERE uuid = ?', uuid)) db.run('UPDATE blogs SET role = ? WHERE uuid = ? AND is_primary = 0', r.role, uuid);
+      else pending[uuid] = r.role;
+    }
+    db.setMeta('pendingRoles', pending);
+    // category groups (by key, or by name for groups made by hand), then categories by tag; ids are remapped
+    const gmap = new Map();
+    for (const g of exp.categoryGroups || []) {
+      const have = db.all('SELECT id, key, name FROM category_groups').find(x => g.key ? x.key === g.key : (!x.key && x.name === g.name));
+      if (have) { db.run('UPDATE category_groups SET name = ?, ord = ? WHERE id = ?', g.name ?? null, g.ord ?? 0, have.id); gmap.set(g.ref, have.id); }
+      else gmap.set(g.ref, Number(db.run('INSERT INTO category_groups (key, name, ord) VALUES (?, ?, ?)', g.key ?? null, g.name ?? null, g.ord ?? 0).lastInsertRowid));
+    }
+    const cmap = new Map();
+    for (const c of exp.categories || []) {
+      const gid = c.group == null ? null : (gmap.get(c.group) ?? null);
+      const have = db.all('SELECT id, tag FROM categories').find(x => C.key(x.tag) === C.key(c.tag));
+      if (have) { db.run('UPDATE categories SET name = ?, tag = ?, ord = ?, group_id = ? WHERE id = ?', c.name, c.tag, c.ord ?? 0, gid, have.id); cmap.set(c.ref, have.id); }
+      else cmap.set(c.ref, Number(db.run('INSERT INTO categories (name, tag, ord, group_id) VALUES (?, ?, ?, ?)', c.name, c.tag, c.ord ?? 0, gid).lastInsertRowid));
+    }
+    const defaults = db.getMeta('blogDefaults', {});
+    for (const [uuid, d] of Object.entries(exp.blogDefaults || {}))
+      defaults[uuid] = { ...d, categoryIds: (d.categoryIds || []).map(id => cmap.get(id)).filter(id => id != null) };
+    db.setMeta('blogDefaults', defaults);
+    // rules and routes arrive switched off; the same rule or route is not added twice. The automation switches
+    // stay as they are here (off on a new install).
+    for (const r of exp.expiryRules || []) {
+      const kinds = J(r.kinds || ['original']), targets = J(r.targets || []);
+      const ex = db.get('SELECT id FROM expiry_rules WHERE mode = ? AND blog = ? AND scope = ?', r.mode, r.blog, r.scope);
+      if (ex) db.run('UPDATE expiry_rules SET days = ?, kinds = ?, targets = ?, skip_pinned = ? WHERE id = ?', r.days, kinds, targets, r.skip_pinned ? 1 : 0, ex.id);
+      else db.run('INSERT INTO expiry_rules (mode, blog, enabled, days, scope, kinds, targets, skip_pinned, updated_at) VALUES (?, ?, 0, ?, ?, ?, ?, ?, ?)',
+        r.mode, r.blog, r.days, r.scope, kinds, targets, r.skip_pinned ? 1 : 0, now);
+    }
+    const sameSet = (a, b) => a.length === b.length && a.every(x => b.includes(x));
+    for (const r of exp.routes || []) {
+      const ex = db.all('SELECT id, sources FROM routes WHERE dest = ?', r.dest).find(x => sameSet(P(x.sources, []), r.sources || []));
+      if (ex) db.run('UPDATE routes SET exclude = ?, delivery = ? WHERE id = ?', J(r.exclude || []), r.delivery || 'published', ex.id);
+      else db.run('INSERT INTO routes (sources, dest, enabled, since, exclude, delivery, revision, updated_at) VALUES (?, ?, 0, NULL, ?, ?, 1, ?)',
+        J(r.sources || []), r.dest, J(r.exclude || []), r.delivery || 'published', now);
+    }
+    // per-post "always visible / always hidden", so a rule switched on later leaves the same posts alone
+    for (const p of exp.display || []) {
+      if (!['keep_visible', 'keep_hidden'].includes(p.display)) continue;
+      db.run(`INSERT INTO policies (blog, id, display, updated_at) VALUES (?, ?, ?, ?)
+        ON CONFLICT(blog, id) DO UPDATE SET display = excluded.display, updated_at = excluded.updated_at`, p.blog, String(p.id), p.display, now);
+    }
+    for (const a of exp.allowlist || []) db.run('INSERT OR IGNORE INTO allowlist (uuid, name, reason, at) VALUES (?, ?, ?, ?)', a.uuid, a.name, a.reason, a.at);
+    db.setMeta('lastSettingsImport', { at: now, file: path.basename(keep), from: exp.exported });
+  });
+  groups.rebuild(db, now);
+  return plan;
+}
+
 function applyImport(db, exp, { dataDir, now = Date.now() } = {}) {
   const plan = planImport(db, exp);
   const d = exp.data, s = d.settings || {};
@@ -53,21 +190,8 @@ function applyImport(db, exp, { dataDir, now = Date.now() } = {}) {
       else pending[r.uuid] = r.role;
     }
     db.setMeta('pendingRoles', pending);
-    // packs: one per id; a pack edited here is not replaced
-    const mine = db.getMeta('packs', []);
-    const idOf = p => { try { return (typeof p.raw === 'string' ? JSON.parse(p.raw) : p.raw)?.id; } catch { return null; } };
-    for (const p of d.packs || []) {
-      const id = idOf(p);
-      if (!id) continue;
-      const i = mine.findIndex(x => idOf(x) === id);
-      if (i >= 0 && mine[i].edited && !p.edited) continue;
-      if (i >= 0) mine[i] = { raw: p.raw, source: p.source || 'extension', edited: !!p.edited }; else mine.push({ raw: p.raw, source: p.source || 'extension', edited: !!p.edited });
-    }
-    db.setMeta('packs', mine);
-    // tag statistics: newer sample wins
-    const stats = db.getMeta('tagStats', {});
-    for (const [k, v] of Object.entries(d.cache?.tagStats || {})) if (!stats[k] || (v.at || 0) > (stats[k].at || 0)) stats[k] = v;
-    db.setMeta('tagStats', stats);
+    mergePacks(db, d.packs, 'extension');
+    mergeStats(db, d.cache?.tagStats);
     // settings that mean the same here
     const mineSet = db.getMeta('settings', {});
     if (s.rules) mineSet.rules = s.rules;
@@ -173,6 +297,9 @@ function addData(svc, api, { dataDir, vault = null, openPath = () => {}, relaunc
     importPreview({ text }) { return planImport(db, JSON.parse(text)); },
     importApply({ text }) { const exp = JSON.parse(text); const r = applyImport(db, exp, { dataDir, now: svc.ctx.now() }); applyPendingRoles(db); svc.ctx.onImport?.(exp); return r; },
     // The same import handed over by the paired browser extension (bridge request 'import')
+    settingsExport() { return exportSettings(db, { now: svc.ctx.now(), version: require('../../package.json').version }); },
+    settingsPreview({ text }) { return planSettings(db, JSON.parse(text)); },
+    settingsApply({ text }) { const r = applySettings(db, JSON.parse(text), { dataDir, now: svc.ctx.now() }); applyPendingRoles(db); return r; },
     importExtension({ data }) { const r = applyImport(db, data, { dataDir, now: svc.ctx.now() }); applyPendingRoles(db); svc.ctx.onImport?.(data); return r; },
     backupNow() { const r = backup(db, { dataDir, now: svc.ctx.now() }); db.setMeta('lastBackup', { at: svc.ctx.now(), dir: r.dir }); return r; },
     backups() {
@@ -201,4 +328,4 @@ function addData(svc, api, { dataDir, vault = null, openPath = () => {}, relaunc
   return { aiKey: () => { try { return vault ? vault.decrypt(fs.readFileSync(aiFile)) : null; } catch { return null; } } };
 }
 
-module.exports = { addData, planImport, applyImport, applyPendingRoles, backup, verifyBackup, restoreAtStartup };
+module.exports = { addData, planImport, applyImport, exportSettings, planSettings, applySettings, applyPendingRoles, backup, verifyBackup, restoreAtStartup };

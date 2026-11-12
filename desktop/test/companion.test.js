@@ -49,8 +49,8 @@ test('bridge: only a paired extension on loopback gets in; one operation id make
   assert.equal((await s.call('/hello')).json.paired, false);
   assert.equal((await s.call('/snapshot')).status, 401, 'nothing before pairing');
   // pairing from a browser logged into another account is refused
-  assert.equal((await s.call('/pair', { primary: 'someoneelse' })).status, 409);
-  const pr = await s.call('/pair', { primary: 'mainblog' });
+  assert.equal((await s.call('/pair', { primary: 'someoneelse', code: '1234' })).status, 409);
+  const pr = await s.call('/pair', { primary: 'mainblog', code: '1234' });
   assert.equal(pr.status, 200);
   const auth = 'Bearer ' + pr.json.token;
   assert.equal((await s.call('/snapshot', {}, { auth: 'Bearer nope' })).status, 401);
@@ -85,7 +85,8 @@ test('bridge: only a paired extension on loopback gets in; one operation id make
 
 test('bridge: a declined pairing gives nothing', async () => {
   const s = setup({ approve: false });
-  assert.equal((await s.call('/pair')).status, 403);
+  assert.equal((await s.call('/pair', { code: '1234' })).status, 403);
+  assert.equal((await s.call('/pair', {})).status, 403, 'no grant and no code: refused');
   assert.equal((await s.call('/status')).status, 401);
 });
 
@@ -189,7 +190,7 @@ test('bridge: the browser relay is for the paired extension only and lists the a
   const s = setup({ relay });
   s.svc.pass(); await s.run();
   assert.equal((await s.call('/relay/next', { wait: 0 })).status, 401, 'nothing before pairing');
-  const { token } = (await s.call('/pair', { primary: 'mainblog' })).json;
+  const { token } = (await s.call('/pair', { primary: 'mainblog', code: '1234' })).json;
   const auth = 'Bearer ' + token;
   // the same extension id in another Chrome profile, with an older token, isn't the paired browser
   assert.equal((await s.call('/hello', {}, { auth: 'Bearer stale' })).json.paired, false);

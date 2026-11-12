@@ -210,6 +210,75 @@ const MIGRATIONS = [
   DELETE FROM items WHERE id IN (SELECT item_id FROM ad_rows) AND NOT EXISTS (SELECT 1 FROM posts p WHERE p.item_id = items.id);
   DROP TABLE ad_rows;
   `,
+  // 12: fans & interactions (docs/FAN_RELATIONSHIP_SPEC.md). Additive. Follower rows learn whether they were
+  // inspected (so a uuid known from the list doesn't skip protection) and keep a missing → checked → confirmed
+  // path: an old gone = 1 stays "missing, not checked", never a confirmed unfollow. People, reminders and
+  // workflow states are local only and never written to Tumblr.
+  `
+  ALTER TABLE followers ADD COLUMN inspected INTEGER NOT NULL DEFAULT 0;
+  UPDATE followers SET inspected = 1 WHERE uuid IS NOT NULL;
+  ALTER TABLE followers ADD COLUMN gone_at INTEGER;      -- followed_by confirmed: no longer following
+  ALTER TABLE followers ADD COLUMN checked_at INTEGER;   -- last followed_by check of a missing row
+  ALTER TABLE followers ADD COLUMN check_note TEXT;
+  CREATE TABLE people (
+    uuid TEXT PRIMARY KEY, name TEXT, names TEXT NOT NULL DEFAULT '[]',   -- names: earlier names of this uuid
+    star INTEGER NOT NULL DEFAULT 0, alias TEXT, labels TEXT NOT NULL DEFAULT '[]', note TEXT,
+    mute INTEGER NOT NULL DEFAULT 0, resolved_at INTEGER, updated_at INTEGER
+  );
+  CREATE TABLE reminders (
+    id INTEGER PRIMARY KEY AUTOINCREMENT, uuid TEXT, text TEXT NOT NULL, due INTEGER,
+    status TEXT NOT NULL DEFAULT 'open',                 -- open | done | dismissed
+    event TEXT, created_at INTEGER, done_at INTEGER
+  );
+  CREATE TABLE audience_changes (
+    id INTEGER PRIMARY KEY AUTOINCREMENT, blog TEXT NOT NULL, name TEXT, uuid TEXT,
+    kind TEXT NOT NULL,                                  -- follow | unfollow | back
+    at INTEGER NOT NULL, since INTEGER, note TEXT        -- unfollow: between since (last seen) and at (confirmed)
+  );
+  CREATE INDEX audience_changes_at ON audience_changes(at);
+  CREATE TABLE audience_counts (blog TEXT NOT NULL, at INTEGER NOT NULL, followers INTEGER, PRIMARY KEY (blog, at));
+  CREATE TABLE interactions (
+    id TEXT PRIMARY KEY,                                 -- Tumblr's notification id
+    blog TEXT, type TEXT, kind TEXT NOT NULL,            -- kind: reply | mention | ask | reblog | reblog_plain | like | follow | other
+    from_uuid TEXT, from_name TEXT, post_id TEXT, reblog_id TEXT, text TEXT, tags TEXT, summary TEXT,
+    at INTEGER, fetched_at INTEGER,
+    state TEXT NOT NULL DEFAULT 'new',                   -- new | later | done | skip | old | digest
+    state_at INTEGER, later_until INTEGER, replied INTEGER NOT NULL DEFAULT 0, raw TEXT
+  );
+  CREATE INDEX interactions_at ON interactions(at);
+  CREATE INDEX interactions_from ON interactions(from_uuid);
+  CREATE INDEX interactions_state ON interactions(state);
+  `,
+  // 13: functional workflows (docs/FUNCTIONAL_WORKFLOWS_SPEC.md). Additive.
+  // Editing a published original reuses the draft row: kind 'edit' names the post it edits (target), the remote
+  // body it started from (base: fingerprint, tags, state, read time) and, after a refused submit, Tumblr's newer
+  // body (conflict) and the user's own text kept aside when they take Tumblr's (stash). Nothing old changes.
+  // Replies sent from the app: one row per operation id (a repeat never sends twice), its target, identity and
+  // the exact text, apart from the interaction's own local states; unsent text per interaction; when the user
+  // last went to Tumblr from an interaction (a hand-off, never counted as a send).
+  `
+  ALTER TABLE drafts ADD COLUMN kind TEXT NOT NULL DEFAULT 'new';   -- new | edit
+  ALTER TABLE drafts ADD COLUMN target_blog TEXT;
+  ALTER TABLE drafts ADD COLUMN target_id TEXT;
+  ALTER TABLE drafts ADD COLUMN base TEXT;
+  ALTER TABLE drafts ADD COLUMN conflict TEXT;
+  ALTER TABLE drafts ADD COLUMN stash TEXT;
+  CREATE TABLE reply_ops (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    op TEXT NOT NULL UNIQUE,                             -- the page's operation id
+    event TEXT,                                          -- interaction id it answers (may be null)
+    blog TEXT NOT NULL, post_id TEXT NOT NULL,           -- the post replied under (uuid, id)
+    reply_as TEXT NOT NULL,                              -- my blog (uuid) that speaks
+    account TEXT,                                        -- account name at the time
+    text TEXT NOT NULL, job INTEGER,
+    status TEXT NOT NULL DEFAULT 'queued',               -- queued | waiting | sending | checking | unknown | confirmed | failed | not_sent
+    reply_id TEXT, error TEXT,
+    created_at INTEGER, sent_at INTEGER, confirmed_at INTEGER, updated_at INTEGER
+  );
+  CREATE INDEX reply_ops_event ON reply_ops(event);
+  CREATE TABLE reply_drafts (event TEXT PRIMARY KEY, text TEXT, reply_as TEXT, op TEXT, updated_at INTEGER);
+  ALTER TABLE interactions ADD COLUMN handoff_at INTEGER;
+  `,
 ];
 
 function openDb(file) {

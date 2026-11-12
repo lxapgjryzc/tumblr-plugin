@@ -1,0 +1,16 @@
+{"t":"2026-11-07T21:30:33.792Z","kind":"job","id":1959,"job":"post.publish","status":"failed","error":"published as 832659217805705216, but it doesn\u0027t match what was sent: block 1: the text differs; the tags differ","attempts":9,"target":{"blog":"t:8Bl6M-1Ix6KW9TbUzsK2nA","draft":4,"phase":"verify","verifyN":7}}
+{"t":"2026-11-07T22:04:07.686Z","kind":"job","id":2053,"job":"post.publish","status":"failed","error":"published as 832661328194879488, but it doesn\u0027t match what was sent: block 1: the text differs","attempts":9,"target":{"blog":"t:8Bl6M-1Ix6KW9TbUzsK2nA","draft":6,"phase":"verify","verifyN":7}}
+{"t":"2026-11-09T01:43:46.356Z","kind":"backend.start","version":"0.6.0","env":"work","pid":16372,"node":"v24.19.0"}
+{"t":"2026-11-09T01:43:46.387Z","kind":"activity","level":"info","area":"runtime","msg":"local backend started (work, port 47823)"}
+{"t":"2026-11-09T01:44:24.503Z","kind":"job","id":5436,"job":"post.publish","status":"running","attempts":1,"target":{"blog":"t:8Bl6M-1Ix6KW9TbUzsK2nA","draft":7}}
+{"t":"2026-11-09T01:44:27.890Z","kind":"tumblr","method":"POST","path":"/v2/blog/t%3A8Bl6M-1Ix6KW9TbUzsK2nA/posts","status":201,"via":"official","ms":3359,"attempt":0}
+{"t":"2026-11-09T01:44:28.660Z","kind":"tumblr","method":"GET","path":"/v2/blog/t%3A8Bl6M-1Ix6KW9TbUzsK2nA/posts/832767173331173376","status":200,"via":"official","ms":769,"attempt":0}
+{"t":"2026-11-09T01:44:28.730Z","kind":"job","id":5437,"job":"post.reblog","status":"pending","attempts":0,"target":{"blog":"t:8Bl6M-1Ix6KW9TbUzsK2nA","id":"832767173331173376","dest":"t:NoAduFiw3P7xqQREZ_7W2A"}}
+{"t":"2026-11-09T01:44:28.734Z","kind":"job","id":5436,"job":"post.publish","status":"verifying","attempts":1,"target":{"blog":"t:8Bl6M-1Ix6KW9TbUzsK2nA","draft":7,"phase":"verify","verifyN":0}}
+{"t":"2026-11-09T01:44:28.736Z","kind":"job","id":5437,"job":"post.reblog","status":"running","attempts":1,"target":{"blog":"t:8Bl6M-1Ix6KW9TbUzsK2nA","id":"832767173331173376","dest":"t:NoAduFiw3P7xqQREZ_7W2A"}}
+{"t":"2026-11-09T01:44:29.043Z","kind":"tumblr","method":"GET","path":"/v2/blog/t%3A8Bl6M-1Ix6KW9TbUzsK2nA/posts/832767173331173376","status":200,"via":"official","ms":306,"attempt":0}
+{"t":"2026-11-09T01:44:29.517Z","kind":"tumblr","method":"GET","path":"/v2/blog/t%3ANoAduFiw3P7xqQREZ_7W2A/posts","status":200,"via":"official","ms":439,"attempt":0}
+{"t":"2026-11-09T01:44:30.357Z","kind":"tumblr","method":"POST","path":"/v2/blog/t%3ANoAduFiw3P7xqQREZ_7W2A/posts","status":201,"via":"official","ms":796,"attempt":0}
+{"t":"2026-11-09T01:44:30.671Z","kind":"tumblr","method":"GET","path":"/v2/blog/t%3ANoAduFiw3P7xqQREZ_7W2A/posts/832767176162328576","status":200,"via":"official","ms":311,"attempt":0}
+{"t":"2026-11-09T01:44:30.676Z","kind":"job","id":5437,"job":"post.reblog","status":"succeeded","attempts":1,"target":{"blog":"t:8Bl6M-1Ix6KW9TbUzsK2nA","id":"832767173331173376","dest":"t:NoAduFiw3P7xqQREZ_7W2A"}}
+{"t":"2026-11-09T01:44:30.678Z","kind":"activity","level":"info","area":"post.reblog","msg":"succeeded","data":{"job":5437,"route":2,"revision":2,"blog":"t:8Bl6M-1Ix6KW9TbUzsK2nA","id":"832767173331173376","rev":1,"fp":"d6e714188187857a98bf456d00a1c1ae","dest":"t:NoAduFiw3P7xqQREZ_7W2A","state":"published"}}

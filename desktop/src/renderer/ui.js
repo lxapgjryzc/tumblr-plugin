@@ -23,6 +23,7 @@ const call = async (m, a) => {
 const cleanErr = e => String(e?.message || e).replace(/^Error invoking remote method 'studio': (Error: )?/, '');
 
 function toast(msg, kind = 'info', ms = 4000) {
+  if (kind === 'error' && typeof clientLog === 'function') clientLog('warn', 'toast', msg);
   const el = h('div', { class: 'toast ' + kind }, msg);
   $('#toasts').append(el);
   setTimeout(() => el.remove(), ms);

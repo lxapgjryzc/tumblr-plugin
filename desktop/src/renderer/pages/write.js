@@ -77,11 +77,16 @@ function caretOffset(el) {
   frag.append(pre.cloneContents());
   return cps(domToText(frag).text).length;
 }
+// The Tumblr image size nearest to the editor's width (a published post's images keep their own media)
+const nearMedia = media => (media || []).reduce((a, b) => (!a || Math.abs((b.width || 0) - 540) < Math.abs((a.width || 0) - 540) ? b : a), null)?.url || null;
 const sliceFmt = (fmt, a, b) => fmt.filter(f => f.end > a && f.start < b).map(f => ({ ...f, start: Math.max(f.start, a) - a, end: Math.min(f.end, b) - a }));
 
 const WritePage = {
   async render(root, params = {}) {
     this.root = root;
+    // where an edit of a published post came from (Posts with its query, the exact instance), to go back to it
+    this.ret = params.ret || null;
+    if (params.edit) return this.startEdit(params.edit);
     if (params.id) return this.open(params.id);
     if (params.create) return this.create();
     const drafts = await call('drafts');
@@ -90,6 +95,7 @@ const WritePage = {
       drafts.length ? h('div', { class: 'cards draft-cards' }, drafts.map(d => h('div', { class: 'pcard', onclick: () => this.open(d.id) },
         d.thumb ? h('div', { class: 'thumb' }, h('img', { src: d.thumb })) : h('div', { class: 'thumb text' }, d.title || t('untitled')),
         h('div', { class: 'meta' }, h('div', { class: 'row1' }, h('span', { class: 'blog' }, d.blog ? blogName(d.blog) : '—'), h('span', { class: 'muted' }, fmtTime(d.updated_at))),
+          d.kind === 'edit' ? h('span', { class: 'badge accent' }, t('edBadge')) : null,
           d.status !== 'editing' ? h('span', { class: 'badge warn' }, t('ds_' + d.status)) : null)))) : empty(t('noDrafts'), h('button', { class: 'primary', onclick: () => this.create() }, t('newPost'))));
   },
 
@@ -100,6 +106,35 @@ const WritePage = {
     if (!share.some(b => b.uuid === blog)) blog = share.find(b => !b.is_primary)?.uuid || share[0]?.uuid || null;
     const d = await call('newDraft', { blog });
     this.open(d.id, d);
+  },
+
+  // Edit one of my published originals in this editor (FUNCTIONAL_WORKFLOWS_SPEC 3.2). The app reads the post
+  // from Tumblr first; an unfinished edit of the same post is resumed.
+  async startEdit({ blog, id }) {
+    this.root.replaceChildren(h('div', { class: 'page-loading' }));
+    let d;
+    try { d = await call('editPublished', { blog, id }); }
+    catch (e) {
+      const m = cleanErr(e);
+      let code = /unsupported:(\w+)/.exec(m)?.[1];
+      if (code && !['layout_ask', 'layout_rows', 'layout_order'].includes(code)) code = 'layout_other';
+      this.root.replaceChildren(h('header', { class: 'page-head' }, h('button', { class: 'ghost', onclick: () => this.goBack() }, '← ' + t('edBack'))),
+        h('div', { class: 'banner warn' }, code ? t('edUnsupported_' + code) : m),
+        h('p', { class: 'muted small' }, t('edUnsupportedNote')),
+        h('a', { class: 'button', href: `https://www.tumblr.com/edit/${blogName(blog)}/${id}`, target: '_blank' }, t('edOnTumblr')));
+      return;
+    }
+    this.open(d.id, d);
+  },
+  isEdit() { return this.d?.kind === 'edit'; },
+  // Back where the edit started: Posts keeps its query, layout and scroll; the exact instance is shown again
+  async goBack() {
+    try { await this.flush(); } catch {}
+    const r = this.ret;
+    if (!r) return this.render(this.root);
+    if (r.page === 'fans') return App.go('fans');
+    await App.go('posts');
+    if (r.detail) PostsPage.openDetail(r.detail);
   },
 
   async open(id, d) {
@@ -126,13 +161,15 @@ const WritePage = {
     this.statusEl = h('span', { class: 'save-state muted' });
     this.root.replaceChildren(
       h('header', { class: 'page-head' },
-        h('button', { class: 'ghost', onclick: () => { this.flush(); this.render(this.root); } }, '← ' + t('allDrafts')),
+        this.isEdit() && this.ret ? h('button', { class: 'ghost', onclick: () => this.goBack() }, '← ' + t('edBack'))
+          : h('button', { class: 'ghost', onclick: () => { this.flush(); this.render(this.root); } }, '← ' + t('allDrafts')),
         h('div', { class: 'head-actions' }, this.statusEl,
           h('button', { title: 'Ctrl+Z', onclick: () => this.undo() }, '↶ ' + t('undo')),
           h('button', { title: 'Ctrl+Y', onclick: () => this.redo() }, '↷ ' + t('redo')),
           h('button', { onclick: () => this.preview() }, t('preview')))),
-      d.status === 'published' ? h('div', { class: 'banner' }, t('publishedNote'), h('a', { href: `https://${blogName(d.remote_blog)}.tumblr.com/post/${d.remote_id}`, target: '_blank' }, t('openOnTumblr'))) : null,
-      d.status === 'publishing' || d.status === 'failed' ? this.publishBanner() : null,
+      this.isEdit() ? this.editBanner() : null,
+      !this.isEdit() && d.status === 'published' ? h('div', { class: 'banner' }, t('publishedNote'), h('a', { href: `https://${blogName(d.remote_blog)}.tumblr.com/post/${d.remote_id}`, target: '_blank' }, t('openOnTumblr'))) : null,
+      !this.isEdit() && (d.status === 'publishing' || d.status === 'failed') ? this.publishBanner() : null,
       h('div', { class: 'write' }, h('div', { class: 'canvas-wrap' }, this.toolbar(), this.canvas), this.side));
     this.drawCanvas();
     this.drawSide();
@@ -140,6 +177,42 @@ const WritePage = {
   },
 
   readOnly() { return this.d.status !== 'editing'; },
+
+  // What this edit is and where it stands: the target post, Tumblr's newer version, sending, done
+  editBanner() {
+    const d = this.d, b = d.base || {};
+    const url = `https://${blogName(d.target_blog)}.tumblr.com/post/${d.target_id}`;
+    const from = this.ret?.detail && (this.ret.detail.blog !== d.target_blog || this.ret.detail.id !== d.target_id) ? this.ret.detail : null;
+    const head = h('div', { class: 'banner' }, h('span', {}, t('edEditing', blogName(d.target_blog)), ' ', b.state ? stateBadge(b.state) : null, ' ',
+      from ? h('span', { class: 'muted small' }, t('edFromReblog', blogName(from.blog))) : null),
+      h('a', { href: url, target: '_blank' }, t('openOnTumblr')));
+    const parts = [head];
+    if (d.status === 'editing' && d.remoteChanged) parts.push(h('div', { class: 'banner warn small' }, t('edRemoteChanged')));
+    if (d.status === 'editing' && d.stash) parts.push(h('div', { class: 'banner small' }, t('edStash', fmtTime(d.stash.at)),
+      h('button', { onclick: async () => { this.open(d.id, await call('restoreStash', { id: d.id })); } }, t('edRestore'))));
+    if (d.status === 'submitting') parts.push(h('div', { class: 'banner' }, t('edSubmitting'), h('button', { 'data-go': 'activity' }, t('navActivity'))));
+    if (d.status === 'failed') parts.push(h('div', { class: 'banner warn' }, t('edFailed'),
+      h('button', { onclick: async () => { await call('reopenDraft', { id: d.id }); this.open(d.id); } }, t('backToEditing')),
+      h('button', { 'data-go': 'activity' }, t('navActivity'))));
+    if (d.status === 'conflict' && d.conflict) {
+      const c = d.conflict;
+      parts.push(h('div', { class: 'banner warn' }, h('span', {}, t('edConflict_' + c.why, fmtTime(c.at))),
+        h('button', { onclick: () => this.showRemote(c) }, t('edSeeTheirs')),
+        h('button', { onclick: async () => { try { this.open(d.id, await call('resolveEdit', { id: d.id, use: 'theirs' })); } catch (e) { toast(cleanErr(e), 'error'); } } }, t('edUseTheirs')),
+        h('button', { class: 'primary', onclick: async () => { try { this.open(d.id, await call('resolveEdit', { id: d.id, use: 'mine' })); toast(t('edMineKept')); } catch (e) { toast(cleanErr(e), 'error'); } } }, t('edUseMine'))));
+    }
+    if (d.status === 'published') parts.push(h('div', { class: 'banner ok' }, t('edDone', fmtTime(d.updated_at)),
+      h('button', { onclick: () => VersionsDialog.open({ blog: d.target_blog, id: d.target_id }) }, t('versionsManage')),
+      this.ret ? h('button', { onclick: () => this.goBack() }, t('edBack')) : null));
+    return parts;
+  },
+  // Tumblr's version as it is now (text blocks, images, other blocks), next to the edit
+  async showRemote(c) {
+    const blocks = (c.content || []).map(b => b.type === 'text' ? h('p', { class: 'npf-text st-' + (b.subtype || 'p') }, b.text)
+      : b.type === 'image' ? h('img', { src: nearMedia(b.media), alt: b.alt_text || '', class: 'remote-img' })
+        : h('p', { class: 'muted small' }, '[' + (b.type || '?') + ']'));
+    await modal(t('edTheirsTitle'), h('div', { class: 'npf-preview' }, blocks, (c.tags || []).length ? h('div', { class: 'npf-tags' }, c.tags.map(x => h('span', {}, '#' + x))) : null), [{ label: t('close'), value: null }], { wide: true });
+  },
 
   publishBanner() {
     const b = h('div', { class: 'banner warn' }, this.d.status === 'publishing' ? t('publishing') : t('publishFailed'),
@@ -344,9 +417,18 @@ const WritePage = {
     if (b.type === 'link') return h('div', { class: 'unit' }, this.unitTools([b.id], ui, n, [h('button', { class: 'ghost', title: t('delete'), onclick: () => this.removeBlock(b.id) }, '✕')]),
       h('div', { class: 'link-block' }, '🔗 ', h('input', { value: b.url, readonly: this.readOnly(), onchange: e => this.commit(d => { d.blocks.find(x => x.id === b.id).url = e.target.value.trim(); }) })));
     if (b.type === 'readmore') return h('div', { class: 'unit' }, this.unitTools([b.id], ui, n, [h('button', { class: 'ghost', onclick: () => this.removeBlock(b.id) }, '✕')]), h('div', { class: 'readmore' }, t('blockReadMore')));
+    // a block of a published post this editor can't change: kept exactly, can be moved or removed on purpose
+    if (b.type === 'keep') return h('div', { class: 'unit' }, this.unitTools([b.id], ui, n, [h('button', { class: 'ghost', title: t('delete'), onclick: () => this.removeBlock(b.id) }, '✕')]),
+      h('div', { class: 'keep-block' }, h('b', {}, t('keepBlock', b.label || b.raw?.type || '?')), h('span', { class: 'muted small' }, t('keepBlockNote'))));
     return h('div');
   },
   textEl(b, ui, n) {
+    if (b.locked) {
+      // formatting the editor can't show (colour, mentions): the text is kept exactly as it is on Tumblr
+      const el = h('div', { class: 'text-block locked st-' + (b.subtype || 'p'), 'data-locked': b.id });
+      textToDom(el, b.text || '', (b.formatting || []).filter(f => TAGS[f.type] || f.type === 'link'));
+      return h('div', { class: 'unit text-unit' }, this.unitTools([b.id], ui, n, [h('span', { class: 'muted small', title: t('lockedHint') }, '🔒 ' + t('locked')), h('button', { class: 'ghost', title: t('delete'), onclick: () => this.removeBlock(b.id) }, '✕')]), el);
+    }
     const el = h('div', { class: 'text-block st-' + (b.subtype || 'p'), contenteditable: this.readOnly() ? 'false' : 'true', 'data-block': b.id, 'data-ph': t('typeHere'), spellcheck: 'true' });
     textToDom(el, b.text || '', b.formatting || []);
     el.addEventListener('input', () => this.textChanged(el));
@@ -362,7 +444,7 @@ const WritePage = {
       h('div', { class: 'img-row grouped' }, blocks.map(b => this.imageTile(b, u.ids))));
   },
   imageTile(b, row) {
-    const a = this.assets[b.asset];
+    const a = b.remote ? { exists: true, url: nearMedia(b.remote) } : this.assets[b.asset];
     const on = this.sel.has(b.id);
     const ro = this.readOnly();
     const others = this.doc.blocks.filter(x => x.id !== b.id && !(row || []).includes(x.id));
@@ -382,6 +464,7 @@ const WritePage = {
     if (x.type === 'text') return '“' + (x.text || '').slice(0, 24) + ((x.text || '').length > 24 ? '…' : '') + '”';
     if (x.type === 'image') return t('blockImage') + ' ' + (this.doc.blocks.filter(b => b.type === 'image').indexOf(x) + 1);
     if (x.type === 'link') return t('blockLink');
+    if (x.type === 'keep') return '[' + (x.label || '?') + ']';
     return t('blockReadMore');
   },
   focusBlock(id, atEnd = false) {
@@ -489,6 +572,7 @@ const WritePage = {
 
   // ---------- side panel: destination, categories, templates, tags, publish ----------
   async drawSide() {
+    if (this.isEdit()) return this.drawEditSide();
     const o = this.opts, ro = this.readOnly();
     const share = (App.status.blogs || []).filter(b => b.role === 'share');
     const tagsRes = await call('composeTags', o);
@@ -604,6 +688,47 @@ const WritePage = {
     this.side.replaceChildren(...box);
   },
 
+  // Editing a published post: the blog is fixed, visibility stays as it is, tags are the post's own list
+  async drawEditSide() {
+    const d = this.d, ro = this.readOnly();
+    const tags = this.opts.tags || [];
+    const k = x => String(x).toLowerCase();
+    const setTags = next => { this.opts = { ...this.opts, tags: next }; this.scheduleSave(); this.drawSide(); };
+    const has = tag => tags.some(x => k(x) === k(tag));
+    const effects = await call('routeEffect', { blog: d.target_blog, tags });
+    const tagsChanged = JSON.stringify(tags.map(k)) !== JSON.stringify((d.base?.tags || []).map(k));
+    this.side.replaceChildren(
+      h('section', { class: 'side-card' }, h('h3', {}, t('edTarget')),
+        h('p', {}, h('b', {}, blogName(d.target_blog)), ' ', d.base?.state ? stateBadge(d.base.state) : null),
+        h('p', { class: 'muted small' }, t('edSameLink'))),
+      h('section', { class: 'side-card' }, h('h3', {}, t('category'), ' ', h('span', { class: 'muted small' }, t('optional'))),
+        catSections(this.catGroups, this.categories).map(([g, list]) => h('div', { class: 'cat-group' },
+          h('div', { class: 'muted small' }, groupName(g)),
+          h('div', { class: 'chips' }, list.map(c => h('button', { class: 'chip' + (has(c.tag) ? ' on' : ''), disabled: ro, title: '#' + c.tag,
+            onclick: () => setTags(has(c.tag) ? tags.filter(x => k(x) !== k(c.tag)) : [...tags, c.tag]) }, c.name)))))),
+      h('section', { class: 'side-card' }, h('h3', {}, t('finalTags'), ' ', h('span', { class: 'muted small' }, tags.length)),
+        h('div', { class: 'chips' }, tags.map(x => h('button', { class: 'chip', disabled: ro, title: t('delete'), onclick: () => setTags(tags.filter(y => y !== x)) }, '#' + x, ' ✕'))),
+        h('input', { placeholder: t('extraHint'), disabled: ro, onkeydown: e => { if ((e.key === 'Enter' || e.key === ',') && !e.isComposing) { e.preventDefault(); const v = e.target.value.split(/[,，]/).map(x => x.trim().replace(/^#/, '')).filter(Boolean); if (v.length) setTags([...tags, ...v.filter(x => !has(x))]); } } }),
+        h('p', { class: 'muted small' }, t('edTagsNote')),
+        tagsChanged ? h('p', { class: 'small' }, t('edTagsChanged')) : null),
+      effects.length ? h('section', { class: 'side-card' }, h('h3', {}, t('edRoutes')),
+        effects.map(ef => h('p', { class: 'small ' + (ef.excluded ? 'muted' : '') }, ef.excluded ? t('routeSkip', blogName(ef.dest), ef.excluded) : t('edRouteGo', blogName(ef.dest)))),
+        h('p', { class: 'muted small' }, t('edRoutesNote'))) : null,
+      ro ? null : h('section', { class: 'side-card publish' },
+        h('button', { class: 'primary big-btn', onclick: () => this.submitEdit() }, t('edSubmit')),
+        h('p', { class: 'muted small' }, t('edSubmitNote')),
+        h('button', { class: 'ghost danger', onclick: async () => {
+          const ok = await modal(t('edDiscard'), h('p', {}, t('edDiscardQ')), [{ label: t('cancel'), value: false }, { label: t('edDiscard'), value: true, class: 'danger' }]);
+          if (ok) { await call('deleteDraft', { id: d.id }); this.goBack(); }
+        } }, t('edDiscard'))));
+  },
+  async submitEdit() {
+    await this.flush();
+    if (this.saveState === 'error') return;
+    try { await window.studio.call('submitEdit', { id: this.d.id }); toast(t('edQueued'), 'ok'); this.open(this.d.id); }
+    catch (e) { toast(cleanErr(e), 'error'); }
+  },
+
   async publish(mode, at = null) {
     await this.flush();
     if (this.saveState === 'error') return;
@@ -622,7 +747,7 @@ const WritePage = {
   async preview() {
     this.syncText();
     const c = await call('compileDraft', { doc: this.doc });
-    const tags = (await call('composeTags', this.opts)).tags.map(x => x.tag);
+    const tags = this.isEdit() ? (this.opts.tags || []) : (await call('composeTags', this.opts)).tags.map(x => x.tag);
     const assetsById = this.assets;
     const blockById = new Map(this.doc.blocks.filter(b => b.type === 'image').map(b => [b.id, b]));
     const render = (width) => {
@@ -631,7 +756,8 @@ const WritePage = {
       return h('div', { class: 'npf-preview', style: { width: width + 'px' } }, rows.map(r => {
         const cells = r.blocks.map(i => {
           const b = c.content[i];
-          if (b.type === 'image') { const src = assetsById[blockById.get(b.media[0].identifier)?.asset]?.url; return h('img', { src, alt: b.alt_text || '' }); }
+          if (b.type === 'image') { const src = b.media[0].identifier ? assetsById[blockById.get(b.media[0].identifier)?.asset]?.url : nearMedia(b.media); return h('img', { src, alt: b.alt_text || '' }); }
+          if (b.type !== 'text' && b.type !== 'link') return h('div', { class: 'npf-link' }, '[' + b.type + ']');
           if (b.type === 'link') return h('div', { class: 'npf-link' }, '🔗 ', b.url);
           const el = h('div', { class: 'npf-text st-' + (b.subtype || 'p') });
           textToDom(el, b.text, b.formatting || []);
@@ -652,7 +778,7 @@ const WritePage = {
   },
 
   refresh(ev) {
-    if (ev.type === 'job' && this.d && this.d.status === 'publishing') {
+    if (ev.type === 'job' && this.d && ['publishing', 'submitting'].includes(this.d.status)) {
       clearTimeout(this.rt);
       this.rt = setTimeout(async () => { const d = await call('draft', { id: this.d.id }); if (d && d.status !== this.d.status) this.open(d.id, d); }, 500);
     }

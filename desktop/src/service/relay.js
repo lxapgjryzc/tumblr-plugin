@@ -18,7 +18,8 @@ const crypto = require('node:crypto');
 // single posts and notes on any blog (material checks such as the AI-art clues). The extension holds the same
 // list and also checks that writes and post lists are for the account's own blogs.
 // Creates and deletes keep the official API (their reconciliation rules are written for it), and public
-// visitor checks need a logged-out view, so they never use the browser session.
+// visitor checks need a logged-out view, so they never use the browser session. The one exception is a reply
+// (no public API at all): it goes through the browser or waits, and its outcome is reconciled from the replies.
 const ALLOWED = [
   ['GET', /^\/v2\/blog\/[\w%:.-]{1,80}\/posts(\/draft|\/queue)?$/],
   ['GET', /^\/v2\/blog\/[\w%:.-]{1,80}\/posts\/\d{1,25}$/],
@@ -28,6 +29,11 @@ const ALLOWED = [
   ['GET', /^\/v2\/user\/likes$/],
   ['GET', /^\/v2\/tagged$/],
   ['GET', /^\/v2\/blog\/[\w%:.-]{1,80}\/notes$/],
+  ['GET', /^\/v2\/blog\/[\w%:.-]{1,80}\/notifications$/],
+  ['GET', /^\/v2\/blog\/[\w%:.-]{1,80}\/followed_by$/],
+  ['GET', /^\/v2\/blog\/[\w%:.-]{1,80}\/post\/\d{1,25}\/replies$/],
+  // A reply has no public API: replies.js sends it only this way (browserOnly), as one of the account's own blogs
+  ['POST', /^\/v2\/user\/post\/reply$/],
 ];
 const relayable = (method, path) => ALLOWED.some(([m, re]) => m === method && re.test(path));
 

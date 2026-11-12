@@ -1,6 +1,6 @@
 // Service worker of the browser companion (Tumblr Studio, design 4.3). It runs no business work of its own: no
 // sync, reblog, expiry or collection passes and no AI. It
-//  - opens the companion page from the toolbar icon,
+//  - opens the app from the toolbar icon (the companion page from the icon's right-click menu),
 //  - turns the ad-network ruleset on and off with the browser-local "Hide ads" preference,
 //  - talks to the running app over its loopback endpoint (pairing, a read-only data snapshot for the pages,
 //    typed requests such as "Open in Tumblr Studio" and "Collect with Tumblr Studio"),
@@ -14,20 +14,48 @@ const TUMBLR = 'https://www.tumblr.com';
 const PORTS = [47823, 47824, 47825];
 const PROTOCOL = 1;
 
-// ---------- The companion page ----------
+// ---------- The toolbar icon: the app; the companion page from the icon's menu ----------
+// The app's own pages are http://127.0.0.1:<port>/ (anything but /companion/). While the app runs and we're
+// paired, the icon switches to an open app tab or asks the app to open one (`focus`, fresh: the app opens it
+// itself with its own one-time sign-in code; this extension never sees a code or a session). Not paired: the
+// companion page, where pairing happens. App not running: this extension's own companion page, which says to
+// start the app from its shortcut.
+const appTab = (url, port) => { try { const u = new URL(url || ''); return u.protocol === 'http:' && (u.hostname === '127.0.0.1' || u.hostname === 'localhost') && +u.port === port; } catch { return false; } };
+const companionTab = url => (url || '').startsWith(chrome.runtime.getURL('companion.html')) || /^http:\/\/(127\.0\.0\.1|localhost):\d+\/companion\//.test(url || '');
+async function showTab(find, url) {
+  const tabs = await chrome.tabs.query({}).catch(() => []);
+  const tab = tabs.find(find);
+  if (!tab) return chrome.tabs.create({ url });
+  await chrome.tabs.update(tab.id, { active: true, ...(url && !tab.url?.startsWith(url) ? { url } : {}) });
+  if (tab.windowId >= 0) chrome.windows.update(tab.windowId, { focused: true });
+}
+async function appRunning() {
+  const r = await studio('/hello', {}, { timeout: 1500 });
+  const { bridge = {} } = await chrome.storage.local.get('bridge');
+  return r.status === 200 && r.json.app === 'tumblr-studio' && bridge.port ? bridge : null;
+}
 // While the app runs, its page is the companion page (served by the app at /companion/, with companion-host.js
 // giving it this extension's few operations); otherwise this extension's own copy says to start the app.
 async function openCompanion() {
-  const r = await studio('/hello', {}, { timeout: 1500 });
-  const { bridge = {} } = await chrome.storage.local.get('bridge');
-  const url = r.status === 200 && r.json.app === 'tumblr-studio' && bridge.port ? `http://127.0.0.1:${bridge.port}/companion/` : chrome.runtime.getURL('companion.html');
-  const tabs = await chrome.tabs.query({}).catch(() => []);
-  const tab = tabs.find(x => x.url?.startsWith(url) || x.url?.startsWith(chrome.runtime.getURL('companion.html')) || /^http:\/\/127\.0\.0\.1:\d+\/companion\//.test(x.url || ''));
-  if (!tab) return chrome.tabs.create({ url });
-  await chrome.tabs.update(tab.id, { active: true, ...(tab.url?.startsWith(url) ? {} : { url }) });
-  if (tab.windowId >= 0) chrome.windows.update(tab.windowId, { focused: true });
+  const bridge = await appRunning();
+  const url = bridge ? `http://127.0.0.1:${bridge.port}/companion/` : chrome.runtime.getURL('companion.html');
+  return showTab(x => companionTab(x.url), url);
 }
-chrome.action.onClicked.addListener(() => openCompanion());
+// App not running: the installed app registers a native host (desktop nativehost.js) that runs its launcher, which
+// starts it and opens its page itself. Without that host (not installed, never paired here) the companion page.
+async function startApp() {
+  try { const r = await chrome.runtime.sendNativeMessage('com.tumblr_studio.launcher', { cmd: 'open' }); return !!r?.ok; } catch { return false; }
+}
+async function openApp() {
+  const bridge = await appRunning();
+  if (!bridge && await startApp()) return;
+  if (!bridge?.token) return openCompanion();
+  const tabs = await chrome.tabs.query({}).catch(() => []);
+  if (tabs.some(x => appTab(x.url, bridge.port) && !companionTab(x.url))) return showTab(x => appTab(x.url, bridge.port) && !companionTab(x.url), '');
+  const r = await request('focus', { fresh: true });
+  if (r.error) return chrome.tabs.create({ url: `http://127.0.0.1:${bridge.port}/` }); // the session cookie may still be good
+}
+chrome.action.onClicked.addListener(() => openApp());
 
 // ---------- Older versions' background passes are gone for good (A55) ----------
 // Their data stays in storage (the companion page can still export it); only the alarms are removed, and
@@ -48,9 +76,11 @@ chrome.storage.onChanged.addListener(ch => { if (ch.settings) syncAdBlocking(ch.
 
 // ---------- The app ----------
 // storage `bridge` = { port, token, primary, at }: the pairing. A request is answered by the app or not at all.
-async function studio(path, body = {}, { timeout = 8000 } = {}) {
+async function studio(path, body = {}, { timeout = 8000, port: only = null } = {}) {
   const { bridge = {} } = await chrome.storage.local.get('bridge');
-  const ports = bridge.port ? [bridge.port, ...PORTS.filter(p => p !== bridge.port)] : PORTS;
+  // Paired: only the backend that paired us (a work and a test backend may both run on this computer; never hop
+  // to the other one). Unpaired: look for any, read only (/hello); pairing names its port.
+  const ports = only ? [only] : bridge.token && bridge.port ? [bridge.port] : bridge.port ? [bridge.port, ...PORTS.filter(p => p !== bridge.port)] : PORTS;
   let last = null;
   for (const port of ports) {
     const ctl = new AbortController();
@@ -79,11 +109,20 @@ async function primaryBlog() {
   return (j?.response?.user?.blogs || []).find(b => b.primary)?.name || null;
 }
 
-async function pair() {
+// With a grant (the app's own companion page) pairing is immediate; without one the app asks the user, showing
+// `code`, which the asking page shows too. Port: the given one, else the running app found by /hello.
+async function pair(grant, port, code) {
+  if (!grant && !/^\d{4}$/.test(String(code || ''))) return { error: 'grant_required' };
+  if (!PORTS.includes(port)) {
+    const h = await studio('/hello', {}, { timeout: 1500 });
+    if (h.status !== 200) return { error: 'not_running' };
+    port = (await chrome.storage.local.get('bridge')).bridge?.port;
+    if (!PORTS.includes(port)) return { error: 'not_running' };
+  }
   const primary = await primaryBlog().catch(() => null);
-  const r = await studio('/pair', { primary });
+  const r = await studio('/pair', { primary, ...(grant ? { grant } : { code: String(code) }) }, { port });
   if (r.status !== 200) return { error: r.json.error || 'failed', primary: r.json.primary };
-  await chrome.storage.local.set({ bridge: { ...(await chrome.storage.local.get('bridge')).bridge, token: r.json.token, primary: r.json.primary, at: Date.now() } });
+  await chrome.storage.local.set({ bridge: { port, token: r.json.token, primary: r.json.primary, at: Date.now() } });
   await refreshSnapshot(true);
   relayLoop();
   return { ok: true, primary: r.json.primary };
@@ -135,7 +174,22 @@ const RELAY_OK = [
   ['GET', /^\/v2\/user\/following$/],
   ['GET', /^\/v2\/user\/likes$/],
   ['GET', /^\/v2\/tagged$/], // public tag search, used for tag heat
+  ['GET', /^\/v2\/blog\/([\w%:.-]{1,80})\/notifications$/], // fans & interactions: own blogs only
+  ['GET', /^\/v2\/blog\/([\w%:.-]{1,80})\/followed_by$/],
+  ['GET', /^\/v2\/blog\/([\w%:.-]{1,80})\/post\/\d{1,25}\/replies$/, 'anyBlog'], // read a post's replies
+  // a reply the app sends as one of the account's own blogs (Tumblr has no public API for it); body checked in replyOk
+  ['POST', /^\/v2\/user\/post\/reply$/, 'reply'],
 ];
+// Only these fields, a short plain text, and reply_as one of the account's (and the app's) own blogs
+const REPLY_KEYS = new Set(['post_id', 'reblog_key', 'tumblelog', 'reply_text', 'reply_as']);
+function replyOk(json, own) {
+  if (!json || typeof json !== 'object' || Object.keys(json).some(k => !REPLY_KEYS.has(k))) return false;
+  if (!/^\d{1,25}$/.test(String(json.post_id || ''))) return false;
+  if (typeof json.reply_text !== 'string' || !json.reply_text.trim() || json.reply_text.length > 4096) return false;
+  if (typeof json.reblog_key !== 'string' || !json.reblog_key || json.reblog_key.length > 64) return false;
+  if (typeof json.tumblelog !== 'string' || !/^[\w%:.-]{1,80}$/.test(json.tumblelog)) return false;
+  return own(String(json.reply_as || ''));
+}
 let web = null; // { token, csrf, primary, own: Set of lowercased uuids and names, at }
 async function webAuth(force = false) {
   if (web && !force && Date.now() - web.at < 10 * 60e3) return web;
@@ -156,6 +210,7 @@ async function carry(item, appBlogs, bridge) {
   let a = await webAuth().catch(() => null);
   if (!a) return { rid, refused: 'signed_out' };
   if (!bridge.primary || String(a.primary || '').toLowerCase() !== bridge.primary.toLowerCase()) return { rid, refused: 'other_account' };
+  if (rule[2] === 'reply' && !replyOk(item.json, b => a.own.has(b.toLowerCase()) && appBlogs.has(b.toLowerCase()))) return { rid, refused: 'not_own_blog' };
   const blog = rule[1].exec(item.path)[1];
   if (blog && rule[2] !== 'anyBlog') {
     const b = decodeURIComponent(blog).toLowerCase();
@@ -217,9 +272,11 @@ async function setupMenus() {
     chrome.contextMenus.create({ id, title: t(key), contexts: ['link'], targetUrlPatterns: MENU_PATTERNS });
     chrome.contextMenus.create({ id: id + '-page', title: t(key), contexts: ['page'], documentUrlPatterns: MENU_PATTERNS });
   }
+  chrome.contextMenus.create({ id: 'tth-companion', title: t('ctxCompanion'), contexts: ['action'] });
 }
 chrome.runtime.onStartup?.addListener(setupMenus);
 chrome.contextMenus.onClicked.addListener(async (info, tab) => {
+  if (info.menuItemId === 'tth-companion') return openCompanion();
   const post = postOf(info.linkUrl || info.pageUrl || '');
   const say = text => tab?.id >= 0 && chrome.tabs.sendMessage(tab.id, { type: 'studioToast', text }).catch(() => {});
   const { settings = {} } = await chrome.storage.local.get('settings');
@@ -240,7 +297,7 @@ chrome.runtime.onMessage.addListener((msg, sender, reply) => {
     case 'studioRefresh': return answer(refreshSnapshot(false));
     case 'studioHello': return answer(studio('/hello').then(r => ({ ...r.json, running: r.status !== 0 })));
     case 'studioStatus': return answer(studio('/status').then(r => ({ status: r.status, ...r.json })));
-    case 'studioPair': return answer(pair());
+    case 'studioPair': return answer(pair(msg.grant, msg.port, msg.code));
     case 'studioUnpair': return answer((async () => { await studio('/unpair'); await chrome.storage.local.remove(['bridge', 'studio']); return { ok: true }; })());
     case 'studioImport': return answer(request('import', { export: msg.export }));
     case 'studioResult': return answer(studio('/result', { op: msg.op }).then(r => r.json));

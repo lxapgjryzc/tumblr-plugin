@@ -282,3 +282,19 @@ test('a route reblog planned before route automation was switched off sends noth
   assert.equal(s.svc.jobs.list({}).find(j => j.kind === 'post.reblog').status, 'cancelled');
   assert.ok(!s.db.get(`SELECT 1 FROM deliveries WHERE src_id = ? AND status = 'pending'`, A.id_string), 'no delivery left pending');
 });
+
+test('a route reblog joins its original\'s work as soon as it is made, not at the next pass (BUG-20261108-01)', async () => {
+  const s = await withRoute();
+  const A = s.fake.addPost('t:art', { content: body('one work'), tags: ['art'], timestamp: ts(s.clock.t) });
+  await s.pass();
+  const [R] = s.copies(A.id_string);
+  assert.ok(R, 'the route made its reblog');
+  const item = id => s.db.get('SELECT item_id FROM posts WHERE id = ?', id)?.item_id;
+  assert.ok(item(A.id_string));
+  assert.equal(item(R.id_string), item(A.id_string), 'one work, before any later regroup');
+  // a reblog stored by any other read (e.g. looking for copies) joins the same way
+  s.db.run('UPDATE posts SET item_id = NULL WHERE id = ?', R.id_string);
+  const { upsertPost } = require('../src/service/posts');
+  upsertPost(s.db, s.fake.posts.get(R.id_string), 't:main', s.clock.t);
+  assert.equal(item(R.id_string), item(A.id_string));
+});

@@ -31,7 +31,7 @@ const HomePage = {
         stat(all.total, t('statPosts'), () => App.go('posts', { view: 'displayed' })),
         stat(pub.total, t('statPublic'), () => App.go('posts', { view: 'displayed', state: 'published' })),
         stat(priv.total, t('statHidden'), () => App.go('posts', { view: 'displayed', state: 'private' })),
-        stat(expiring.length, t('statExpiring'), () => App.go('posts', { expiring: true }), expiring.length ? 'accent' : ''),
+        stat(expiring.length, t('statExpiring'), () => App.go('posts', { expiring: true, scope: 'all' }), expiring.length ? 'accent' : ''),
         stat(reviewN, t('statReview'), () => App.go('posts', { review: true }), reviewN ? 'warn' : '')),
       reviewN ? h('section', { class: 'card' }, h('h2', {}, t('statReview')), h('ul', { class: 'plain' },
         review.ambiguous ? h('li', {}, t('reviewAmbiguous', review.ambiguous)) : null,

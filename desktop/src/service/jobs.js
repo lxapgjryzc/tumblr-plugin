@@ -8,13 +8,13 @@
 // { status, result?, nextAt?, payload? }; throwing a typed error decides the next status (see errors.js).
 
 const { J, P } = require('./db');
-const { AuthError, NetError, RateError, HttpError, UnsupportedError, StaleError } = require('./errors');
+const { AuthError, NetError, RateError, HttpError, UnsupportedError, StaleError, WaitError } = require('./errors');
 
 const DUE = ['pending', 'waiting', 'verifying'];
 const FINAL = ['succeeded', 'unchanged', 'skipped', 'failed', 'cancelled'];
 const OK = ['succeeded', 'unchanged'];
 
-function makeJobs(db, { handlers = {}, now = Date.now, onChange = () => {}, log = () => {} } = {}) {
+function makeJobs(db, { handlers = {}, now = Date.now, onChange = () => {}, log = () => {}, trace = null } = {}) {
   let timer = null, busy = false, stopped = true;
 
   const rowOut = r => r && { ...r, payload: P(r.payload, {}), result: P(r.result) };
@@ -23,6 +23,7 @@ function makeJobs(db, { handlers = {}, now = Date.now, onChange = () => {}, log 
     const keys = Object.keys(fields);
     const vals = keys.map(k => (['payload', 'result'].includes(k) ? J(fields[k]) : fields[k]));
     db.run(`UPDATE jobs SET ${keys.map(k => k + ' = ?').join(', ')}, updated_at = ? WHERE id = ?`, ...vals, now(), id);
+    if (trace && fields.status) { try { trace(get(id), fields); } catch {} }
     onChange(id);
   };
 
@@ -38,6 +39,7 @@ function makeJobs(db, { handlers = {}, now = Date.now, onChange = () => {}, log 
       const r = db.run(`INSERT INTO jobs (kind, status, priority, batch_id, depends_on, scope, payload, next_at, created_at, updated_at)
         VALUES (?, 'pending', ?, ?, ?, ?, ?, ?, ?, ?)`, kind, priority, batch, dependsOn, scope, J(payload), at, t, t);
       const id = Number(r.lastInsertRowid);
+      if (trace) { try { trace(get(id), { status: 'pending' }); } catch {} }
       onChange(id);
       return id;
     });
@@ -119,6 +121,8 @@ function makeJobs(db, { handlers = {}, now = Date.now, onChange = () => {}, log 
       return { status: 'unknown', error: 'outcome unknown (lookup failed: ' + msg + ')', next_at: wait };
     }
     if (e instanceof AuthError) return { status: 'waiting', error: 'auth: ' + msg, next_at: now() + 10 * 60_000 };
+    // nothing was sent: wait for the browser (woken when it connects), never another channel
+    if (e instanceof WaitError) return { status: 'waiting', error: 'browser: ' + msg, next_at: e.retryAt || now() + 5 * 60_000 };
     if (e instanceof RateError) return { status: 'waiting', error: 'rate: ' + msg, next_at: e.retryAt || now() + 60_000 };
     if (e instanceof NetError) {
       if (h.creates && (e.uncertain || reconciling)) return { status: 'unknown', error: 'outcome unknown: ' + msg, next_at: now() + 60_000 };

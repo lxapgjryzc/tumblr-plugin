@@ -1,6 +1,6 @@
 {
   "name": "tumblr-studio",
-  "version": "0.4.5",
+  "version": "0.6.6",
   "private": true,
   "description": "Tumblr Studio: local desktop publishing and management for Tumblr",
   "license": "MIT",
@@ -8,10 +8,16 @@
   "scripts": {
     "start": "electron .",
     "test": "node --test test/*.test.js",
-    "pack": "node tools/pack.js"
+    "pack": "node tools/pack-web.js",
+    "pack:electron": "node tools/pack.js",
+    "serve": "node src/server/main.js --env test"
   },
   "devDependencies": {
     "@electron/packager": "^18.3.6",
     "electron": "45.2.3"
+  },
+  "dependencies": {
+    "jpeg-js": "^0.4.4",
+    "pngjs": "^7.0.0"
   }
 }

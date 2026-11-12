@@ -3,7 +3,7 @@
 // Reads and full-post edits (PUT) are retried a little; creating requests (POST) never are: a lost response
 // becomes an uncertain NetError and the caller reconciles before anything is sent again.
 
-const { safeJson, errText, AuthError, NetError, RateError, HttpError } = require('./errors');
+const { safeJson, errText, AuthError, NetError, RateError, HttpError, WaitError } = require('./errors');
 const { relayable, RelayMiss } = require('./relay');
 const { isPost } = require('./core');
 
@@ -42,13 +42,15 @@ function makeTumblr({ creds, budget = new Budget(), relay = null, fetchFn = fetc
     const q = {};
     for (const [k, v] of Object.entries(query || {})) if (v != null) q[k] = String(v);
     let r;
+    const t0 = Date.now();
     try { r = await relay.send({ method, path: pathname, query: q, json: json ?? null }); }
     catch (e) {
+      onRequest({ method, path: pathname, status: 0, via: 'browser', ms: Date.now() - t0, error: e instanceof RelayMiss ? 'not taken: ' + e.message : e.message });
       if (e instanceof RelayMiss) { relay.noteFallback?.(); return null; }
       // taken but never answered: an edit may have landed (verification decides), a read is just retried
       throw new NetError(`${method} ${pathname} (browser): ${e.message}`, { uncertain: method !== 'GET' });
     }
-    onRequest({ method, path: pathname, status: r.status, via: 'browser' });
+    onRequest({ method, path: pathname, status: r.status, via: 'browser', ms: Date.now() - t0 });
     // signed out or limited in the browser: nothing was done, so the official API takes this one
     if (r.status === 401 || r.status === 429 || r.status === 0) { relay.noteFallback?.(); return null; }
     const j = safeJson(r.text);
@@ -57,13 +59,40 @@ function makeTumblr({ creds, budget = new Budget(), relay = null, fetchFn = fetc
     return { out: j?.response ?? j };
   }
 
-  async function request(pathname, { method = 'GET', query, json, form, body, bearer = true, retries } = {}) {
+  // Web-only actions (a reply has no public API): the browser or nothing. A request the browser never took, or
+  // refused before sending (signed out, limited, not connected), throws WaitError (nothing sent, wait for it);
+  // one it took and couldn't finish is uncertain (NetError, the caller reconciles). Never the official API.
+  async function viaBrowserOnly(pathname, { method, query, json }) {
+    if (!relay || !relay.available()) throw new WaitError('needs the signed-in browser (Tumblr Studio companion)');
+    if (!relayable(method, pathname)) throw new WaitError('not a request the browser may carry');
+    const q = {};
+    for (const [k, v] of Object.entries(query || {})) if (v != null) q[k] = String(v);
+    let r;
+    const t0 = Date.now();
+    try { r = await relay.send({ method, path: pathname, query: q, json: json ?? null }); }
+    catch (e) {
+      onRequest({ method, path: pathname, status: 0, via: 'browser-only', ms: Date.now() - t0, error: e.message });
+      if (e instanceof RelayMiss) throw new WaitError('the browser did not take it (' + e.message + ')');
+      throw new NetError(`${method} ${pathname} (browser): ${e.message}`, { uncertain: method !== 'GET' });
+    }
+    onRequest({ method, path: pathname, status: r.status, via: 'browser-only', ms: Date.now() - t0 });
+    if (r.status === 401) throw new WaitError('the browser is signed out of Tumblr');
+    if (r.status === 429) throw new WaitError('Tumblr limited the browser', { retryAt: Date.now() + (r.retryAfter || 300) * 1000 });
+    // status 0: the browser's fetch failed, which may be after Tumblr got it
+    if (r.status === 0 || r.status >= 500) throw new NetError(`HTTP ${r.status} on ${method} ${pathname} (browser)`, { uncertain: method !== 'GET', status: r.status });
+    const j = safeJson(r.text);
+    if (r.status < 200 || r.status >= 300) throw new HttpError(`HTTP ${r.status}: ${errText(j ?? r.text.slice(0, 200))}`, { status: r.status, body: j });
+    return j?.response ?? j;
+  }
+
+  async function request(pathname, { method = 'GET', query, json, form, body, bearer = true, retries, browserOnly = false } = {}) {
     // core.js builds paths with the query string attached; split it off so the relay sees the bare path
     const qi = pathname.indexOf('?');
     if (qi >= 0) {
       query = { ...Object.fromEntries(new URLSearchParams(pathname.slice(qi + 1))), ...(query || {}) };
       pathname = pathname.slice(0, qi);
     }
+    if (browserOnly) return viaBrowserOnly(pathname, { method, query, json });
     if (relay && bearer && !form && !body && relay.available() && relayable(method, pathname)) {
       const r = await viaBrowser(pathname, { method, query, json });
       if (r) return r.out;
@@ -83,16 +112,18 @@ function makeTumblr({ creds, budget = new Budget(), relay = null, fetchFn = fetc
       let res, text;
       const ctl = new AbortController();
       const timer = setTimeout(() => ctl.abort(), timeoutMs);
+      const t0 = Date.now();
       try {
         res = await fetchFn(url, { method, headers, body: payload, signal: ctl.signal });
         text = await res.text();
       } catch (e) {
         clearTimeout(timer);
+        onRequest({ method, path: pathname, status: 0, via: 'official', ms: Date.now() - t0, attempt, error: e.name === 'AbortError' ? 'timeout' : e.message });
         if (!creates && attempt < maxTry) { await sleep(1000 * 2 ** attempt); continue; }
         throw new NetError(`${method} ${pathname}: ${e.name === 'AbortError' ? 'timeout' : e.message}`, { uncertain: method !== 'GET' });
       }
       clearTimeout(timer);
-      onRequest({ method, path: pathname, status: res.status });
+      onRequest({ method, path: pathname, status: res.status, via: 'official', ms: Date.now() - t0, attempt, ...(res.ok ? {} : { error: errText(j ?? text.slice(0, 200)) }) });
       const j = safeJson(text);
       if (res.status === 401 && bearer && attempt === 0) { await creds.accessToken(true); continue; }
       if (res.status === 401) throw new AuthError('unauthorised');
@@ -134,6 +165,42 @@ function makeTumblr({ creds, budget = new Budget(), relay = null, fetchFn = fetc
     },
     getPost: (blog, id) => request(`/v2/blog/${enc(blog)}/posts/${enc(id)}`, { query: { post_format: 'npf' } }),
     putPost: (blog, id, body) => request(`/v2/blog/${enc(blog)}/posts/${enc(id)}`, { method: 'PUT', json: body }),
+    // A full edit that adds image files (multipart like a create; official API, the relay carries JSON only)
+    putPostFiles(blog, id, body, files = []) {
+      if (!files.length) return T.putPost(blog, id, body);
+      const fd = new FormData();
+      fd.append('json', JSON.stringify(body));
+      for (const f of files) fd.append(f.identifier, f.blob, f.filename);
+      return request(`/v2/blog/${enc(blog)}/posts/${enc(id)}`, { method: 'PUT', body: fd });
+    },
+    // The replies under a post, normalised. The web client's own list (/post/{id}/replies: ids and threads)
+    // through the browser; otherwise the public notes API in conversation mode (replies without ids). Read only.
+    // -> { source: 'replies' | 'notes', replies: [{ id, uuid, name, text, at, children }] }
+    async replies(blog, id) {
+      if (relay && relay.available()) {
+        try {
+          const r = await request(`/v2/blog/${enc(blog)}/post/${enc(id)}/replies`, { query: { mode: 'replies', sort: 'asc' } });
+          if (r?.timeline) return { source: 'replies', replies: replyTree(r.timeline.elements || []) };
+        } catch (e) { if (!(e instanceof HttpError)) throw e; }
+      }
+      const out = [];
+      let before = null;
+      for (let page = 0; page < 5; page++) {
+        const r = await request(`/v2/blog/${enc(blog)}/notes`, { query: { id, mode: 'conversation', ...(before ? { before_timestamp: before } : {}) } });
+        const notes = r?.notes || [];
+        for (const n of notes) {
+          if (pick(n, 'type') !== 'reply') continue;
+          out.push({ id: null, uuid: pick(n, 'blog_uuid') || null, name: pick(n, 'blog_name') || null, text: String(pick(n, 'reply_text') || ''), at: Math.round(Number(pick(n, 'timestamp')) * 1000) || 0, children: [] });
+        }
+        const next = r?._links?.next?.query_params?.before_timestamp;
+        if (!notes.length || !next || String(next) === String(before)) break;
+        before = next;
+      }
+      return { source: 'notes', replies: out.sort((a, b) => a.at - b.at) };
+    },
+    // Reply to a post as one of my blogs (the web client's own request; no public API): browser only, never retried
+    sendReply: ({ postId, postBlog, reblogKey, text, replyAs }) => request('/v2/user/post/reply', { method: 'POST', browserOnly: true,
+      json: { post_id: String(postId), reblog_key: reblogKey, tumblelog: postBlog, reply_text: text, reply_as: replyAs } }),
     // NPF create; files: [{ identifier, blob, filename }]
     async createPost(blog, json, files = []) {
       const fd = new FormData();
@@ -151,6 +218,10 @@ function makeTumblr({ creds, budget = new Budget(), relay = null, fetchFn = fetc
     deletePost: (blog, id) => request(`/v2/blog/${enc(blog)}/post/delete`, { method: 'POST', form: { id } }),
     followers: (blog, offset = 0, limit = 20) => request(`/v2/blog/${enc(blog)}/followers`, { query: { limit, offset } }),
     following: (offset = 0, limit = 20) => request('/v2/user/following', { query: { limit, offset } }),
+    // Activity of one of my blogs (newest first, paged by `before` = a timestamp in seconds); read only
+    notifications: (blog, query = {}) => request(`/v2/blog/${enc(blog)}/notifications`, { query: { rollups: false, ...query } }),
+    // Is `name` following my blog `blog`? → { followed_by: bool }
+    followedBy: (blog, name) => request(`/v2/blog/${enc(blog)}/followed_by`, { query: { query: name } }),
     blocks: (blog, offset = 0, limit = 20) => request(`/v2/blog/${enc(blog)}/blocks`, { query: { limit, offset } }),
     block: (blog, target) => request(`/v2/blog/${enc(blog)}/blocks`, { method: 'POST', form: { blocked_tumblelog: target } }),
     unblock: (blog, target) => request(`/v2/blog/${enc(blog)}/blocks`, { method: 'DELETE', query: { blocked_tumblelog: target }, retries: 1 }),
@@ -163,4 +234,28 @@ function makeTumblr({ creds, budget = new Budget(), relay = null, fetchFn = fetc
   return T;
 }
 
-module.exports = { makeTumblr, Budget, API };
+// snake_case (official, relay) or camelCase field
+function pick(o, snake) {
+  if (!o) return undefined;
+  if (o[snake] !== undefined) return o[snake];
+  return o[snake.replace(/_([a-z])/g, (_, c) => c.toUpperCase())];
+}
+// /replies timeline elements (post_note of type reply; NPF content; children = the thread under it) -> plain rows
+function replyTree(elements) {
+  const text = el => {
+    const c = pick(el, 'content');
+    if (Array.isArray(c) && c.length) return c.filter(b => b.type === 'text').map(b => b.text).join('\n');
+    return String(pick(el, 'reply_text') || '');
+  };
+  const one = el => ({
+    id: String(pick(el, 'reply_id') || pick(el, 'id') || '') || null,
+    uuid: pick(el, 'blog')?.uuid || pick(el, 'blog_uuid') || null,
+    name: pick(el, 'blog')?.name || pick(el, 'blog_name') || null,
+    text: text(el),
+    at: Math.round(Number(pick(el, 'timestamp')) * 1000) || 0,
+    children: (pick(el, 'children')?.elements || []).filter(x => pick(x, 'type') === 'reply').map(one),
+  });
+  return (elements || []).filter(x => pick(x, 'type') === 'reply').map(one);
+}
+
+module.exports = { makeTumblr, Budget, API, replyTree };

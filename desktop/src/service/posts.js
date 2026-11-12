@@ -94,6 +94,13 @@ function upsertPost(db, p, blogUuid, now = Date.now()) {
   n.blog, n.id, n.kind, n.parent_blog, n.parent_id, n.root_blog, n.root_id, n.state, n.published_at, J(n.tags), n.notes,
   n.notes == null ? null : now, n.summary, n.thumb, n.has_images, n.legacy, n.pinned, n.fingerprint, J(p), now);
   observeRevision(db, n, p, now);
+  // A new reblog of a grouped original joins that work at once, not only at the next pass's regroup (otherwise
+  // it shows as a separate work until then, BUG-20261108-01); groups.rebuild still settles the manager
+  if (n.kind === 'reblog' && n.root_blog && n.root_id) {
+    db.run(`UPDATE posts SET item_id = (SELECT o.item_id FROM posts o WHERE o.blog = ? AND o.id = ?)
+      WHERE blog = ? AND id = ? AND item_id IS NULL AND EXISTS (SELECT 1 FROM posts o WHERE o.blog = ? AND o.id = ? AND o.item_id IS NOT NULL)`,
+    n.root_blog, String(n.root_id), n.blog, n.id, n.root_blog, String(n.root_id));
+  }
   return { before, after: getPost(db, n.blog, n.id) };
 }
 

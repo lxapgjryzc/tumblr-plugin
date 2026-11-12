@@ -27,7 +27,7 @@ function makeStudio() {
   const api = D('src/service/api').makeApi(svc, { extra });
   const opened = [];
   const relay = D('src/service/relay').makeRelay({ enabled: () => !!svc.db.getMeta('companion', null) });
-  const bridge = D('src/service/bridge').makeBridge(svc, api, { version: 't', relay, approve: async () => true, onOpen: o => opened.push(o) });
+  const bridge = D('src/service/bridge').makeBridge(svc, api, { version: 't', relay, approve: async (id, { code }) => code === '4321', checkGrant: g => g === 'g-test', onOpen: o => opened.push(o) });
   return { fake, svc, api, bridge, relay, opened, running: true };
 }
 
@@ -69,6 +69,7 @@ function makeChrome(store, studio, tumblrCalls) {
       tumblrCalls.at(-1).headers = init.headers;
       return res(200, { response: { id_string: u.pathname.split('/').pop(), via: 'browser', body: init.body ? JSON.parse(init.body) : null } });
     }
+    if (u.pathname === '/api/v2/user/post/reply') { tumblrCalls.at(-1).body = JSON.parse(init.body || '{}'); return res(200, { response: {} }); }
     if (u.pathname === '/api/v2/tagged' || u.pathname === '/api/v2/user/likes' || /^\/api\/v2\/blog\/[^/]+\/notes$/.test(u.pathname)) { tumblrCalls.at(-1).search = u.search; return res(200, { response: [] }); }
     return res(404, {});
   };
@@ -102,7 +103,11 @@ function makeChrome(store, studio, tumblrCalls) {
 
   // pairing, then the snapshot arrives for the pages
   check((await send({ type: 'studioRefresh' })).error === 'not_paired', 'no snapshot before pairing');
-  const pr = await send({ type: 'studioPair' });
+  // pairing needs the one-time grant the app's own companion page hands over (no grant: refused, nothing sent)
+  check((await send({ type: 'studioPair' })).error === 'grant_required', 'pairing without a grant is refused');
+  // without a grant the app asks the user, showing the page's code (here: declined for another code)
+  check((await send({ type: 'studioPair', code: '1111' })).error === 'declined', 'a pairing the user does not allow is refused');
+  const pr = await send({ type: 'studioPair', grant: 'g-test', port: 47823 });
   check(pr.ok && store.bridge?.token && store.bridge.primary === 'mainblog', 'paired with the account the browser is logged into: ' + JSON.stringify(pr));
   check(store.studio?.version && store.studio.cache?.blogs?.['t:main'], 'the app snapshot is stored for the content scripts');
 
@@ -192,12 +197,24 @@ function makeChrome(store, studio, tumblrCalls) {
   const b = await served(false);
   check(/isn.t connected to the Tag Helper extension/.test(b.$('conn').textContent) && b.d.window.document.querySelector('section.needs-ext').hidden, 'without the extension the app-served page says so: ' + b.$('conn').textContent);
 
-  // the toolbar icon opens the app's page while it runs, the extension's own copy when it doesn't
+  // the toolbar icon opens the app: an open app tab is switched to; otherwise the app opens (and signs in) a page
+  // itself; with the app not running, the extension's own companion page. The icon's menu opens the companion page.
+  const opened0 = studio.opened.length;
   await fx.chrome.action.onClicked.fns[0]();
+  check(studio.opened.length === opened0 + 1 && studio.opened.at(-1).fresh === true && fx.chrome.tabs.created.length === 0, 'toolbar icon: the app opens its own page: ' + JSON.stringify(studio.opened.at(-1)) + JSON.stringify(fx.chrome.tabs.created));
+  const realQuery = fx.chrome.tabs.query, updated = [];
+  fx.chrome.tabs.query = async () => [{ id: 3, windowId: 1, url: 'http://127.0.0.1:47823/companion/' }, { id: 4, windowId: 1, url: 'http://127.0.0.1:47823/' }];
+  const realUpdate = fx.chrome.tabs.update;
+  fx.chrome.tabs.update = async (id, o) => { updated.push([id, o]); };
+  await fx.chrome.action.onClicked.fns[0]();
+  check(updated.length === 1 && updated[0][0] === 4 && !updated[0][1].url && studio.opened.length === opened0 + 1, 'toolbar icon: switches to the open app tab: ' + JSON.stringify(updated));
+  fx.chrome.tabs.query = realQuery; fx.chrome.tabs.update = realUpdate;
+  check(fx.menus.some(m => m.id === 'tth-companion' && m.contexts.includes('action')), 'the icon menu has the companion page');
+  await Promise.all(fx.chrome.contextMenus.onClicked.fns.map(f => f({ menuItemId: 'tth-companion' }, undefined)));
   studio.running = false;
   await fx.chrome.action.onClicked.fns[0]();
   studio.running = true;
-  check(fx.chrome.tabs.created[0] === 'http://127.0.0.1:47823/companion/' && fx.chrome.tabs.created[1] === `chrome-extension://${EXT_ID}/companion.html`, 'toolbar icon: app page when running, own page otherwise: ' + JSON.stringify(fx.chrome.tabs.created));
+  check(fx.chrome.tabs.created[0] === 'http://127.0.0.1:47823/companion/' && fx.chrome.tabs.created[1] === `chrome-extension://${EXT_ID}/companion.html`, 'companion page from the icon menu; own page when the app is down: ' + JSON.stringify(fx.chrome.tabs.created));
 
   // the companion never writes to Tumblr on its own
   check(tumblrCalls.every(c => c.startsWith('GET ')), 'only reads from tumblr.com: ' + JSON.stringify(tumblrCalls.map(String)));
@@ -232,6 +249,16 @@ function makeChrome(store, studio, tumblrCalls) {
   check(/not_own_blog/.test(r3) && tumblrCalls.length === n, 'an edit on a blog outside the account is refused without a request: ' + r3);
   const r4 = await studio.relay.send({ method: 'GET', path: '/v2/blog/someoneelse/posts', query: {} }).then(() => 'sent', e => e.message);
   check(/not_own_blog/.test(r4) && tumblrCalls.length === n, "another blog's post list is refused, and one refusal doesn't pause the relay: " + r4);
+  // a reply (no public API): only as one of the account's own blogs, with the fixed fields
+  const reply = json => studio.relay.send({ method: 'POST', path: '/v2/user/post/reply', query: {}, json }).then(r => r, e => e.message);
+  const ok = { post_id: '11', reblog_key: 'rk', tumblelog: 'mainblog', reply_text: 'thanks!', reply_as: 'refside' };
+  const a9 = await reply(ok);
+  check(a9.status === 200 && tumblrCalls.some(c => String(c) === 'POST /api/v2/user/post/reply' && c.body?.reply_as === 'refside'), 'a reply as one of my blogs goes through the browser');
+  const m = tumblrCalls.length;
+  const r10 = await reply({ ...ok, reply_as: 'someoneelse' });
+  const r11 = await reply({ ...ok, extra: 'x' });
+  const r12 = await reply({ ...ok, reply_text: ' ' });
+  check([r10, r11, r12].every(x => /not_own_blog/.test(x)) && tumblrCalls.length === m, 'a reply as another blog, with extra fields or no text is refused without a request: ' + [r10, r11, r12]);
   console.log(failures ? `${failures} FAILED` : 'all passed');
   process.exit(failures ? 1 : 0);
 })().catch(e => { console.log('TEST CRASH', e.stack || e); process.exit(1); });
