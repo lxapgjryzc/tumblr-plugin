@@ -1,10 +1,10 @@
 'use strict';
 // Official Tumblr API adapter (api.tumblr.com, OAuth2 bearer). No browser session, cookies or web-client token.
-// Reads and full-post edits (PUT) are retried a little; creating requests (POST) never are: a lost response
-// becomes an uncertain NetError and the caller reconciles before anything is sent again.
+// Reads are retried a little; writes (creates, full-post edits) never are: a lost response becomes an uncertain
+// NetError and the job reads or reconciles before anything is sent again.
 
 const { safeJson, errText, AuthError, NetError, RateError, HttpError, WaitError } = require('./errors');
-const { relayable, RelayMiss } = require('./relay');
+const { relayable, optIn, RelayMiss } = require('./relay');
 const { isPost } = require('./core');
 
 const API = 'https://api.tumblr.com';
@@ -37,22 +37,44 @@ class Budget {
 
 // relay: the browser relay (relay.js). Requests it allows go through the browser while it is connected and
 // don't count against the budget; whatever it can't take goes the official way below.
-function makeTumblr({ creds, budget = new Budget(), relay = null, fetchFn = fetch, timeoutMs = 30_000, onRequest = () => {} }) {
-  async function viaBrowser(pathname, { method, query, json }) {
+// browserFirst: the optional quota-saving mode (setting `relaySave`). While it returns true, a request the
+// browser may carry never falls back to the official API: it waits for the browser (WaitError → job `waiting`,
+// woken when the browser connects). Creates, deletes and visitor checks still go the official way.
+// browserDelete / browserCreate / browserUpload: deletes, creates/reblogs, and posts or edits with new files may
+// go through the browser too (settings `relayDelete` / `relayCreate` / `relayUpload`; see deletePost, createPost,
+// reblog, putPostFiles). Files travel to the extension as base64 next to the JSON (MAX_RELAY_FILES in total).
+const MAX_RELAY_FILES = 50 * 1024 * 1024;
+async function relayFiles(files) {
+  let total = 0;
+  const out = [];
+  for (const f of files) {
+    const buf = Buffer.from(await f.blob.arrayBuffer());
+    total += buf.length;
+    if (total > MAX_RELAY_FILES) return null; // too big to carry: the official API takes it
+    out.push({ identifier: f.identifier, filename: f.filename, mime: f.blob.type || 'application/octet-stream', b64: buf.toString('base64') });
+  }
+  return out;
+}
+function makeTumblr({ creds, budget = new Budget(), relay = null, browserFirst = () => false, browserDelete = () => false, browserCreate = () => false, browserUpload = () => false, fetchFn = fetch, timeoutMs = 30_000, onRequest = () => {} }) {
+  async function viaBrowser(pathname, { method, query, json, files = null }) {
     const q = {};
     for (const [k, v] of Object.entries(query || {})) if (v != null) q[k] = String(v);
     let r;
     const t0 = Date.now();
-    try { r = await relay.send({ method, path: pathname, query: q, json: json ?? null }); }
+    try { r = await relay.send({ method, path: pathname, query: q, json: json ?? null, ...(files ? { files } : {}) }); }
     catch (e) {
       onRequest({ method, path: pathname, status: 0, via: 'browser', ms: Date.now() - t0, error: e instanceof RelayMiss ? 'not taken: ' + e.message : e.message });
-      if (e instanceof RelayMiss) { relay.noteFallback?.(); return null; }
+      // a refusal of this one request (another blog, not on the list) is not about the browser being usable
+      if (e instanceof RelayMiss) return { miss: /^browser refused: (?!signed_out|other_account)/.test(e.message) ? 'request' : 'browser' };
       // taken but never answered: an edit may have landed (verification decides), a read is just retried
       throw new NetError(`${method} ${pathname} (browser): ${e.message}`, { uncertain: method !== 'GET' });
     }
     onRequest({ method, path: pathname, status: r.status, via: 'browser', ms: Date.now() - t0 });
+    // the browser's own fetch failed (status 0): a write may have reached Tumblr, so it is uncertain and the job
+    // reads fresh state before doing anything again; it is never resent the official way on the spot
+    if (r.status === 0 && method !== 'GET') throw new NetError(`${method} ${pathname} (browser): the browser's request failed`, { uncertain: true, status: 0 });
     // signed out or limited in the browser: nothing was done, so the official API takes this one
-    if (r.status === 401 || r.status === 429 || r.status === 0) { relay.noteFallback?.(); return null; }
+    if (r.status === 401 || r.status === 429 || r.status === 0) return { miss: 'browser' };
     const j = safeJson(r.text);
     if (r.status >= 500) throw new NetError(`HTTP ${r.status} on ${method} ${pathname} (browser)`, { uncertain: method !== 'GET', status: r.status });
     if (r.status < 200 || r.status >= 300) throw new HttpError(`HTTP ${r.status}: ${errText(j ?? r.text.slice(0, 200))}`, { status: r.status, body: j });
@@ -85,7 +107,10 @@ function makeTumblr({ creds, budget = new Budget(), relay = null, fetchFn = fetc
     return j?.response ?? j;
   }
 
-  async function request(pathname, { method = 'GET', query, json, form, body, bearer = true, retries, browserOnly = false } = {}) {
+  // browserJson: the JSON body the browser sends for a request whose official body is a form or multipart
+  // browser: an opt-in write (relay.optIn) goes through the browser only when this is true
+  // browserFiles: new files for the browser ({ identifier, filename, mime, b64 }), sent with browserJson as multipart
+  async function request(pathname, { method = 'GET', query, json, form, body, bearer = true, retries, browserOnly = false, browserJson = null, browserFiles = null, browser = false } = {}) {
     // core.js builds paths with the query string attached; split it off so the relay sees the bare path
     const qi = pathname.indexOf('?');
     if (qi >= 0) {
@@ -93,15 +118,25 @@ function makeTumblr({ creds, budget = new Budget(), relay = null, fetchFn = fetc
       pathname = pathname.slice(0, qi);
     }
     if (browserOnly) return viaBrowserOnly(pathname, { method, query, json });
-    if (relay && bearer && !form && !body && relay.available() && relayable(method, pathname)) {
-      const r = await viaBrowser(pathname, { method, query, json });
-      if (r) return r.out;
+    const bjson = browserJson || json;
+    if (relay && bearer && (browserJson || (!form && !body)) && relayable(method, pathname) && (browser || !optIn(method, pathname))) {
+      const wait = browserFirst();
+      if (wait && !relay.available()) throw new WaitError('waiting for the browser (saving official API quota)');
+      if (relay.available()) {
+        const r = await viaBrowser(pathname, { method, query, json: bjson, files: browserFiles });
+        if (!r.miss) return r.out;
+        // quota-saving mode: nothing was sent and the browser can't work right now, so wait for it
+        if (wait && r.miss === 'browser') throw new WaitError('the browser could not take it; waiting (saving official API quota)');
+        relay.noteFallback?.();
+      }
     }
     const url = new URL(API + pathname);
     for (const [k, v] of Object.entries(query || {})) if (v != null) url.searchParams.set(k, String(v));
     if (!bearer) url.searchParams.set('api_key', creds.clientId());
     const creates = method === 'POST';
-    const maxTry = retries ?? (creates ? 0 : 2);
+    // only reads retry on the spot. A write (create, full edit) whose answer was lost is never resent blindly:
+    // the job reads fresh state first (an edit may have landed and been changed on Tumblr since)
+    const maxTry = retries ?? (method === 'GET' ? 2 : 0);
     for (let attempt = 0; ; attempt++) {
       budget.take();
       const headers = { 'User-Agent': UA, Accept: 'application/json' };
@@ -123,8 +158,8 @@ function makeTumblr({ creds, budget = new Budget(), relay = null, fetchFn = fetc
         throw new NetError(`${method} ${pathname}: ${e.name === 'AbortError' ? 'timeout' : e.message}`, { uncertain: method !== 'GET' });
       }
       clearTimeout(timer);
-      onRequest({ method, path: pathname, status: res.status, via: 'official', ms: Date.now() - t0, attempt, ...(res.ok ? {} : { error: errText(j ?? text.slice(0, 200)) }) });
       const j = safeJson(text);
+      onRequest({ method, path: pathname, status: res.status, via: 'official', ms: Date.now() - t0, attempt, ...(res.ok ? {} : { error: errText(j ?? text.slice(0, 200)) }) });
       if (res.status === 401 && bearer && attempt === 0) { await creds.accessToken(true); continue; }
       if (res.status === 401) throw new AuthError('unauthorised');
       if (res.status === 429) {
@@ -171,7 +206,10 @@ function makeTumblr({ creds, budget = new Budget(), relay = null, fetchFn = fetc
       const fd = new FormData();
       fd.append('json', JSON.stringify(body));
       for (const f of files) fd.append(f.identifier, f.blob, f.filename);
-      return request(`/v2/blog/${enc(blog)}/posts/${enc(id)}`, { method: 'PUT', body: fd });
+      return (async () => {
+        const bf = browserUpload() ? await relayFiles(files) : null;
+        return request(`/v2/blog/${enc(blog)}/posts/${enc(id)}`, { method: 'PUT', body: fd, ...(bf ? { browserJson: body, browserFiles: bf } : {}) });
+      })();
     },
     // The replies under a post, normalised. The web client's own list (/post/{id}/replies: ids and threads)
     // through the browser; otherwise the public notes API in conversation mode (replies without ids). Read only.
@@ -206,16 +244,23 @@ function makeTumblr({ creds, budget = new Budget(), relay = null, fetchFn = fetc
       const fd = new FormData();
       fd.append('json', JSON.stringify(json));
       for (const f of files) fd.append(f.identifier, f.blob, f.filename);
-      const r = await request(`/v2/blog/${enc(blog)}/posts`, { method: 'POST', body: fd });
+      // without new files the browser may carry it as JSON (relayCreate); with files as multipart (also relayUpload)
+      let via = {};
+      if (browserCreate() && !files.length) via = { browserJson: json, browser: true };
+      else if (browserCreate() && browserUpload()) { const bf = await relayFiles(files); if (bf) via = { browserJson: json, browserFiles: bf, browser: true }; }
+      const r = await request(`/v2/blog/${enc(blog)}/posts`, { method: 'POST', body: fd, ...via });
       return String(r?.id_string ?? r?.id ?? r?.post?.id_string ?? r?.post?.id ?? '');
     },
     async reblog(dest, { parentBlog, parentId, reblogKey, state = 'published', tags = [], content = [], reblogControl }) {
       const json = { parent_tumblelog_uuid: parentBlog, parent_post_id: parentId, reblog_key: reblogKey, content, state, tags: tags.join(',') };
       if (reblogControl === 'noone') json.interactability_reblog = 'noone';
-      const r = await request(`/v2/blog/${enc(dest)}/posts`, { method: 'POST', json });
+      const r = await request(`/v2/blog/${enc(dest)}/posts`, { method: 'POST', json, browser: browserCreate() });
       return String(r?.id_string ?? r?.id ?? '');
     },
-    deletePost: (blog, id) => request(`/v2/blog/${enc(blog)}/post/delete`, { method: 'POST', form: { id } }),
+    // Official: a form. Through the browser (only with `relayDelete` on): the same request as JSON. A delete the
+    // browser took without a clear answer is uncertain; the delete jobs check whether the post is gone first.
+    deletePost: (blog, id) => request(`/v2/blog/${enc(blog)}/post/delete`, { method: 'POST', form: { id },
+      ...(browserDelete() ? { browserJson: { id: String(id) }, browser: true } : {}) }),
     followers: (blog, offset = 0, limit = 20) => request(`/v2/blog/${enc(blog)}/followers`, { query: { limit, offset } }),
     following: (offset = 0, limit = 20) => request('/v2/user/following', { query: { limit, offset } }),
     // Activity of one of my blogs (newest first, paged by `before` = a timestamp in seconds); read only

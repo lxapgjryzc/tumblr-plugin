@@ -411,3 +411,24 @@ test('links: URLs go out percent-encoded; a dropped formatting is named when ver
   assert.equal(job.status, 'failed');
   assert.match(job.error, /block 1: Tumblr dropped the link formatting/);
 });
+
+test('publish: waiting for the browser (quota-saving mode) keeps the draft publishing, then it goes out once', async () => {
+  const { fake, svc, api, run } = setup();
+  svc.pass(); await run();
+  const { WaitError } = require('../src/service/errors');
+  const cat = api.categories().find(c => c.tag === 'fanart');
+  const d = api.newDraft({ blog: 't:art' });
+  api.saveDraft({ id: d.id, doc: { v: 1, blocks: [{ id: 'a', type: 'text', text: 'waits for the browser' }], rows: [] }, options: { categoryIds: [cat.id] }, revision: d.revision, blog: 't:art' });
+  const orig = fake.createPost;
+  fake.createPost = async () => { throw new WaitError('waiting for the browser (saving official API quota)'); };
+  api.publish({ id: d.id });
+  await svc.jobs.drain(svc.ctx);
+  const job = () => svc.jobs.list({}).find(j => j.kind === 'post.publish');
+  assert.equal(job().status, 'waiting');
+  assert.match(job().error, /^browser:/);
+  assert.equal(api.draft({ id: d.id }).status, 'publishing', 'not failed while it waits');
+  fake.createPost = orig;
+  await run();
+  assert.equal(job().status, 'succeeded');
+  assert.equal([...fake.posts.values()].filter(p => p.blog.uuid === 't:art' && JSON.stringify(p.content).includes('waits for the browser')).length, 1);
+});

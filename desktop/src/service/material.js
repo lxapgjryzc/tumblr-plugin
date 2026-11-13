@@ -142,7 +142,7 @@ function addMaterial(svc, api, { media = null, aiKey = () => '' } = {}) {
           content: note ? [{ type: 'text', text: C.AI_NOTE_MARK + note }] : [] });
       } catch (e) {
         if (e instanceof HttpError) { db.run(`UPDATE collected SET status = 'failed', reason = ? WHERE root = ?`, e.message, root); }
-        else db.run(`UPDATE collected SET status = 'unknown', tags = ? WHERE root = ?`, J(tags), root);
+        else if (e.uncertain) db.run(`UPDATE collected SET status = 'unknown', tags = ? WHERE root = ?`, J(tags), root);
         throw Object.assign(e, { payload: frozen });
       }
       if (!id) { db.run(`UPDATE collected SET status = 'unknown', tags = ? WHERE root = ?`, J(tags), root); return { status: 'unknown', error: 'no id in the response', payload: frozen, nextAt: ctx.now() + 30_000 }; }

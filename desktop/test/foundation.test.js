@@ -30,7 +30,6 @@ function setup({ staleReads = 0 } = {}) {
   const clock = { t: Date.UTC(2026, 10, 1) };
   const now = () => clock.t;
   const svc = createService({ dataDir: dir, tumblr: fake, now });
-  svc.db.capability('edit.labels', 'not_used');
   const run = async () => {
     // drain repeatedly, moving the clock past verification waits
     for (let i = 0; i < 30; i++) { await svc.jobs.drain(svc.ctx); clock.t += 70e3; }
@@ -228,15 +227,13 @@ test('stale reads after a write do not cause a second write (verification polls)
   assert.equal(display.policyOf(db, 't:main', p.id_string).display, 'keep_hidden');
 });
 
-test('labels gate: edits wait for the label capability', async () => {
+test('edits do not wait for a community-label confirmation', async () => {
   const { fake, svc, run, db } = setup();
-  db.capability('edit.labels', 'unverified');
   const p = fake.addPost('t:main');
   svc.pass(); await run();
   display.userVisibility(db, svc.jobs, [{ blog: 't:main', id: p.id_string }], 'private');
   await run();
-  assert.equal(fake.posts.get(p.id_string).state, 'published');
-  assert.equal(svc.jobs.list().find(j => j.kind === 'post.visibility').status, 'skipped');
+  assert.equal(fake.posts.get(p.id_string).state, 'private');
 });
 
 test('routes: exclusions skip whole posts, whole-tag match, no duplicates, tombstones (A17, A19, A20)', async () => {
@@ -293,6 +290,25 @@ test('routes: a refused reblog leaves reblog control unchanged (A20)', async () 
   svc.pass(); await run();
   assert.equal(fake.posts.get(p.id_string).interactability_reblog, 'noone');
   assert.ok(!fake.calls.some(c => c === 'put:' + p.id_string), 'the original was not opened up');
+});
+
+test('routes: waiting for the browser leaves the delivery open, and it is created once later', async () => {
+  const { fake, svc, run, db, clock, roles } = setup();
+  svc.pass(); await run(); roles();
+  routes.saveRoute(db, svc.jobs, { sources: ['t:art'], dest: 't:main', enabled: true }, clock.t);
+  db.setMeta('automation', { routes: true });
+  clock.t += 1000;
+  const p = fake.addPost('t:art', { timestamp: ts(clock.t) });
+  const orig = fake.reblog;
+  fake.reblog = async () => { throw new (require('../src/service/errors').WaitError)('waiting for the browser'); };
+  svc.pass();
+  for (let i = 0; i < 6; i++) await svc.jobs.drain(svc.ctx);
+  assert.notEqual(db.get('SELECT status FROM deliveries WHERE src_id = ?', p.id_string)?.status, 'failed');
+  assert.ok(svc.jobs.list({}).some(j => j.kind === 'post.reblog' && j.status === 'waiting'), JSON.stringify(svc.jobs.list({}).map(j => [j.kind, j.status])));
+  fake.reblog = orig;
+  await run();
+  assert.equal([...fake.posts.values()].filter(x => x.blog.uuid === 't:main' && x.parent_post_id === p.id_string).length, 1);
+  assert.equal(db.get('SELECT status FROM deliveries WHERE src_id = ?', p.id_string).status, 'created');
 });
 
 test('work tags: one change applied to the chosen originals keeps visibility and other tags; reblogs are skipped (A05, A14, R02, R08)', async () => {

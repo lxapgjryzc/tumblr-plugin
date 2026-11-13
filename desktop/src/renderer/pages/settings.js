@@ -23,13 +23,17 @@ const SettingsPage = {
       s.relay ? h('div', { class: 'setting-block' },
         h('label', { class: 'check-label' }, h('input', { type: 'checkbox', checked: s.settings.browserRelay !== false, onchange: async e => { await call('setSettings', { browserRelay: e.target.checked }); this.render(root); } }), t('relayUse')),
         h('p', { class: 'muted small' }, t('relayHint')),
+        s.settings.browserRelay !== false ? h('label', { class: 'check-label' }, h('input', { type: 'checkbox', checked: s.settings.relaySave === true, onchange: async e => { await call('setSettings', { relaySave: e.target.checked }); this.render(root); } }), t('relaySave')) : null,
+        s.settings.browserRelay !== false ? h('p', { class: 'muted small' }, t('relaySaveHint')) : null,
+        s.settings.browserRelay !== false ? h('label', { class: 'check-label' }, h('input', { type: 'checkbox', checked: s.settings.relayDelete !== false, onchange: async e => { await call('setSettings', { relayDelete: e.target.checked }); this.render(root); } }), t('relayDelete')) : null,
+        s.settings.browserRelay !== false ? h('p', { class: 'muted small' }, t('relayDeleteHint')) : null,
+        s.settings.browserRelay !== false ? h('label', { class: 'check-label' }, h('input', { type: 'checkbox', checked: s.settings.relayCreate !== false, onchange: async e => { await call('setSettings', { relayCreate: e.target.checked }); this.render(root); } }), t('relayCreate')) : null,
+        s.settings.browserRelay !== false ? h('p', { class: 'muted small' }, t('relayCreateHint')) : null,
+        s.settings.browserRelay !== false ? h('label', { class: 'check-label' }, h('input', { type: 'checkbox', checked: s.settings.relayUpload !== false, onchange: async e => { await call('setSettings', { relayUpload: e.target.checked }); this.render(root); } }), t('relayUpload')) : null,
+        s.settings.browserRelay !== false ? h('p', { class: 'muted small' }, t('relayUploadHint')) : null,
         s.relay.enabled ? h('p', { class: 'muted small' }, s.relay.coolWhy ? t('relayCool_' + (['signed_out', 'other_account', 'limited'].includes(s.relay.coolWhy) ? s.relay.coolWhy : 'other'))
-          : s.relay.connected ? t('relayOn', s.relay.hour) : t('relayOff'))
+          : s.relay.connected ? t('relayOn', s.relay.hour) : t(s.settings.relaySave === true ? 'relayOffWait' : 'relayOff'))
           : s.settings.browserRelay !== false ? h('p', { class: 'muted small' }, t('relayUnpaired')) : null) : null,
-      h('h3', {}, t('labelsTitle')),
-      h('p', { class: 'muted' }, t('labelsHint')),
-      chips([{ value: 'unverified', label: t('labelsUnverified') }, { value: 'not_used', label: t('labelsNotUsed') }, { value: 'pass', label: t('labelsPass') }],
-        s.capabilities['edit.labels'] || 'unverified', async v => { await call('setCapability', { key: 'edit.labels', status: v }); this.render(root); }),
     );
 
     const roles = card(t('rolesTitle'), h('p', { class: 'muted' }, t('rolesHint')),

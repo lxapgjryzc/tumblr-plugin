@@ -7,6 +7,8 @@
 // out one validated request at a time (design 4.3: a browser-only adapter for an app-owned operation) and reports
 // the raw answer. Anything it can't do (not connected, another account logged in, the web session limited or
 // signed out) falls back to the official API for that request, so the official budget stays the backstop.
+// That is the default; the optional quota-saving mode (setting `relaySave`, tumblr.js `browserFirst`) makes
+// those requests wait for the browser instead.
 //
 // Transport: the extension long-polls the bridge (/relay/next) and answers with /relay/done. Pure module, no
 // sockets, so it can be tested.
@@ -17,7 +19,9 @@ const crypto = require('node:crypto');
 // the account's likes (material scans), public tag search (tag heat for upkeep and templates) and, read only,
 // single posts and notes on any blog (material checks such as the AI-art clues). The extension holds the same
 // list and also checks that writes and post lists are for the account's own blogs.
-// Creates and deletes keep the official API (their reconciliation rules are written for it), and public
+// Deletes (`relayDelete`) and creates/reblogs without new files (`relayCreate`) on the account's own blogs may
+// go through the browser too, but only when the caller asks (tumblr.js, by setting). A create the browser took
+// without a clear answer is uncertain like an official one: the job reconciles and never resends. Public
 // visitor checks need a logged-out view, so they never use the browser session. The one exception is a reply
 // (no public API at all): it goes through the browser or waits, and its outcome is reconciled from the replies.
 const ALLOWED = [
@@ -34,8 +38,15 @@ const ALLOWED = [
   ['GET', /^\/v2\/blog\/[\w%:.-]{1,80}\/post\/\d{1,25}\/replies$/],
   // A reply has no public API: replies.js sends it only this way (browserOnly), as one of the account's own blogs
   ['POST', /^\/v2\/user\/post\/reply$/],
+  // Own blogs only, opt-in (relayDelete); the extension checks the body is just { id }
+  ['POST', /^\/v2\/blog\/[\w%:.-]{1,80}\/post\/delete$/],
+  // Creates and reblogs without new files, own blogs only, opt-in (relayCreate); the extension checks the fields
+  ['POST', /^\/v2\/blog\/[\w%:.-]{1,80}\/posts$/],
 ];
 const relayable = (method, path) => ALLOWED.some(([m, re]) => m === method && re.test(path));
+// Writes the browser carries only when the caller asks for it (each has its own setting)
+const OPT_IN = [/^\/v2\/blog\/[\w%:.-]{1,80}\/post\/delete$/, /^\/v2\/blog\/[\w%:.-]{1,80}\/posts$/];
+const optIn = (method, path) => method === 'POST' && OPT_IN.some(re => re.test(path));
 
 const ONLINE_MS = 45e3;     // the extension counts as connected this long after its last poll
 const PICKUP_MS = 8e3;      // not taken by the browser in this time: the request goes the official way
@@ -97,10 +108,12 @@ function makeRelay({ now = Date.now, enabled = () => true, onConnect = () => {},
     while (queue.length && out.length < max) {
       const item = queue.shift();
       clearTimeout(item.timer);
+      // uploads get longer to answer: 90 s plus 1 s per 50 KB of files (a slow connection still finishes)
+      const bytes = (item.req.files || []).reduce((n, f) => n + String(f.b64 || '').length * 0.75, 0);
       item.timer = setTimeout(() => {
         if (!taken.delete(item.rid)) return;
         item.reject(Object.assign(new Error('the browser took the request but never answered'), { uncertain: true }));
-      }, ANSWER_MS);
+      }, ANSWER_MS + Math.round(bytes / 50e3) * 1000);
       taken.set(item.rid, item);
       out.push({ rid: item.rid, ...item.req });
     }
@@ -141,4 +154,4 @@ function makeRelay({ now = Date.now, enabled = () => true, onConnect = () => {},
   return { send, next, done, available, stats, cool, noteFallback: () => tally(true) };
 }
 
-module.exports = { makeRelay, relayable, RelayMiss, ALLOWED };
+module.exports = { makeRelay, relayable, optIn, RelayMiss, ALLOWED };

@@ -11,7 +11,7 @@ const { J, P } = require('./db');
 const C = require('./core');
 const { fresh } = require('./ops');
 const { upsertPost, payloadOf, contentFingerprint, trailFingerprint, observeRevision, latestRevision } = require('./posts');
-const { StaleError, HttpError, NetError, RateError, AuthError } = require('./errors');
+const { StaleError, HttpError, NetError, RateError, AuthError, WaitError } = require('./errors');
 
 // The one tag comparison used everywhere: whole tags, case-insensitive, '#' and outer spaces ignored
 const cleanRuleTag = t => C.norm(String(t || '')).trim();
@@ -261,7 +261,7 @@ const reblog = {
     } catch (e) {
       // A refusal leaves the original's reblog setting as it is; no temporary opening
       if (e instanceof NetError && e.uncertain) mapSet(db, p, 'unknown', { tags });
-      else if (!(e instanceof NetError || e instanceof RateError || e instanceof AuthError)) mapSet(db, p, 'failed', { reason: String(e.message || e) });
+      else if (!(e instanceof NetError || e instanceof RateError || e instanceof AuthError || e instanceof WaitError)) mapSet(db, p, 'failed', { reason: String(e.message || e) });
       throw e;
     }
     if (!id) { mapSet(db, p, 'unknown', { tags }); return { status: 'unknown', error: 'no id in the response', nextAt: ctx.now() + 30_000, payload: { ...p, tags, sentAt: ctx.now() } }; }

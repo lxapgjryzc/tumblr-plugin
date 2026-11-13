@@ -17,7 +17,7 @@ const { J, P } = require('./db');
 const C = require('./core');
 const { upsertPost, contentFingerprint, latestRevision, editBody: editBodyFrom } = require('./posts');
 const routes = require('./routes');
-const { fresh, verifyStep, labelGate, categoryFirst } = require('./ops');
+const { fresh, verifyStep, categoryFirst } = require('./ops');
 const { UnsupportedError, StaleError, HttpError } = require('./errors');
 
 const DOC_VERSION = 1;
@@ -613,7 +613,6 @@ function addWriting(svc, api, { dataDir, assetUrl = null }) {
     const d = db.get('SELECT status FROM drafts WHERE id = ?', p.draft);
     if (!d) throw new StaleError('the edit was deleted');
     if (want.problems.length) throw new UnsupportedError('cannot send: ' + want.problems.map(x => x.problem).join(', '));
-    labelGate(ctx);
     const { p: cur, row } = await fresh(ctx, p.blog, p.id);
     if (row.kind !== 'original') throw new UnsupportedError('not an original');
     if (row.legacy) throw new UnsupportedError('legacy-format post');
@@ -757,7 +756,8 @@ function addWriting(svc, api, { dataDir, assetUrl = null }) {
       if (p.publishOn) json.publish_on = new Date(p.publishOn).toISOString();
       let id;
       try { id = await ctx.tumblr.createPost(p.blog, json, files); }
-      catch (e) { if (!e.uncertain && !(e instanceof require('./errors').NetError)) db.run(`UPDATE drafts SET status = 'failed' WHERE id = ?`, p.draft); throw e; }
+      // network, rate limit, sign-in or waiting for the browser: the job waits or reconciles, the draft stays publishing
+      catch (e) { const E = require('./errors'); if (!e.uncertain && ![E.NetError, E.RateError, E.AuthError, E.WaitError].some(K => e instanceof K)) db.run(`UPDATE drafts SET status = 'failed' WHERE id = ?`, p.draft); throw e; }
       if (!id) return { status: 'unknown', error: 'no id in the response', nextAt: now() + 30_000 };
       let row = null;
       try { row = (await fresh(ctx, p.blog, id)).row; } catch {}

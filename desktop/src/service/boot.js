@@ -52,7 +52,14 @@ function bootStudio({
   // Tumblr requests: reads that succeed through the browser are frequent and dull, so only their failures
   // and every write are kept; official requests are all kept (they spend the hourly budget)
   const onRequest = r => { if (r.method === 'GET' && r.status >= 200 && r.status < 300 && r.via === 'browser') return; diag.request(r); };
-  let tumblr = makeTumblr({ creds, budget, relay, onRequest });
+  // quota-saving mode: only while the relay itself is on and paired, so an unpaired app still works
+  const browserFirst = () => relay.stats().enabled && db.getMeta('settings', {}).relaySave === true;
+  // deletes and creates/reblogs without new files through the browser (both live-checked 2026-11-13: on unless turned off)
+  const browserDelete = () => relay.stats().enabled && db.getMeta('settings', {}).relayDelete !== false;
+  const browserCreate = () => relay.stats().enabled && db.getMeta('settings', {}).relayCreate !== false;
+  // new image files through the browser (step 3, live-checked 2026-11-13: on unless turned off)
+  const browserUpload = () => relay.stats().enabled && db.getMeta('settings', {}).relayUpload !== false;
+  let tumblr = makeTumblr({ creds, budget, relay, browserFirst, browserDelete, browserCreate, browserUpload, onRequest });
   if (fake) {
     // made-up account for tests and UI checks (test/demo.js); never the real one
     tumblr = require('../../test/demo').demoFake();
@@ -61,7 +68,6 @@ function bootStudio({
     const send = tumblr.sendReply;
     tumblr.sendReply = a => { if (!relay.available()) throw new (require('./errors').WaitError)('needs the signed-in browser (Tumblr Studio companion)'); return send(a); };
     creds.status = () => 'connected';
-    db.capability('edit.labels', 'not_used');
   }
   svc = createService({ db, tumblr, creds, onEvent, diag });
   if (!db.getMeta('categoryFirstFixed')) {

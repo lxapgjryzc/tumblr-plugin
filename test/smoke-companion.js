@@ -69,6 +69,15 @@ function makeChrome(store, studio, tumblrCalls) {
       tumblrCalls.at(-1).headers = init.headers;
       return res(200, { response: { id_string: u.pathname.split('/').pop(), via: 'browser', body: init.body ? JSON.parse(init.body) : null } });
     }
+    if (/^\/api\/v2\/blog\/[^/]+\/posts$/.test(u.pathname) && init.method === 'POST') {
+      if (init.body instanceof FormData) {
+        const files = [];
+        for (const [k, v] of init.body.entries()) if (k !== 'json') files.push([k, v.name, v.type, Buffer.from(await v.arrayBuffer()).toString()]);
+        Object.assign(tumblrCalls.at(-1), { body: JSON.parse(init.body.get('json')), files, contentType: init.headers['Content-Type'] });
+        return res(201, { response: { id_string: '900000000000000002' } });
+      }
+      tumblrCalls.at(-1).body = JSON.parse(init.body || '{}'); return res(201, { response: { id: 900000000000000001, id_string: '900000000000000001' } }); }
+    if (/^\/api\/v2\/blog\/[^/]+\/post\/delete$/.test(u.pathname)) { tumblrCalls.at(-1).body = JSON.parse(init.body || '{}'); return res(200, { response: {} }); }
     if (u.pathname === '/api/v2/user/post/reply') { tumblrCalls.at(-1).body = JSON.parse(init.body || '{}'); return res(200, { response: {} }); }
     if (u.pathname === '/api/v2/tagged' || u.pathname === '/api/v2/user/likes' || /^\/api\/v2\/blog\/[^/]+\/notes$/.test(u.pathname)) { tumblrCalls.at(-1).search = u.search; return res(200, { response: [] }); }
     return res(404, {});
@@ -88,7 +97,7 @@ function makeChrome(store, studio, tumblrCalls) {
   const tumblrCalls = [];
   const fx = makeChrome(store, studio, tumblrCalls);
   const ctx = { chrome: fx.chrome, fetch: fx.fetch, console, setTimeout, clearTimeout, AbortController, URL, URLSearchParams, TextDecoder, TextEncoder,
-    navigator: { languages: ['en'], language: 'en' }, crypto: require('crypto').webcrypto, Blob };
+    navigator: { languages: ['en'], language: 'en' }, crypto: require('crypto').webcrypto, Blob, FormData, atob };
   ctx.importScripts = f => vm.runInContext(ext(f), ctx, { filename: f });
   ctx.self = ctx;
   vm.createContext(ctx);
@@ -259,6 +268,40 @@ function makeChrome(store, studio, tumblrCalls) {
   const r11 = await reply({ ...ok, extra: 'x' });
   const r12 = await reply({ ...ok, reply_text: ' ' });
   check([r10, r11, r12].every(x => /not_own_blog/.test(x)) && tumblrCalls.length === m, 'a reply as another blog, with extra fields or no text is refused without a request: ' + [r10, r11, r12]);
+  // a delete (opt-in in the app): one post on one of my blogs, body exactly { id }
+  const del = (blog, json) => studio.relay.send({ method: 'POST', path: `/v2/blog/${blog}/post/delete`, query: {}, json }).then(r => r, e => e.message);
+  const d1 = await del('refside', { id: '14' });
+  check(d1.status === 200 && tumblrCalls.some(c => String(c) === 'POST /api/v2/blog/refside/post/delete' && c.body?.id === '14'), 'a delete on one of my blogs goes through the browser');
+  const k = tumblrCalls.length;
+  const d2 = await del('someoneelse', { id: '14' });
+  const d3 = await del('refside', { id: '14', extra: 'x' });
+  const d4 = await del('refside', { id: 'abc' });
+  check(/not_own_blog/.test(d2) && /not_allowed/.test(d3) && /not_allowed/.test(d4) && tumblrCalls.length === k, 'a delete on another blog or with another body is refused without a request: ' + [d2, d3, d4]);
+  // creates (opt-in in the app): own blogs, known fields, no new files
+  const cre = (blog, json) => studio.relay.send({ method: 'POST', path: `/v2/blog/${blog}/posts`, query: {}, json }).then(r => r, e => e.message);
+  const c1 = await cre('refside', { content: [{ type: 'text', text: 'hi' }], state: 'draft', tags: 'a,b' });
+  const c2 = await cre('refside', { content: [], state: 'published', tags: 'x', parent_tumblelog_uuid: 't:other', parent_post_id: '5', reblog_key: 'rk' });
+  check(c1.status === 201 && c2.status === 201 && tumblrCalls.some(c => String(c) === 'POST /api/v2/blog/refside/posts' && c.body?.reblog_key === 'rk'), 'an original and a reblog on one of my blogs go through the browser');
+  const q = tumblrCalls.length;
+  const c3 = await cre('someoneelse', { content: [] });
+  const c4 = await cre('refside', { content: [{ type: 'image', media: [{ identifier: 'img1' }] }] });
+  const c5 = await cre('refside', { content: [], parent_post_id: '5' });
+  const c6 = await cre('refside', { content: [], slug: 'x' });
+  check(/not_own_blog/.test(c3) && [c4, c5, c6].every(x => /not_allowed/.test(x)) && tumblrCalls.length === q, 'a create on another blog, with a new file, half a parent or unknown fields is refused without a request: ' + [c3, c4, c5, c6]);
+  // uploads: the files come with the request and go out as multipart; identifiers must match the files exactly
+  const up = (blog, json, files, method = 'POST', p = `/v2/blog/${blog}/posts`) => studio.relay.send({ method, path: p, query: {}, json, files }).then(r => r, e => e.message);
+  const file = (id, mime = 'image/png') => ({ identifier: id, filename: id + '.png', mime, b64: Buffer.from('IMG-' + id).toString('base64') });
+  const imgPost = ids => ({ content: ids.map(id => ({ type: 'image', media: [{ identifier: id }] })), state: 'draft' });
+  const u1 = await up('refside', imgPost(['b1', 'b2']), [file('b1'), file('b2')]);
+  const sent = tumblrCalls.find(c => c.files);
+  check(u1.status === 201 && sent && !sent.contentType && JSON.stringify(sent.files) === JSON.stringify([['b1', 'b1.png', 'image/png', 'IMG-b1'], ['b2', 'b2.png', 'image/png', 'IMG-b2']]) && sent.body.content.length === 2,
+    'a post with new images goes through the browser as multipart: ' + JSON.stringify(u1).slice(0, 300) + JSON.stringify(sent && sent.files));
+  const w2 = tumblrCalls.length;
+  const u2 = await up('refside', imgPost(['b1']), [file('b1'), file('b9')]);
+  const u3 = await up('refside', imgPost(['b1']), [file('b1', 'text/html')]);
+  const u4 = await up('refside', { id: '14' }, [file('b1')], 'POST', '/v2/blog/refside/post/delete');
+  const u5 = await up('someoneelse', imgPost(['b1']), [file('b1')]);
+  check([u2, u3, u4].every(x => /not_allowed/.test(x)) && /not_own_blog/.test(u5) && tumblrCalls.length === w2, 'files not matching the post, another file type, files on a delete or another blog are refused without a request: ' + [u2, u3, u4, u5]);
   console.log(failures ? `${failures} FAILED` : 'all passed');
   process.exit(failures ? 1 : 0);
 })().catch(e => { console.log('TEST CRASH', e.stack || e); process.exit(1); });

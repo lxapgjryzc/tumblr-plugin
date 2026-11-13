@@ -1,4 +1,5 @@
 'use strict';
+const { postGone } = require('./gone');
 // Version maintenance in one place (docs/REBLOG_POLICY.md 2.1, R12-R17, A56). A work's source revisions and,
 // per owned destination blog, the reblog instances that hold them, with the actions that make sense on exact
 // instances. Nothing here edits a snapshot's body or tags:
@@ -138,7 +139,7 @@ function addVersions(svc, api) {
         else if (['hide', 'show'].includes(action) && !['published', 'private'].includes(x.state)) skipped.push({ ...x, reason: 'state' });
         else ok.push(x);
       }
-      return { action, ok, skipped, original: { blog: origin.blog, id: origin.id, untouched: true }, labelsOk: ['pass', 'not_used'].includes(db.capStatus('edit.labels')) };
+      return { action, ok, skipped, original: { blog: origin.blog, id: origin.id, untouched: true } };
     },
     versionAction({ blog, id, targets = [], action }) {
       const pv = api.versionActionPreview({ blog, id, targets, action });
@@ -205,7 +206,7 @@ function addVersions(svc, api) {
       const row = db.get('SELECT kind FROM posts WHERE blog = ? AND id = ?', blog, String(id));
       if (!row) return { status: 'skipped', error: 'not a known post' };
       if (row.kind !== 'reblog') return { status: 'skipped', error: 'originals are never deleted from version maintenance' };
-      const gone = async () => { try { await ctx.tumblr.getPost(blog, id); return false; } catch (e) { if (e.status === 404) return true; throw e; } };
+      const gone = () => postGone(ctx.tumblr, blog, id);
       if (job.payload.phase !== 'verify') {
         if (!(await gone())) await ctx.tumblr.deletePost(blog, id);
         return { status: 'verifying', payload: { ...job.payload, phase: 'verify', tries: 0 }, nextAt: ctx.now() + 3000 };

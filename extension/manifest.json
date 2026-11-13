@@ -1,7 +1,7 @@
 {
   "manifest_version": 3,
   "name": "Tumblr Tag Helper",
-  "version": "0.13.9",
+  "version": "0.13.12",
   "description": "Browser companion of Tumblr Studio: tag suggestions and template insertion on tumblr.com, mass editor upgrades, hiding ads and recommendations, and shortcuts into the app.",
   "permissions": [
     "storage",

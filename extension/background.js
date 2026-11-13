@@ -179,7 +179,60 @@ const RELAY_OK = [
   ['GET', /^\/v2\/blog\/([\w%:.-]{1,80})\/post\/\d{1,25}\/replies$/, 'anyBlog'], // read a post's replies
   // a reply the app sends as one of the account's own blogs (Tumblr has no public API for it); body checked in replyOk
   ['POST', /^\/v2\/user\/post\/reply$/, 'reply'],
+  // delete one post on the account's (and the app's) own blogs; the app offers this only with its opt-in
+  // setting and checks the post is gone before and after. Body: exactly { id }
+  ['POST', /^\/v2\/blog\/([\w%:.-]{1,80})\/post\/delete$/, 'delete'],
+  // create a post or reblog on one of the account's (and the app's) own blogs, without new files (the app
+  // offers this only with its opt-in setting; a lost answer is reconciled there, never resent). Fields checked in createOk
+  ['POST', /^\/v2\/blog\/([\w%:.-]{1,80})\/posts$/, 'create'],
 ];
+const CREATE_KEYS = new Set(['content', 'layout', 'state', 'tags', 'publish_on', 'parent_tumblelog_uuid', 'parent_post_id', 'reblog_key', 'interactability_reblog']);
+function createOk(json, files) {
+  if (!json || typeof json !== 'object' || Array.isArray(json) || Object.keys(json).some(k => !CREATE_KEYS.has(k))) return false;
+  if (!Array.isArray(json.content) || (json.layout != null && !Array.isArray(json.layout))) return false;
+  if (json.state != null && !['published', 'draft', 'queue', 'private'].includes(json.state)) return false;
+  if (json.tags != null && typeof json.tags !== 'string') return false;
+  // a reblog names its parent completely; an original names none of it
+  const parent = ['parent_tumblelog_uuid', 'parent_post_id', 'reblog_key'].filter(k => json[k] != null).length;
+  if (parent !== 0 && parent !== 3) return false;
+  // upload identifiers only for the files that come with it (filesOk checks they match exactly)
+  if (!files && JSON.stringify(json.content).includes('"identifier"')) return false;
+  return JSON.stringify(json).length <= 512 * 1024;
+}
+// New image files for a create or a full edit (step 3): images/video only, sane names and sizes, and the post's
+// upload identifiers are exactly these files, so nothing unrelated rides along.
+const FILE_TYPES = /^(image\/(png|jpeg|gif|webp|bmp)|video\/mp4)$/;
+function idsIn(content) {
+  const out = [];
+  for (const b of content || []) for (const m of [].concat(b?.media || [], b?.poster || [])) if (m && typeof m.identifier === 'string') out.push(m.identifier);
+  return out;
+}
+function filesOk(item, rule) {
+  if (item.files == null) return true;
+  if (!(rule[2] === 'create' || (item.method === 'PUT' && !rule[2]))) return false;
+  const f = item.files;
+  if (!Array.isArray(f) || !f.length || f.length > 30) return false;
+  let total = 0;
+  for (const x of f) {
+    if (!x || !/^[\w-]{1,64}$/.test(String(x.identifier || '')) || !FILE_TYPES.test(String(x.mime || '')) || typeof x.b64 !== 'string' || typeof x.filename !== 'string' || x.filename.length > 200) return false;
+    total += x.b64.length;
+  }
+  if (total > 80 * 1024 * 1024) return false;
+  const want = [...new Set(f.map(x => x.identifier))].sort();
+  return want.length === f.length && JSON.stringify([...new Set(idsIn(item.json?.content))].sort()) === JSON.stringify(want);
+}
+function formOf(json, files) {
+  const fd = new FormData();
+  fd.append('json', JSON.stringify(json ?? {}));
+  for (const x of files) {
+    const bin = atob(x.b64);
+    const bytes = new Uint8Array(bin.length);
+    for (let i = 0; i < bin.length; i++) bytes[i] = bin.charCodeAt(i);
+    fd.append(x.identifier, new Blob([bytes], { type: x.mime }), x.filename);
+  }
+  return fd;
+}
+const deleteOk = json => !!json && typeof json === 'object' && Object.keys(json).length === 1 && /^\d{1,25}$/.test(String(json.id ?? ''));
 // Only these fields, a short plain text, and reply_as one of the account's (and the app's) own blogs
 const REPLY_KEYS = new Set(['post_id', 'reblog_key', 'tumblelog', 'reply_text', 'reply_as']);
 function replyOk(json, own) {
@@ -210,6 +263,9 @@ async function carry(item, appBlogs, bridge) {
   let a = await webAuth().catch(() => null);
   if (!a) return { rid, refused: 'signed_out' };
   if (!bridge.primary || String(a.primary || '').toLowerCase() !== bridge.primary.toLowerCase()) return { rid, refused: 'other_account' };
+  if (rule[2] === 'delete' && !deleteOk(item.json)) return { rid, refused: 'not_allowed' };
+  if (rule[2] === 'create' && !createOk(item.json, item.files)) return { rid, refused: 'not_allowed' };
+  if (!filesOk(item, rule)) return { rid, refused: 'not_allowed' };
   if (rule[2] === 'reply' && !replyOk(item.json, b => a.own.has(b.toLowerCase()) && appBlogs.has(b.toLowerCase()))) return { rid, refused: 'not_own_blog' };
   const blog = rule[1].exec(item.path)[1];
   if (blog && rule[2] !== 'anyBlog') {
@@ -220,10 +276,12 @@ async function carry(item, appBlogs, bridge) {
   const url = TUMBLR + '/api' + item.path + (qs ? '?' + qs : '');
   for (let retry = 0; ; retry++) {
     const headers = { Authorization: 'Bearer ' + a.token, Accept: 'application/json' };
-    if (item.method !== 'GET') { headers['Content-Type'] = 'application/json'; if (a.csrf) headers['X-CSRF'] = a.csrf; }
+    // with files: multipart like the official API (the browser sets the boundary); otherwise JSON
+    if (item.method !== 'GET') { if (!item.files) headers['Content-Type'] = 'application/json'; if (a.csrf) headers['X-CSRF'] = a.csrf; }
+    const body = item.method === 'GET' ? undefined : item.files ? formOf(item.json, item.files) : JSON.stringify(item.json ?? {});
     let res;
-    try { res = await fetch(url, { method: item.method, headers, credentials: 'include', body: item.method === 'GET' ? undefined : JSON.stringify(item.json ?? {}) }); }
-    catch { return { rid, status: 0 }; } // the app sends it the official way (an edit is a full, repeatable PUT)
+    try { res = await fetch(url, { method: item.method, headers, credentials: 'include', body }); }
+    catch { return { rid, status: 0 }; } // may have reached Tumblr: the app treats a write as uncertain and reads first
     if (res.status === 401 && retry === 0) { a = await webAuth(true).catch(() => null); if (!a) return { rid, refused: 'signed_out' }; continue; }
     return { rid, status: res.status, text: await res.text(), retryAfter: Number(res.headers.get('retry-after')) || 0 };
   }

@@ -1,4 +1,5 @@
 'use strict';
+const { postGone } = require('./gone');
 // AI-made images among collected material (moved from the extension's collection page, A55). The rule is the
 // extension's (src/core.js aiArtCheck / aiArtVerdict): the original poster's own tags decide; otherwise two or
 // more other blogs saying so (their reblog tags and replies) with none against.
@@ -84,7 +85,7 @@ function addAiArt(svc, api) {
       const row = db.get(`SELECT p.kind, p.parent_blog, p.parent_id, b.role FROM posts p JOIN blogs b ON b.uuid = p.blog WHERE p.blog = ? AND p.id = ?`, blog, id);
       if (!row) return { status: 'skipped', error: 'not a known post' };
       if (row.kind !== 'reblog' || row.role !== 'material') return { status: 'skipped', error: 'only reblogs on material blogs are deleted here' };
-      const gone = async () => { try { await ctx.tumblr.getPost(blog, id); return false; } catch (e) { if (e.status === 404) return true; throw e; } };
+      const gone = () => postGone(ctx.tumblr, blog, id);
       if (job.payload.phase !== 'verify') {
         if (!(await gone())) await ctx.tumblr.deletePost(blog, id);
         return { status: 'verifying', payload: { ...job.payload, phase: 'verify', tries: 0 }, nextAt: ctx.now() + 3000 };
