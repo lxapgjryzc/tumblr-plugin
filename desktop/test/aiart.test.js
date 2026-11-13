@@ -18,7 +18,6 @@ test('ai art: the poster’s own tags flag a collected reblog; nothing is writte
   const fake = makeFake({ blogs: [{ uuid: 't:main', name: 'mainblog', primary: true }, { uuid: 't:ref', name: 'refside' }] });
   const clock = { t: Date.now() };
   const svc = createService({ dataDir: dir, tumblr: fake, now: () => clock.t });
-  svc.db.capability('edit.labels', 'not_used');
   const extra = {};
   addAiArt(svc, extra);
   const api = makeApi(svc, { extra });

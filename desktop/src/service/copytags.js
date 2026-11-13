@@ -11,7 +11,7 @@
 
 const { P } = require('./db');
 const { editBody } = require('./posts');
-const { fresh, labelGate, verifyStep } = require('./ops');
+const { fresh, verifyStep } = require('./ops');
 
 const PER_PASS = 40;
 
@@ -67,7 +67,6 @@ function addCopyTags(svc) {
       if (row.legacy) return { status: 'skipped', error: 'legacy-format post' };
       const want = P(src.tags, []);
       if (JSON.stringify(want) === JSON.stringify(row.tags)) return { status: 'unchanged' };
-      labelGate(ctx);
       await ctx.tumblr.putPost(blog, id, editBody(p, { tags: want }));
       return { status: 'verifying', payload: { ...job.payload, phase: 'verify', verifyN: 0, expect: want }, nextAt: ctx.now() + 2000 };
     },

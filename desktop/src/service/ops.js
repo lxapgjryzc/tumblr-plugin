@@ -10,14 +10,6 @@ const C = require('./core');
 
 const VERIFY_DELAYS = [3e3, 6e3, 15e3, 30e3, 60e3, 5 * 60e3, 15 * 60e3];
 
-// Fields the OAuth payload doesn't show can't be preserved. Community labels are such a field (stage 0);
-// edits wait until the user has confirmed how labels behave (capability edit.labels).
-function labelGate(ctx) {
-  const s = ctx.db.capStatus('edit.labels');
-  if (s === 'pass' || s === 'not_used') return;
-  throw new UnsupportedError('community-label preservation not confirmed (Settings → Tumblr connection)');
-}
-
 async function fresh(ctx, blog, id) {
   let p;
   try { p = await ctx.tumblr.getPost(blog, id); }
@@ -60,7 +52,6 @@ const visibility = {
     if (!['published', 'private'].includes(row.state)) return { status: 'skipped', error: 'not a published or private post' };
     if (reason === 'expiry' && row.state !== 'published') return { status: 'unchanged', error: 'already hidden' };
     if (row.state === target) return finish(ctx, job, row, 'unchanged');
-    labelGate(ctx);
     await ctx.tumblr.putPost(blog, id, editBody(p, { state: target }));
     return { status: 'verifying', payload: { ...job.payload, phase: 'verify', verifyN: 0, prev: row.state }, nextAt: ctx.now() + 2000, result: { sent: ctx.now() } };
   },
@@ -136,10 +127,9 @@ const tags = {
     if (row.kind === 'reblog') return { status: 'skipped', error: 'a reblog takes its tags from its original; edit the original' };
     const next = categoryFirst(ctx.db, want(row.tags));
     if (JSON.stringify(next) === JSON.stringify(row.tags)) return { status: 'unchanged' };
-    labelGate(ctx);
     await ctx.tumblr.putPost(blog, id, editBody(p, { tags: next }));
     return { status: 'verifying', payload: { ...job.payload, phase: 'verify', verifyN: 0, expect: next }, nextAt: ctx.now() + 2000 };
   },
 };
 
-module.exports = { visibility, tags, fresh, labelGate, verifyStep, categoryFirst, queueCategoryFirst };
+module.exports = { visibility, tags, fresh, verifyStep, categoryFirst, queueCategoryFirst };

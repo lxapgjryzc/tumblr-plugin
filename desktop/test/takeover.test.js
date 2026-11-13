@@ -19,7 +19,6 @@ test('reblog sync takeover: offered from the import, only the missed post is sen
   const now = () => clock.t;
   const fake = makeFake({ blogs: [{ uuid: 't:main', name: 'mainblog', primary: true }, { uuid: 't:side', name: 'sideblog' }], now });
   const svc = createService({ dataDir: dir, tumblr: fake, now });
-  svc.db.capability('edit.labels', 'not_used');
   const extra = {};
   addTakeover(svc, extra, { dataDir: dir });
   const api = makeApi(svc, { extra });

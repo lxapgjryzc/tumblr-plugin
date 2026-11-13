@@ -112,7 +112,7 @@ const getPost = (db, blog, id) => rowOut(db.get('SELECT * FROM posts WHERE blog 
 const payloadOf = (db, blog, id) => P(db.get('SELECT payload FROM posts WHERE blog = ? AND id = ?', blog, String(id))?.payload);
 
 // Full edit body for PUT from a fresh remote post (Tumblr refuses partial PUTs). Only `changes` differ.
-// Fields the OAuth payload doesn't carry can't be sent back; see capability edit.labels.
+// Community labels aren't in the OAuth payload; a full edit without them keeps them (verified 2026-11-06).
 function editBody(p, changes = {}) {
   const out = {
     content: p.content || [],

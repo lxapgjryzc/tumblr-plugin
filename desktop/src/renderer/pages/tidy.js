@@ -67,7 +67,7 @@ const TidyPage = {
       h('p', { class: 'muted small' }, t('snapshotsUntouched'))), [{ label: t('cancel'), value: false }, { label: t('apply'), value: true, class: 'primary' }]);
     if (!ok) return;
     const r = await call('cleanupApply', { tags });
-    toast(t('queuedN', r.queued) + (r.labelsOk === false ? ' · ' + t('heldForLabels') : ''), 'ok');
+    toast(t('queuedN', r.queued), 'ok');
     this.clean.results = this.clean.results.filter(x => !this.cleanSel.has(x.key));
     this.cleanSel.clear();
     this.render(this.root);
@@ -99,7 +99,7 @@ const TidyPage = {
       [{ label: t('cancel'), value: false }, { label: t('apply'), value: true, class: 'primary' }]);
     if (!ok) return;
     const r = await call('upkeepApply', { rules: [...this.upkSel] });
-    toast(t('queuedN', r.queued) + (r.labelsOk === false ? ' · ' + t('heldForLabels') : ''), 'ok');
+    toast(t('queuedN', r.queued), 'ok');
     this.upk = null;
     this.render(this.root);
   },

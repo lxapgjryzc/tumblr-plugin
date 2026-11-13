@@ -22,7 +22,6 @@ function setup() {
   const clock = { t: Date.UTC(2026, 10, 7, 12) };
   const fake = makeFake({ blogs: BLOGS, now: () => clock.t });
   const svc = createService({ dataDir: dir, tumblr: fake, now: () => clock.t });
-  svc.db.capability('edit.labels', 'not_used');
   const extra = {};
   addWriting(svc, extra, { dataDir: dir });
   addAudience(svc, extra);

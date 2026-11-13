@@ -96,8 +96,7 @@ const VersionsDialog = {
       action === 'delete' ? h('p', { class: 'banner warn' }, t('deleteWarn')) : null,
       h('p', {}, t('actWill', pv.ok.length)), h('ul', { class: 'plain' }, pv.ok.map(row)),
       pv.skipped.length ? [h('p', { class: 'muted' }, t('actSkips', pv.skipped.length)), h('ul', { class: 'plain muted' }, pv.skipped.map(row))] : null,
-      h('p', { class: 'muted small' }, t('originalUntouched')),
-      !pv.labelsOk && action !== 'delete' && action !== 'followRule' ? h('p', { class: 'muted small' }, t('heldForLabels')) : null),
+      h('p', { class: 'muted small' }, t('originalUntouched'))),
     [{ label: t('cancel'), value: false }, { label: action === 'delete' ? t('deleteN', pv.ok.length) : t('apply'), value: true, class: action === 'delete' ? 'danger' : 'primary', disabled: !pv.ok.length }]);
     if (!ok || !pv.ok.length) return;
     const r = await call('versionAction', { ...this.key, targets: this.targets(), action });

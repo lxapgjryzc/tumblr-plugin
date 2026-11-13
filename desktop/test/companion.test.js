@@ -26,7 +26,6 @@ function setup({ approve = true, media = null, relay = null } = {}) {
   const now = () => clock.t;
   const fake = makeFake({ blogs: BLOGS, now });
   const svc = createService({ dataDir: dir, tumblr: fake, now });
-  svc.db.capability('edit.labels', 'not_used');
   const extra = {};
   addWriting(svc, extra, { dataDir: dir });
   addData(svc, extra, { dataDir: dir });

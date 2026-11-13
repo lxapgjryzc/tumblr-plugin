@@ -101,7 +101,7 @@ function addTidy(svc, api, { fetchFn = fetch } = {}) {
       if (!targets.length) return { queued: 0 };
       const batch = jobs.batch('Remove weak tags', { tags, targets: targets.length });
       for (const p of targets) jobs.add('post.tags', { blog: p.blog, id: String(p.id), remove: tags }, { priority: 1, scope: `post:${p.blog}:${p.id}`, batch });
-      return { queued: targets.length, labelsOk: ['pass', 'not_used'].includes(db.capStatus('edit.labels')) };
+      return { queued: targets.length };
     },
 
     // ----- tidy old posts by pack (retired spellings, missing search spellings) -----
@@ -123,7 +123,7 @@ function addTidy(svc, api, { fetchFn = fetch } = {}) {
       if (!posts.length) return { queued: 0 };
       const batch = jobs.batch('Tidy tags by packs', { rules: [...allow], targets: posts.length });
       for (const p of posts) jobs.add('post.tags', { blog: p.blog, id: String(p.id), upkeep: [...allow] }, { priority: 1, scope: `post:${p.blog}:${p.id}`, batch });
-      return { queued: posts.length, labelsOk: ['pass', 'not_used'].includes(db.capStatus('edit.labels')) };
+      return { queued: posts.length };
     },
 
     // ----- a category's tag changed: optionally bring old originals along (design 6.3; never automatic) -----
@@ -141,7 +141,7 @@ function addTidy(svc, api, { fetchFn = fetch } = {}) {
       if (!posts.length) return { queued: 0 };
       const batch = jobs.batch('Retag after a category change', { from, to, targets: posts.length });
       for (const p of posts) jobs.add('post.tags', { blog: p.blog, id: String(p.id), replace: { from, to } }, { priority: 1, scope: `post:${p.blog}:${p.id}`, batch });
-      return { queued: posts.length, labelsOk: ['pass', 'not_used'].includes(db.capStatus('edit.labels')) };
+      return { queued: posts.length };
     },
 
     // ----- pack review: suggestions for one pack's character and relation tags -----

@@ -71,12 +71,6 @@ function makeApi(svc, { creds, openUrl = () => {}, importStage0 = null, extra = 
       groups.rebuild(db, now());
       return blogs();
     },
-    setCapability({ key, status }) {
-      if (!['edit.labels'].includes(key) || !['pass', 'not_used', 'unverified'].includes(status)) throw new Error('bad capability');
-      db.capability(key, status, 'set by the user');
-      jobs.wake();
-      return api.status();
-    },
     syncNow({ full = false } = {}) { return svc.pass({ full, priority: 2 }); },
     setPaused(paused) { db.setMeta('paused', !!paused); return api.status(); },
     setAutomation(patch) { db.setMeta('automation', { ...db.getMeta('automation', {}), ...patch }); svc.passSoon?.(); return api.status(); },
@@ -128,7 +122,6 @@ function makeApi(svc, { creds, openUrl = () => {}, importStage0 = null, extra = 
           if (!targets.some(x => x.blog === c.blog && String(x.id) === c.id)) out.copies.push(c);
         }
       }
-      out.labelsOk = ['pass', 'not_used'].includes(db.capStatus('edit.labels'));
       return out;
     },
     visibility({ targets, target, display: disp }) { return display.userVisibility(db, jobs, targets, target, { display: disp, now: now() }); },
@@ -206,7 +199,7 @@ function makeApi(svc, { creds, openUrl = () => {}, importStage0 = null, extra = 
       const { edit, snapshots } = api.tagsPreview({ targets });
       const batch = jobs.batch('Edit tags', { targets: edit, add, remove, snapshots: snapshots.length });
       for (const t of edit) jobs.add('post.tags', { blog: t.blog, id: String(t.id), add, remove }, { priority: 1, scope: `post:${t.blog}:${t.id}`, batch });
-      return { batch, queued: edit.length, snapshots: snapshots.length, labelsOk: ['pass', 'not_used'].includes(db.capStatus('edit.labels')) };
+      return { batch, queued: edit.length, snapshots: snapshots.length };
     },
 
     // ----- expiry rules -----

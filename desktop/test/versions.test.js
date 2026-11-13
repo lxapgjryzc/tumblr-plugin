@@ -23,7 +23,6 @@ async function setup() {
   const now = () => clock.t;
   const fake = makeFake({ blogs: BLOGS, now });
   const svc = createService({ dataDir: dir, tumblr: fake, now });
-  svc.db.capability('edit.labels', 'not_used');
   const extra = {};
   addVersions(svc, extra);
   const api = makeApi(svc, { extra });

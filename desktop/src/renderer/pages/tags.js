@@ -83,7 +83,7 @@ const TagsPage = {
     [{ label: t('retagLeave'), value: false }, { label: t('retagGo', pv.posts), value: true, class: 'primary' }]);
     if (!go) return;
     const r = await call('retagApply', { from: c.tag, to: saved.tag });
-    toast(t('queuedN', r.queued) + (r.labelsOk === false ? ' · ' + t('heldForLabels') : ''), 'ok');
+    toast(t('queuedN', r.queued), 'ok');
   },
   fromFile() {
     const input = h('input', { type: 'file', accept: '.json,application/json' });

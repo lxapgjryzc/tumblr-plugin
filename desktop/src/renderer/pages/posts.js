@@ -689,7 +689,7 @@ const PostsPage = {
     const go = await modal(t('pfConfirmTags'), body, [{ label: t('cancel'), value: false }, { label: t('pfApplyN', plan.change.length), value: true, class: 'primary', disabled: !plan.change.length }], { wide: true });
     if (!go) return;
     const r = await call('applyTags', { targets: plan.change.map(p => ({ blog: p.blog, id: p.id })), add, remove: [...remove] });
-    this.submitted(r, t('queuedN', r.queued) + (r.labelsOk === false ? ' · ' + t('heldForLabels') : ''));
+    this.submitted(r, t('queuedN', r.queued));
   },
 
   // Linked posts are never added silently: list them, the user ticks what joins
@@ -731,7 +731,6 @@ const PostsPage = {
       pv.copies.length ? h('p', {}, t('bulkCopies', pv.copies.length)) : null,
       h('p', { class: 'muted' }, target === 'published' ? t('bulkPolicyPublic') : t('bulkPolicyPrivate')),
       target === 'private' ? h('p', { class: 'muted' }, t('bulkDelay')) : null,
-      pv.labelsOk ? null : h('p', { class: 'banner warn' }, t('labelsBlocked')),
       h('ul', { class: 'mini-list' }, pv.change.map(p => h('li', {}, h('b', {}, blogName(p.blog)), ' · ', (p.summary || p.id).slice(0, 70)))));
     const ok = await modal(t('bulkTitle', title), body, [{ label: t('cancel'), value: false }, { label: t('apply'), value: true, class: 'primary', disabled: !pv.change.length && !pv.already.length }]);
     if (!ok) return;
@@ -878,7 +877,7 @@ const PostsPage = {
         const list = live.filter(m => targets.has(m.blog + '/' + m.id)).map(m => ({ blog: m.blog, id: m.id }));
         if (!list.length) return;
         const r = await call('applyTags', { targets: list, add, remove: [...remove] });
-        toast(t('queued', r.queued) + (r.labelsOk ? '' : ' · ' + t('labelsBlocked')), r.labelsOk ? 'ok' : 'error', 6000);
+        toast(t('queued', r.queued), 'ok', 6000);
         remove.clear(); add.length = 0; draw();
       } }, t('applyTags')));
     draw();

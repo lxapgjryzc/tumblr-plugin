@@ -17,7 +17,6 @@ function setup() {
   const clock = { t: Date.UTC(2026, 10, 1) };
   const fake = makeFake({ blogs: [{ uuid: 't:main', name: 'mainblog', primary: true }], now: () => clock.t });
   const svc = createService({ dataDir: dir, tumblr: fake, now: () => clock.t });
-  svc.db.capability('edit.labels', 'not_used');
   const extra = {};
   addVisitor(svc, extra);
   const api = makeApi(svc, { extra });

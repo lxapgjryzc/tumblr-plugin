@@ -20,7 +20,6 @@ function setup() {
   const now = () => clock.t;
   const fake = makeFake({ blogs: BLOGS, now });
   const svc = createService({ dataDir: dir, tumblr: fake, now });
-  svc.db.capability('edit.labels', 'not_used');
   const run = async () => { for (let i = 0; i < 30; i++) { await svc.jobs.drain(svc.ctx); clock.t += 70e3; } };
   const pass = async (o) => { svc.pass(o); await run(); };
   return { dir, fake, clock, svc, db: svc.db, run, pass, api: makeApi(svc, {}) };

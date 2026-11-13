@@ -26,7 +26,6 @@ function setup() {
   const fake = makeFake({ blogs: [{ uuid: 't:main', name: 'mainblog', primary: true }, { uuid: 't:ref', name: 'refside' }] });
   const clock = { t: Date.now() };
   const svc = createService({ dataDir: dir, tumblr: fake, now: () => clock.t });
-  svc.db.capability('edit.labels', 'not_used');
   const extra = {};
   addTidy(svc, extra, { fetchFn: async () => ({ ok: false, text: async () => '' }) });
   const api = makeApi(svc, { extra });
