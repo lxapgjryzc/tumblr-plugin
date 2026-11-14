@@ -1,6 +1,6 @@
 'use strict';
 // Builds the local web version (docs/LOCAL_WEB_APP_SPEC.md) into dist/Tumblr Studio/:
-//   Tumblr Studio.vbs          everyday entry: start or reuse the work backend, open the page in Chrome "Profile 1"
+//   Tumblr Studio.vbs          everyday entry: start or reuse the work backend, open the page in the Chrome profile chosen on first open
 //   Stop Tumblr Studio.vbs     stop the work backend
 //   Tumblr Studio Test.vbs     AI-testing entry: separate test backend (made-up data), Chrome "Profile 10"
 //   runtime/node.exe           the Node runtime (no installation needed)
@@ -80,7 +80,7 @@ write('Tumblr Studio Test.vbs', vbs('open', 'test'));
 fs.writeFileSync(path.join(out, 'README.txt'), [
   'Tumblr Studio (local web version)',
   '',
-  'Tumblr Studio.vbs        Open Tumblr Studio (starts the background service if needed; Chrome "Profile 1").',
+  'Tumblr Studio.vbs        Open Tumblr Studio (starts the background service if needed; the first time it asks which Chrome profile to use).',
   'Stop Tumblr Studio.vbs   Stop the background service. Closing the page or Chrome does not stop it.',
   'Tumblr Studio Test.vbs   Test environment for AI agents: separate made-up data, Chrome "Profile 10".',
   '',

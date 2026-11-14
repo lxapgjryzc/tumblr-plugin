@@ -10,6 +10,7 @@
     "test": "node --test test/*.test.js",
     "pack": "node tools/pack-web.js",
     "pack:electron": "node tools/pack.js",
+    "release": "node tools/release.js",
     "serve": "node src/server/main.js --env test"
   },
   "devDependencies": {
