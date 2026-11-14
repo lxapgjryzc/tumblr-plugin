@@ -154,3 +154,57 @@ function follow2(fake, name, uuid) {
   fake.followerMap.set('t:main', list);
   fake.infos.set(name, { uuid });
 }
+
+test('replies: fake commission buyers are flagged, real questions from fans are not', () => {
+  const hit = text => assess([{ id: 'reply:1', own: true, text, hash: text }]).reasons.includes('commission_bait');
+  // the sample under the user's own post (2026-11-13), and common variants
+  assert.ok(hit('Hello are you going to receive COMM? If yes reach out to me'));
+  assert.ok(hit('Hi! Are you open for commissions? If yes kindly DM me'));
+  assert.ok(hit('I would like to commission you, please email me at example (at) mail'));
+  for (const text of ['are you open for commissions? I would love to get one someday!', 'Commissions open! DM me for prices', 'do you take comms? this is gorgeous', 'so pretty, I love yuri'])
+    assert.ok(!hit(text), text);
+});
+
+test('replies: screening puts the sender up for review, blocking covers the blog they wrote to, campaigns are recognised', async () => {
+  const { fake, svc, api, run, follow } = setup();
+  svc.pass(); await run();
+  let n = 0;
+  const say = (uuid, name, text, kind = 'reply') => {
+    const id = 'n' + ++n;
+    svc.db.run(`INSERT INTO interactions (id, blog, type, kind, from_uuid, from_name, post_id, text, tags, at, fetched_at, state) VALUES (?, 't:main', ?, ?, ?, ?, '833217773830275072', ?, '[]', ?, ?, 'new')`,
+      id, kind, kind, uuid, name, text, Date.now(), Date.now());
+    return svc.db.get('SELECT * FROM interactions WHERE id = ?', id);
+  };
+  say('t:spam1', 'spamone', 'Hello are you going to receive COMM? If yes reach out to me');
+  say('t:fan1', 'fanone', 'are you open for commissions? I would love one!');
+  // off: nothing is screened
+  assert.equal(api.followerCases({ status: 'review' }).length, 0);
+  // switching protection on checks what is already stored
+  api.setFollowerGuard({ mode: 'review' });
+  const review = api.followerCases({ status: 'review' });
+  assert.deepEqual(review.map(c => c.name), ['spamone']);
+  assert.deepEqual(review[0].assessment.reasons, ['commission_bait']);
+  assert.deepEqual(review[0].assessment.via, ['reply']);
+  assert.equal(review[0].evidence[0].post, '833217773830275072');
+  // the same text is not added twice
+  assert.equal(svc.screenInteraction(svc.db.get(`SELECT * FROM interactions WHERE id = 'n1'`)), null);
+  // protected senders are never screened
+  api.allowFollower({ uuid: 't:fan2', name: 'fantwo' });
+  assert.equal(svc.screenInteraction(say('t:fan2', 'fantwo', 'Are you open for comms? dm me')), null);
+  // blocking: the reply's blog is covered, the sender's open texts leave the to-do list, nothing was blocked before the click
+  assert.ok(!fake.calls.some(c => c.startsWith('block:')));
+  follow('spamone', 't:spam1');
+  assert.deepEqual(api.followerBlockBlogs({ uuid: 't:spam1' }), ['t:main']);
+  api.blockFollower({ uuid: 't:spam1', name: 'spamone' });
+  await run();
+  assert.ok(fake.blockMap.get('t:main').has('spamone'));
+  assert.equal(svc.db.get(`SELECT state FROM interactions WHERE id = 'n1'`).state, 'skip');
+  assert.equal(svc.db.get(`SELECT state FROM interactions WHERE id = 'n2'`).state, 'new');
+  // a new account sending the confirmed text again is the same campaign
+  const again = svc.screenInteraction(say('t:spam2', 'spamtwo', 'hello are you going to receive comm?? if yes reach out to me', 'mention'));
+  assert.ok(again.reasons.includes('known_spam_text'));
+  assert.equal(svc.db.get(`SELECT status FROM follower_cases WHERE uuid = 't:spam2'`).status, 'review');
+  // the reply check has its own switch
+  api.setFollowerGuard({ replies: false });
+  assert.equal(svc.screenInteraction(say('t:spam3', 'spamthree', 'Are you open for comms? dm me')), null);
+});

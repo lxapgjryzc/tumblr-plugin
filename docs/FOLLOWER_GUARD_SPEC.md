@@ -6,6 +6,8 @@ Design date: 2026-11-06. Companion to [DESKTOP_PRODUCT_SPEC.md](DESKTOP_PRODUCT_
 
 **Delivery status (2026-11-06):** `desktop/` implements baseline discovery, evidence review, allowlisting and manual block/unblock flows. Automatic blocking remains unavailable pending the quality evaluation below; real block/unblock acceptance is still unverified. Reports use Tumblr's UI and remain pending until user confirmation, which is not an automated transport receipt. Review mode is an intermediate delivery required by section 5, not removal of the automation goal or completion of every stage-4 acceptance check. See [implementation status and gaps](DESKTOP_IMPLEMENTATION_STATUS.md). No new account action is authorised by this update.
 
+**Texts sent to my blogs (user request, 2026-11-13):** ad and scam harassment in replies, mentions and asks is handled by the same cases, patterns, review, allowlist, block and report flow (sender = target, the text = own-words evidence with its post). Same rules: one hit is review only, nothing is blocked or reported without the user's click. Sample: a fake commission buyer's reply under the user's own post.
+
 ## 1. Outcome and scope
 
 Under the confirmed application/companion split, the application alone owns follower discovery, evidence, AI configuration/classification, review, allowlists, block jobs and reporting state. The extension has no duplicate follower inbox, classifier or scheduler. It may supply page context or a validated Tumblr-only reporting step for the same app-owned operation, returning its result/uncertainty; opening the browser is not a completed report. See DESKTOP_PRODUCT_SPEC.md section 4.3. When the app is unavailable, the companion does not independently continue follower actions.

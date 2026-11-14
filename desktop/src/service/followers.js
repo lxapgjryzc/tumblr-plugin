@@ -10,6 +10,11 @@
 // acts: in this release every block is the user's click ("review" mode). Automatic blocking needs patterns that
 // have passed an evaluation, which hasn't happened yet, so the switch is shown as unavailable.
 // Reporting has no API: the user gets "Open report page" and the case stays "report pending" until they say done.
+//
+// Replies, mentions and asks that reach my blogs (collected by audience.js) go through the same patterns while
+// protection is on: a hit becomes or extends the sender's case (status review), with the text as evidence. The
+// same text from a sender the user already marked as spam counts too (a campaign). Still nothing is done to
+// anyone until the user clicks; a blocked sender's open interactions leave the to-do list.
 
 const { J, P } = require('./db');
 const { HttpError } = require('./errors');
@@ -22,7 +27,13 @@ const PATTERNS = [
   { id: 'money_scam', re: /\b(cash ?app|venmo|zelle|paypal)\b.*\b(flip|double|blessing|giveaway|first \d+ (people|to))\b|\b(crypto|forex|bitcoin|btc|usdt)\b.*\b(invest|profit|returns?|trading signals?|mentor)\b|\bclaim (your )?(free )?(gift ?card|reward|prize)\b/i },
   { id: 'bait_link', re: /\b(click|tap|check|see) (the |my )?(link|bio|profile)\b.*\b(nudes?|pics|videos?|meet|hook ?up|date|chat with me|lonely|horny)\b|\b(meet|hook ?up|date) (singles|girls|women|men) (near|in your)\b/i },
   { id: 'impersonation', re: /\b(this is (my )?(new|backup|second) account|my (old|main) account (was|got) (hacked|deleted|banned))\b.*\b(send|follow|message|dm|pay)\b/i },
+  // Fake commission buyers, mostly in replies under art posts ("Hello are you going to receive COMM? If yes reach out
+  // to me"): the question and a push to contact them elsewhere. A fan only asking "are you open for commissions?" is not this.
+  { id: 'commission_bait', re: /\b(are|r) (you|u) (going to |gonna |still )?(open|opening|receive|receiving|take|taking|accept|accepting|doing|available)( for| to)?( any| some| new| a)? (comms?|commissions?)\b.*\b(reach (out )?(to )?me|dm me|message me|text me|e-?mail me|contact me|write (to )?me|inbox me|hit me up|get in touch with me)\b|\b(i('d| would) (like|love) to|i want to|i wish to|i'm willing to) (commission|purchase|buy) (you|your (art|artworks?|drawings?|works?|pieces?))\b.*\b(e-?mail|gmail|reach (out )?(to )?me|contact me|dm me|message me|text me|whats ?app|telegram)\b/i },
 ];
+// Texts that come to my blogs (replies, mentions, asks) and are screened with the same patterns
+const SCREEN_KINDS = ['reply', 'mention', 'ask'];
+const textKey = s => String(s || '').toLowerCase().replace(/[^\p{L}\p{N}]+/gu, ' ').trim();
 const textOf = blocks => (blocks || []).filter(b => b.type === 'text').map(b => b.text).join('\n');
 const sha = s => require('node:crypto').createHash('sha256').update(s).digest('hex').slice(0, 16);
 
@@ -65,7 +76,7 @@ function assess(evidence) {
 
 // Strict check of an AI answer: only known values, only evidence ids that were sent. Anything else is rejected.
 const AI_ASSESS = ['no_spam_evidence', 'insufficient_evidence', 'review', 'spam_candidate'];
-const AI_REASONS = ['offsite_contact', 'sugar', 'money_scam', 'bait_link', 'impersonation', 'repeated_template', 'other_solicitation'];
+const AI_REASONS = ['offsite_contact', 'sugar', 'money_scam', 'bait_link', 'impersonation', 'commission_bait', 'repeated_template', 'other_solicitation'];
 function validateAi(text, evidence) {
   let j;
   try { j = JSON.parse(String(text).replace(/^```(json)?|```$/g, '').trim()); } catch { throw new Error('not JSON'); }
@@ -205,6 +216,53 @@ function addFollowers(svc, api, { aiKey = () => null, fetchFn = fetch } = {}) {
     uuid, name, status, J(evidence), J(assessment), now(), now());
   }
 
+  // ---------- replies, mentions and asks (ad / scam harassment) ----------
+  const screenOn = () => guardOn() && cfg().replies !== false;
+  // text keys of what the user confirmed as spam: the same long-enough text from someone else is the same campaign
+  const spamKeys = () => new Set(db.all(`SELECT evidence FROM follower_cases WHERE status = 'spam'`)
+    .flatMap(r => (P(r.evidence) || []).filter(e => e.key).map(e => e.key)));
+  function screenInteraction(row) {
+    if (!screenOn() || !SCREEN_KINDS.includes(row.kind) || !row.text || !row.from_uuid) return null;
+    if (protectedIds().has(row.from_uuid)) return null;
+    const old = db.get('SELECT * FROM follower_cases WHERE uuid = ?', row.from_uuid);
+    if (old?.status === 'allowed') return null;
+    const oldEv = P(old?.evidence) || [];
+    const id = 'reply:' + row.id;
+    if (oldEv.some(e => e.id === id)) return null;
+    const text = String(row.text).slice(0, 600), key = textKey(text);
+    const e = { id, source: row.kind, blog: row.blog, post: row.post_id, own: true, text, at: row.at || now(), hash: sha(text), key: key.length >= 20 ? sha(key) : null };
+    const hits = signals([e]).map(h => h.pattern);
+    if (e.key && spamKeys().has(e.key)) hits.push('known_spam_text');
+    if (!hits.length) return null;
+    const evidence = [...oldEv.filter(x => x.id !== id), e].slice(-20);
+    const a0 = P(old?.assessment) || {};
+    const fromTexts = evidence.filter(x => x.id.startsWith('reply:'));
+    const reasons = [...new Set([...(a0.reasons || []), ...hits])];
+    const a = { ...a0, assessment: a0.assessment === 'spam_candidate' || (new Set(reasons).size >= 2 && fromTexts.length >= 2) ? 'spam_candidate' : 'review',
+      reasons, evidence_ids: [...new Set([...(a0.evidence_ids || []), id])], via: [...new Set([...(a0.via || []), row.kind])] };
+    // a sender already marked as spam stays spam; this text just leaves the to-do list
+    const status = old?.status === 'spam' ? 'spam' : 'review';
+    db.run(`INSERT INTO follower_cases (uuid, name, status, evidence, assessment, first_seen, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?)
+      ON CONFLICT(uuid) DO UPDATE SET name = excluded.name, status = excluded.status, evidence = excluded.evidence, assessment = excluded.assessment,
+      updated_at = excluded.updated_at, revision = follower_cases.revision + 1`,
+    row.from_uuid, row.from_name || old?.name || row.from_uuid, status, J(evidence), J(a), now(), now());
+    if (status === 'spam') db.run(`UPDATE interactions SET state = 'skip', state_at = ? WHERE id = ? AND state IN ('new', 'later')`, now(), row.id);
+    return { uuid: row.from_uuid, status, reasons: hits };
+  }
+  // audience.js calls this for every newly stored interaction
+  svc.screenInteraction = screenInteraction;
+  // what is already stored (the last 30 days), when protection or the reply check is switched on
+  function screenStored() {
+    if (!screenOn()) return 0;
+    let n = 0;
+    const rows = db.all(`SELECT * FROM interactions WHERE kind IN ('reply', 'mention', 'ask') AND text IS NOT NULL AND from_uuid IS NOT NULL AND at >= ? ORDER BY at`, now() - 30 * 86400e3);
+    db.tx(() => { for (const r of rows) if (screenInteraction(r)) n++; });
+    return n;
+  }
+  // blogs where this sender wrote to me: blocking covers them as well as the protected blogs
+  const caseBlogs = uuid => [...new Set((P(db.get('SELECT evidence FROM follower_cases WHERE uuid = ?', uuid)?.evidence) || [])
+    .filter(e => e.id?.startsWith('reply:') && e.blog).map(e => e.blog))].filter(b => db.get('SELECT 1 FROM blogs WHERE uuid = ?', b));
+
   // Block one target on the chosen blogs; verified against the block list
   svc.handlers['follower.block'] = {
     async run(job, ctx) {
@@ -294,7 +352,9 @@ function addFollowers(svc, api, { aiKey = () => null, fetchFn = fetch } = {}) {
       const c = cfg();
       const count = s => db.get('SELECT COUNT(*) n FROM follower_cases WHERE status = ?', s).n;
       return {
-        config: { ...c, blogs: monitored() },
+        config: { ...c, blogs: monitored(), replies: c.replies !== false },
+        // the reply check reads the interactions the Fans module collects; without collection it has nothing to read
+        replyCheck: { on: screenOn(), collecting: !!fans().collect, flagged: db.get(`SELECT COUNT(*) n FROM follower_cases WHERE status IN ('review', 'spam') AND json_extract(assessment, '$.via') IS NOT NULL`).n },
         scans: monitored().map(b => ({ blog: b, ...db.getMeta('followerScan:' + b, {}), baseline: db.getMeta('followerBaseline:' + b) })),
         digest: { review: count('review'), spam: count('spam'), clear: count('clear'), allowed: db.get('SELECT COUNT(*) n FROM allowlist').n,
           blocked: db.get(`SELECT COUNT(*) n FROM blocks WHERE status = 'blocked' AND origin = 'app'`).n,
@@ -307,7 +367,7 @@ function addFollowers(svc, api, { aiKey = () => null, fetchFn = fetch } = {}) {
       const c = { ...cfg(), ...patch };
       if (c.mode === 'auto') throw new Error('automatic blocking is not available until the evidence patterns pass an evaluation');
       db.setMeta('followerGuard', c);
-      if (c.mode && c.mode !== 'off') svc.followerPass({ force: true });
+      if (c.mode && c.mode !== 'off') { svc.followerPass({ force: true }); screenStored(); }
       return api.followerGuard();
     },
     followerCases({ status = 'review', limit = 100 } = {}) {
@@ -331,8 +391,10 @@ function addFollowers(svc, api, { aiKey = () => null, fetchFn = fetch } = {}) {
     dismissFollower({ uuid }) { db.run(`UPDATE follower_cases SET status = 'dismissed', updated_at = ? WHERE uuid = ?`, now(), uuid); return true; },
     blockFollower({ uuid, name, blogs }) {
       if (db.get('SELECT 1 FROM allowlist WHERE uuid = ?', uuid)) throw new Error('this account is on your normal-account list');
-      const targets = blogs?.length ? blogs : monitored();
+      const targets = blogs?.length ? blogs : [...new Set([...monitored(), ...caseBlogs(uuid)])];
       db.run(`UPDATE follower_cases SET status = 'spam', updated_at = ? WHERE uuid = ?`, now(), uuid);
+      // their replies/mentions/asks need no answer any more
+      db.run(`UPDATE interactions SET state = 'skip', state_at = ? WHERE from_uuid = ? AND state IN ('new', 'later')`, now(), uuid);
       return targets.map(blog => jobs.add('follower.block', { blog, uuid, name }, { priority: 1, scope: `block:${blog}:${uuid}`, supersede: true }));
     },
     unblockFollower({ uuid, name, blogs }) {
@@ -347,8 +409,10 @@ function addFollowers(svc, api, { aiKey = () => null, fetchFn = fetch } = {}) {
       db.run('UPDATE follower_cases SET assessment = ?, updated_at = ? WHERE uuid = ?', J(a), now(), uuid);
       return true;
     },
-    scanFollowers() { return svc.followerPass({ force: true }); },
+    scanFollowers() { return svc.followerPass({ force: true }) + screenStored(); },
+    // the blogs a block would cover by default: the protected blogs and wherever this sender wrote to me
+    followerBlockBlogs({ uuid }) { return [...new Set([...monitored(), ...caseBlogs(uuid)])]; },
   });
 }
 
-module.exports = { addFollowers, collectEvidence, signals, assess, validateAi, aiPrompt, PATTERNS };
+module.exports = { addFollowers, collectEvidence, signals, assess, validateAi, aiPrompt, PATTERNS, SCREEN_KINDS };

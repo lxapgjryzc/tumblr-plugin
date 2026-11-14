@@ -23,7 +23,9 @@ const FollowersPage = {
         h('p', { class: 'muted small' }, t('fgHint')),
         h('div', { class: 'form-row wrap' },
           toggle(c.protectFollowing !== false, async v => { await call('setFollowerGuard', { protectFollowing: v }); }, t('fgProtectFollowing')),
+          toggle(c.replies !== false, async v => { await call('setFollowerGuard', { replies: v }); this.render(root); }, t('fgReplyCheck')),
           toggle(!!c.ai, async v => { await call('setFollowerGuard', { ai: v }); this.render(root); }, t('fgUseAi'))),
+        c.replies !== false ? h('p', { class: 'muted small' + (g.replyCheck.collecting ? '' : ' warn-text') }, g.replyCheck.collecting ? t('fgReplyCheckHint') : t('fgReplyNeedsCollect')) : null,
         c.ai ? h('p', { class: 'muted small' }, t('fgAiNote')) : null,
         h('p', { class: 'muted small' }, t('fgCaps', t('cap_' + g.capabilities.block)), ' · ', t('fgReportNote')),
         g.scans.map(s => h('p', { class: 'muted small' }, blogName(s.blog), ': ', s.at ? t('fgScanned', s.count ?? 0, ago(s.at)) : t('coverageNone'), s.baseline ? ' · ' + t('fgBaseline', fmtDate(s.baseline)) : ''))),
@@ -36,10 +38,12 @@ const FollowersPage = {
     const url = `https://${r.name}.tumblr.com`;
     const ev = (r.evidence || []);
     const used = new Set([...(a.evidence_ids || []), ...(a.ai?.evidence_ids || [])]);
+    const texts = ev.filter(e => e.id?.startsWith('reply:'));
     return h('div', { class: 'case' },
       h('div', { class: 'grow' },
         h('div', { class: 'inst-line' }, h('b', {}, r.name), r.status ? h('span', { class: 'badge' + (r.status === 'review' ? ' warn' : '') }, t('fs_' + r.status)) : null,
           r.origin ? h('span', { class: 'badge' }, r.origin === 'app' ? t('fgByApp') : t('fgExternal')) : null,
+          (a.via || []).map(v => h('span', { class: 'badge' }, t('fgVia_' + v))),
           a.report === 'pending' ? h('span', { class: 'badge warn' }, t('fgReportPending')) : null,
           a.report === 'submitted_by_user' ? h('span', { class: 'badge' }, t('fgReportedByYou')) : null,
           h('a', { href: url, target: '_blank', class: 'small' }, t('openOnTumblr'))),
@@ -47,7 +51,9 @@ const FollowersPage = {
         a.reasons?.length ? h('div', { class: 'small' }, t('fgSignals'), ': ', a.reasons.map(x => t('sig_' + x)).join(' · ')) : null,
         a.ai?.explanation ? h('div', { class: 'small' }, 'AI: ', a.ai.explanation) : a.ai?.error ? h('div', { class: 'small muted' }, 'AI: ', a.ai.error) : null,
         ev.length ? h('details', { class: 'small' }, h('summary', {}, t('fgEvidence', ev.length)),
-          h('ul', { class: 'evidence' }, ev.map(e => h('li', { class: used.has(e.id) ? 'hit' : '' }, h('span', { class: 'muted' }, e.own ? t('fgOwn') : t('fgReblogged'), ' · '), e.text.slice(0, 300))))) : null),
+          h('ul', { class: 'evidence' }, ev.map(e => h('li', { class: used.has(e.id) ? 'hit' : '' },
+            h('span', { class: 'muted' }, e.id?.startsWith('reply:') ? t('fgVia_' + e.source) + (e.at ? ' ' + fmtTime(e.at) : '') : e.own ? t('fgOwn') : t('fgReblogged'), ' · '), e.text.slice(0, 300),
+            e.id?.startsWith('reply:') && e.post ? [' ', h('a', { href: this.postUrl(e), target: '_blank' }, t('openOnTumblr'))] : null)))) : null),
       h('div', { class: 'inst-actions' }, this.actions(r)));
   },
 
@@ -67,20 +73,23 @@ const FollowersPage = {
     return [
       allow,
       h('button', { onclick: async () => {
-        const blogs = (await call('followerGuard')).config.blogs;
+        const blogs = await call('followerBlockBlogs', { uuid: r.uuid });
         const ok = await modal(t('fgBlock'), h('p', {}, t('fgBlockQ', r.name, blogs.map(blogName).join(', '))), [{ label: t('cancel'), value: false }, { label: t('fgBlock'), value: true, class: 'danger' }]);
         if (ok) { await call('blockFollower', { uuid: r.uuid, name: r.name, blogs }); toast(t('queued', blogs.length)); done(); }
       } }, t('fgBlock')),
       h('button', { onclick: async () => {
-        // Tumblr has no report API: open the blog so the user can use Tumblr's own report menu, and keep it pending
+        // Tumblr has no report API: open the reply's post (or the blog) so the user can use Tumblr's own report
+        // menu, and keep it pending
+        const text = (r.evidence || []).filter(e => e.id?.startsWith('reply:') && e.post).pop();
         await call('markReport', { uuid: r.uuid, state: 'pending' });
-        window.open(`https://www.tumblr.com/${r.name}`, '_blank');
-        const ok = await modal(t('fgReport'), h('p', {}, t('fgReportHow')), [{ label: t('fgLater'), value: false }, { label: t('fgReportDone'), value: true, class: 'primary' }]);
+        window.open(text ? this.postUrl(text) : `https://www.tumblr.com/${r.name}`, '_blank');
+        const ok = await modal(t('fgReport'), h('p', {}, text ? t('fgReportReplyHow', r.name) : t('fgReportHow')), [{ label: t('fgLater'), value: false }, { label: t('fgReportDone'), value: true, class: 'primary' }]);
         if (ok) await call('markReport', { uuid: r.uuid, state: 'submitted_by_user' });
         done();
       } }, t('fgReport')),
       h('button', { class: 'ghost', onclick: async () => { await call('dismissFollower', { uuid: r.uuid }); done(); } }, t('fgLater')),
     ];
   },
+  postUrl(e) { return `https://www.tumblr.com/${blogName(e.blog)}/${e.post}`; },
   refresh(ev) { if (ev.type === 'pass') this.render(this.root); },  // standalone only; inside Fans the page refreshes itself
 };

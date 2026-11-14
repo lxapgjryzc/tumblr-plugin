@@ -84,6 +84,8 @@ function addAudience(svc, api) {
       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?) ON CONFLICT(id) DO NOTHING`,
     row.id, row.blog, row.type, row.kind, row.from_uuid, row.from_name, row.post_id, row.reblog_id, row.text, J(row.tags), row.summary, row.at, row.fetched_at, state, now());
     if (r.changes && row.from_uuid && row.from_name) noteName(row.from_uuid, row.from_name);
+    // ad / scam texts go to follower protection's review (followers.js); a screening error never stops collection
+    if (r.changes && !own) try { svc.screenInteraction?.(row); } catch (e) { db.log('warn', 'screen', String(e?.message || e)); }
     return r.changes;
   }
   // a known person seen under a new name keeps the old one in their history
