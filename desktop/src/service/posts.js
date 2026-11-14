@@ -4,6 +4,7 @@
 
 const crypto = require('node:crypto');
 const { J, P } = require('./db');
+const C = require('./core');
 
 const str = v => (v == null || v === '' ? null : String(v));
 
@@ -79,6 +80,7 @@ const latestRevision = (db, blog, id) => db.get('SELECT * FROM source_revisions 
 
 // Insert or update a post read from Tumblr. Returns { before, after } rows (before = null if new).
 function upsertPost(db, p, blogUuid, now = Date.now()) {
+  if (C.isSponsored(p)) return null; // an ad is never one of my posts (see ads.js)
   const n = normalise(p, blogUuid);
   if (!n.blog || !n.id) return null;
   const before = getPost(db, n.blog, n.id);

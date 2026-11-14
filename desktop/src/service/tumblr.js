@@ -193,10 +193,14 @@ function makeTumblr({ creds, budget = new Budget(), relay = null, browserFirst =
       const query = { npf: true, limit, ...(next || {}) };
       const r = await request(base, { query });
       const qp = r?._links?.next?.query_params || null;
-      // The web API (browser relay) mixes ads (backfill_ad, client_side_ad_waterfall…) into post lists: keep posts only.
-      // Paging still follows the raw page, so a page of nothing but ads doesn't end the walk.
+      // The web API (browser relay) mixes ads (backfill_ad, client_side_ad_waterfall…, and sponsored posts that look
+      // like posts of another blog) into post lists: keep this blog's own posts only. Paging still follows the raw
+      // page, so a page of nothing but ads doesn't end the walk.
       const raw = r?.posts || [];
-      return { posts: raw.filter(isPost), next: qp && raw.length ? qp : null };
+      const want = String(blog).toLowerCase();
+      // a post that names another blog is not this blog's (one naming none is kept)
+      const mine = p => { const o = [p.blog?.uuid, p.blog?.name, p.blog_name, p.blogName].filter(Boolean).map(x => String(x).toLowerCase()); return !o.length || o.includes(want); };
+      return { posts: raw.filter(p => isPost(p) && mine(p)), next: qp && raw.length ? qp : null };
     },
     getPost: (blog, id) => request(`/v2/blog/${enc(blog)}/posts/${enc(id)}`, { query: { post_format: 'npf' } }),
     putPost: (blog, id, body) => request(`/v2/blog/${enc(blog)}/posts/${enc(id)}`, { method: 'PUT', json: body }),

@@ -649,7 +649,11 @@ const TTHCore = (() => {
 
   const postId = p => String(pick(p, 'idString', 'id_string', 'id'));
   // Post lists can contain non-post timeline objects (placeholders, ads); keep only real posts
-  const isPost = p => !!p && (pick(p, 'objectType', 'object_type') ?? 'post') === 'post' && pick(p, 'idString', 'id_string', 'id') != null;
+  // Sponsored posts (Blaze ads) come as object_type 'post' inside web-API post lists, even a blog's own list;
+  // they carry ad fields and someone else's blog, and are never posts here.
+  const isSponsored = p => !!p && (p.adm != null || pick(p, 'showSponsoredLabel', 'show_sponsored_label') === true
+    || !!pick(p, 'sponsoredBadgeUrl', 'sponsored_badge_url') || pick(p, 'isSponsored', 'is_sponsored') === true);
+  const isPost = p => !!p && (pick(p, 'objectType', 'object_type') ?? 'post') === 'post' && pick(p, 'idString', 'id_string', 'id') != null && !isSponsored(p);
   // box: '' for published posts, 'draft' or 'queue'
   const basePosts = (blog, extra, box = '') => `/v2/blog/${enc(blog)}/posts${box ? '/' + box : ''}${qs({ npf: true, limit: 20, ...extra })}`;
 
@@ -2237,7 +2241,7 @@ const TTHCore = (() => {
   return {
     sleep, enc, decodeTag, norm, key, esc, pick, debounce, qs, uniqTags, withTags, fmtNum,
     LABEL_CATEGORIES, AD_CSS, REC_CSS, UPSELL_SELECTOR, isUpsell, STRINGS, LANG_NAMES, makeI18n,
-    errMsg, makeApi, guardWrites, getBlogs, ROLES, blogRole, libraryRole, unsetBlogs, roleCache, reblogScope, RECENT_DAYS, recentDays, recentKeys, autoRecent, postId, isPost, basePosts, nextPath, readLabel, readReblog, getPost, postImages, editPost, mutations,
+    errMsg, makeApi, guardWrites, getBlogs, ROLES, blogRole, libraryRole, unsetBlogs, roleCache, reblogScope, RECENT_DAYS, recentDays, recentKeys, autoRecent, postId, isPost, isSponsored, basePosts, nextPath, readLabel, readReblog, getPost, postImages, editPost, mutations,
     emptyCache, buildIndex, matchScore, suggest, syncBlog, syncAll, reblogSource, reblogFamilies, reblogDiffs, copyKeys, snapshotKeys, isReblogPost, isCopyOf, notOnMain, reblogPost, newestPosts, autoMaintain, tagActivity, parseAuth,
     rootKey, likedPosts, emptyCollection, migrateMaterials, syncCollection, collectSkip, collectPost, isPostLimit,
     REF_GROUPS, refGroupOf, paletteTags, imagePixels, postPalette, AI_MARK, AI_NOTE_MARK, withAiNote, aiNoteOf, aiPrompt, parseAiTags, parseAiArt, parseAiNotes, AI_NOTE_LANGS, aiTagImage, imageDataUrl, AI_MAX_IMAGES, aiImageSize, relayout, aiWrite, aiSortPost,

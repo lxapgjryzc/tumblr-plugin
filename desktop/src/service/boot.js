@@ -75,6 +75,8 @@ function bootStudio({
     db.setMeta('categoryFirstFixed', Date.now());
     if (n) db.log('info', 'post.tags', `general categories moved to the front of ${n} originals`, { n });
   }
+  // sponsored posts stored before the filter existed (ads.js); cheap, so every start
+  require('./ads').removeAds(db, { log: d => db.log('info', 'posts', `removed ${d.removed} sponsored posts (ads) stored as posts; ${d.cancelled} jobs on them cancelled`, d) });
   const extra = {
     // the page's own errors and where the user went (breadcrumbs), into the diagnostic log
     clientLog({ level = 'info', what = 'page', msg = '', stack = '', page = '' } = {}) { diag.write(level === 'error' ? 'page.error' : 'page', { what, msg, stack, page }); return true; },
