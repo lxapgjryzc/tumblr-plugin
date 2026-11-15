@@ -94,7 +94,8 @@ async function main() {
   web = makeWeb({ env, dataDir: env.dataDir, studio, controlToken, serveCompanion, onStop: () => stop(), extraApi });
   port = await listenFirst(web.server, env.ports);
   web.setPort(port);
-  lock.update({ env: env.name, kind: 'web', port });
+  // version and install folder: a launcher of a newer install replaces this backend instead of reusing it
+  lock.update({ env: env.name, kind: 'web', port, version: VERSION, root: path.resolve(__dirname, '..', '..') });
   db.log('info', 'runtime', `local backend started (${env.name}, port ${port}${env.fake ? ', made-up account' : ''})`);
   log('started', env.name, 'port', port, 'pid', process.pid);
   svc.start();
@@ -108,6 +109,8 @@ async function main() {
     };
     syncHost();
     setInterval(syncHost, 30e3).unref();
+    // "start with Windows" left pointing at an older install would start that one again after a restart
+    try { if (autostart.repoint()) log('start with Windows now points at this install'); } catch (e) { log('start with Windows not updated', e.message); }
   }
 
   let stopping = false;

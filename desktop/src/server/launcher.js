@@ -13,8 +13,12 @@ const fs = require('node:fs');
 const path = require('node:path');
 const { spawn } = require('node:child_process');
 const { envConfig } = require('./env');
-const { readLock, alive } = require('./lock');
+const { readLock, alive, outdatedBackend } = require('./lock');
 const { makeOpener, bindProfile, profiles, ChooseProfileError } = require('./chrome');
+
+const ROOT = path.resolve(__dirname, '..', '..');
+const VERSION = require('../../package.json').version;
+const outdated = l => outdatedBackend(l, VERSION, ROOT);
 
 const args = process.argv.slice(2);
 const cmd = args[0] || 'open';
@@ -33,11 +37,21 @@ async function running() {
   if (!l || !alive(l.pid)) return null;
   if (l.kind !== 'web') throw new Error('the earlier desktop version (Electron) is running with this data. Quit it from its tray icon first. / 旧版桌面程序正在使用这份数据，请先从托盘退出它。');
   if (!l.port) return { starting: true };
-  try { const s = await control(l.port, 'status'); return s.env === env.name ? { port: l.port } : null; } catch { return { starting: true }; }
+  try { const s = await control(l.port, 'status'); return s.env === env.name ? { port: l.port, lock: l } : null; } catch { return { starting: true }; }
+}
+
+async function replaceOutdated(r) {
+  await control(r.port, 'stop');
+  for (let i = 0; i < 75; i++) {
+    await new Promise(res => setTimeout(res, 200));
+    if (!alive(r.lock.pid)) return;
+  }
+  throw new Error('the older background service did not stop. / 旧版后台没有停下来。');
 }
 
 async function ensure() {
   let r = await running();
+  if (r?.port && outdated(r.lock)) { await replaceOutdated(r); r = null; }
   if (r?.port) return r.port;
   if (!r) {
     const a = ['--env', env.name, ...(args.includes('--real') ? ['--real'] : [])];

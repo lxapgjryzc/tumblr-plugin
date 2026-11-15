@@ -49,3 +49,14 @@ test('opener without a fixed profile reads the recorded choice at each use', () 
   fs.writeFileSync(path.join(dir, 'browser.json'), JSON.stringify({ profileDir: 'Profile 99' }));
   assert.throws(() => o.check(), e => !(e instanceof ChooseProfileError));
 });
+
+test('a backend from an older install is replaced, a newer one is kept (2026-11-15)', () => {
+  const { outdatedBackend } = require('../src/server/lock');
+  const root = 'C:\Apps\Tumblr Studio\app';
+  assert.equal(outdatedBackend({ pid: 1, port: 47823 }, '0.6.15', root), true, 'before 0.6.15 no version was written');
+  assert.equal(outdatedBackend({ version: '0.6.13', root }, '0.6.15', root), true);
+  assert.equal(outdatedBackend({ version: '0.6.9', root }, '0.6.10', root), true, 'numeric, not text order');
+  assert.equal(outdatedBackend({ version: '0.6.15', root: root.toLowerCase() }, '0.6.15', root), false, 'same install');
+  assert.equal(outdatedBackend({ version: '0.6.15', root: 'D:\old copy\app' }, '0.6.15', root), true, 'another folder');
+  assert.equal(outdatedBackend({ version: '0.7.0', root: 'D:\old copy\app' }, '0.6.15', root), false, 'a newer one is kept');
+});

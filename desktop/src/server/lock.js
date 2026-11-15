@@ -33,4 +33,14 @@ function readLock(dataDir) {
   try { return JSON.parse(fs.readFileSync(path.join(dataDir, 'studio.lock'), 'utf8')); } catch { return null; }
 }
 
-module.exports = { takeLock, readLock, alive };
+// A backend left running from an older install (or from another folder with the same version) is replaced by the
+// launcher, so starting a new copy really runs the new copy (2026-11-15: a new package kept opening the old 0.6.13
+// backend on the second computer). A newer backend is kept. Backends before 0.6.15 write no version: older.
+const vnum = v => String(v || '0').split('.').map(n => parseInt(n, 10) || 0);
+function vcmp(a, b) { const x = vnum(a), y = vnum(b); for (let i = 0; i < 3; i++) if ((x[i] || 0) !== (y[i] || 0)) return (x[i] || 0) - (y[i] || 0); return 0; }
+function outdatedBackend(lock, version, root) {
+  const c = vcmp(version, lock?.version);
+  return c > 0 || (c === 0 && String(lock?.root || '').toLowerCase() !== String(root).toLowerCase());
+}
+
+module.exports = { takeLock, readLock, alive, outdatedBackend };

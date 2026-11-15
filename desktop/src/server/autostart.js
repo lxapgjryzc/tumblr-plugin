@@ -24,4 +24,14 @@ function set(on) {
   return get();
 }
 
-module.exports = { get, set };
+// When it is on but names another install's launcher (an older copy, moved folder), point it at this one.
+function repoint() {
+  if (process.platform !== 'win32' || !fs.existsSync(launcher())) return false;
+  const r = spawnSync('reg', ['query', KEY, '/v', NAME], { encoding: 'utf8', windowsHide: true });
+  if (r.status !== 0 || !/REG_SZ/.test(r.stdout || '')) return false;
+  if ((r.stdout || '').toLowerCase().includes(launcher().toLowerCase())) return false;
+  set(true);
+  return true;
+}
+
+module.exports = { get, set, repoint };
