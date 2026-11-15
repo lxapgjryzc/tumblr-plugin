@@ -11,8 +11,12 @@ const App = {
     const b = $('#jobBadge');
     b.hidden = !open; b.textContent = open;
     const foot = $('#sideFoot');
+    // two different connections: the Tumblr account (official API) and the paired browser extension (relay)
+    const r = App.status.relay, relayOn = App.status.settings?.browserRelay !== false;
+    const br = !r || !relayOn ? null : !r.enabled ? 'unpaired' : r.coolWhy ? 'cool' : r.connected ? 'on' : 'off';
     foot.replaceChildren(...[
-      h('div', { class: 'conn ' + App.status.auth }, '● ', t('connStatus_' + App.status.auth)),
+      h('div', { class: 'conn ' + App.status.auth }, '● ', t('sideTumblr'), ' ', t('connStatus_' + App.status.auth)),
+      br ? h('div', { class: 'conn ' + (br === 'on' ? 'connected' : 'reconnect'), style: { cursor: 'pointer' }, title: t('sideBrowserHint'), onclick: () => App.go('settings') }, '● ', t('sideBrowser_' + br)) : null,
       App.status.account?.name ? h('div', { class: 'muted' }, App.status.account.name) : null,
       App.status.paused ? h('div', { class: 'warn-text' }, t('paused')) : null,
     ].filter(Boolean));
@@ -93,3 +97,6 @@ document.addEventListener('click', e => {
   if (App.status.auth !== 'connected') start = 'settings';
   App.go(start);
 })();
+
+// the browser's connection changes without a job event (it polls or stops polling): refresh the side status now and then
+setInterval(() => { if (!document.hidden && App.status) App.loadStatus().catch(() => {}); }, 20e3);

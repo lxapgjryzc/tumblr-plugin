@@ -6,6 +6,11 @@ const SettingsPage = {
     const s = await App.loadStatus();
     const card = (title, ...body) => h('section', { class: 'card' }, h('h2', {}, title), ...body);
     let key = '', secret = '';
+    const si = window.studio.web ? await call('serverInfo').catch(() => null) : null;
+    // not connected / not paired: the way to connect sits right under that status, not only in the backend card
+    const pairEntry = () => window.studio.web ? h('div', { class: 'actions' },
+      h('button', { class: 'primary', onclick: () => window.open('/companion/', '_blank', 'noopener') }, t('relayPairBtn')),
+      h('span', { class: 'muted small' }, t('relayPairHint', si?.profile || 'Chrome'))) : null;
 
     const conn = card(t('connTitle'),
       h('div', { class: 'status-line' }, h('span', { class: 'conn ' + s.auth }, '● ', t('connStatus_' + s.auth)), s.account?.name ? h('span', { class: 'muted' }, ' · ' + t('account') + ': ' + s.account.name) : null,
@@ -33,7 +38,8 @@ const SettingsPage = {
         s.settings.browserRelay !== false ? h('p', { class: 'muted small' }, t('relayUploadHint')) : null,
         s.relay.enabled ? h('p', { class: 'muted small' }, s.relay.coolWhy ? t('relayCool_' + (['signed_out', 'other_account', 'limited'].includes(s.relay.coolWhy) ? s.relay.coolWhy : 'other'))
           : s.relay.connected ? t('relayOn', s.relay.hour) : t(s.settings.relaySave === true ? 'relayOffWait' : 'relayOff'))
-          : s.settings.browserRelay !== false ? h('p', { class: 'muted small' }, t('relayUnpaired')) : null) : null,
+          : s.settings.browserRelay !== false ? h('p', { class: 'muted small' }, t('relayUnpaired')) : null,
+        s.settings.browserRelay !== false && !(s.relay.enabled && s.relay.connected && !s.relay.coolWhy) ? pairEntry() : null) : null,
     );
 
     const roles = card(t('rolesTitle'), h('p', { class: 'muted' }, t('rolesHint')),
@@ -59,8 +65,7 @@ const SettingsPage = {
     const data = this.dataCard ? this.dataCard(card) : null;
     // the local web backend: what is running, start with Windows, stop (closing pages never stops it)
     let backend = null;
-    if (window.studio.web) {
-      const si = await call('serverInfo');
+    if (si) {
       backend = card(t('svcTitle'),
         h('p', { class: 'muted small' }, t('svcInfo', si.test ? t('svcTest') : t('svcWork'), si.port, si.profile, si.version)),
         h('p', { class: 'muted small' }, t('svcHint')),

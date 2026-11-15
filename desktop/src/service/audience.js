@@ -96,6 +96,17 @@ function addAudience(svc, api) {
     db.run('UPDATE people SET name = ?, names = ? WHERE uuid = ?', name, J(names), uuid);
   }
 
+  // Which notification types Tumblr actually sends, with one local sample of each (diagnosis of the mapping in
+  // normalize; never sent anywhere): meta notifTypes = { type: { n, kind, sample } }
+  function noteTypes(list) {
+    const seen = db.getMeta('notifTypes', {}) || {};
+    for (const n of list) {
+      const type = String(f(n, 'type') || '?');
+      const e = seen[type] || (seen[type] = { n: 0, kind: normalize(n, now())?.kind || null, sample: JSON.stringify(n).slice(0, 3000) });
+      e.n++;
+    }
+    db.setMeta('notifTypes', seen);
+  }
   svc.handlers['audience.notifications'] = {
     async run(job, ctx) {
       try { return await readNotifications(job, ctx); }
@@ -123,6 +134,7 @@ function addAudience(svc, api) {
         const r = await ctx.tumblr.notifications(blog, before ? { before } : {});
         const list = r?.notifications || [];
         const rows = list.map(n => normalize(n, now())).filter(Boolean);
+        noteTypes(list);
         db.tx(() => { for (const row of rows) added += store({ ...row, blog: row.blog || blog }, row.at < enabledAt, own.has(row.from_uuid)); });
         const stamps = list.map(n => Number(f(n, 'timestamp')) || 0).filter(Boolean);
         if (stamps.length) { newest = Math.max(newest, ...stamps); oldest = Math.min(oldest ?? Infinity, ...stamps); }

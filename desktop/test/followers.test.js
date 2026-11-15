@@ -159,6 +159,7 @@ test('replies: fake commission buyers are flagged, real questions from fans are 
   const hit = text => assess([{ id: 'reply:1', own: true, text, hash: text }]).reasons.includes('commission_bait');
   // the sample under the user's own post (2026-11-13), and common variants
   assert.ok(hit('Hello are you going to receive COMM? If yes reach out to me'));
+  assert.ok(hit('Hello are  you going to receive COMM? If yes  reach out to me'), 'the real text has double spaces');
   assert.ok(hit('Hi! Are you open for commissions? If yes kindly DM me'));
   assert.ok(hit('I would like to commission you, please email me at example (at) mail'));
   for (const text of ['are you open for commissions? I would love to get one someday!', 'Commissions open! DM me for prices', 'do you take comms? this is gorgeous', 'so pretty, I love yuri'])
@@ -207,4 +208,120 @@ test('replies: screening puts the sender up for review, blocking covers the blog
   // the reply check has its own switch
   api.setFollowerGuard({ replies: false });
   assert.equal(svc.screenInteraction(say('t:spam3', 'spamthree', 'Are you open for comms? dm me')), null);
+});
+
+test('replies: a sender known only by name is looked up before anything is attached', async () => {
+  const { fake, svc, api, run } = setup();
+  svc.pass(); await run();
+  api.setFollowerGuard({ mode: 'review' });
+  fake.infos.set('nameonly', { uuid: 't:n1' });
+  const add = (id, name, text) => svc.db.run(`INSERT INTO interactions (id, blog, type, kind, from_uuid, from_name, post_id, text, tags, at, fetched_at, state) VALUES (?, 't:main', 'reply', 'reply', NULL, ?, '1', ?, '[]', ?, ?, 'new')`, id, name, text, Date.now(), Date.now());
+  add('a1', 'nameonly', 'Hello are you going to receive COMM? If yes reach out to me');
+  add('a2', 'nicefan', 'this is so lovely');
+  add('a3', 'ghostname', 'Are you open for comms? dm me');
+  api.scanFollowers();
+  assert.equal(svc.jobs.list({}).filter(j => j.kind === 'follower.screen').length, 2, 'only the matching texts are looked up');
+  await run();
+  assert.deepEqual(api.followerCases({ status: 'review' }).map(c => [c.uuid, c.name]), [['t:n1', 'nameonly']]);
+  assert.equal(svc.db.get(`SELECT from_uuid FROM interactions WHERE id = 'a1'`).from_uuid, 't:n1');
+  // a name that can't be resolved stays without a case and isn't looked up again on every check
+  assert.equal(svc.db.get(`SELECT from_uuid FROM interactions WHERE id = 'a3'`).from_uuid, null);
+  api.scanFollowers();
+  assert.equal(svc.jobs.list({}).filter(j => j.kind === 'follower.screen').length, 2);
+});
+
+test('replies: a cut notification text is read in full from the post before it is judged (the 2026-11-14 sample)', async () => {
+  const { fake, svc, api, run } = setup();
+  svc.pass(); await run();
+  api.setFollowerGuard({ mode: 'review' });
+  const at = Date.now() - 3600e3;
+  // exactly what the notification carried, and the reply as it is under the post
+  svc.db.run(`INSERT INTO interactions (id, blog, type, kind, from_uuid, from_name, post_id, text, tags, at, fetched_at, state) VALUES ('r1', 't:main', 'reply', 'reply', 't:sly', 'slyeantex', '833217773830275072', 'Hello are  you going to receive COMM? If yes ...', '[]', ?, ?, 'old')`, at, at);
+  svc.db.run(`INSERT INTO interactions (id, blog, type, kind, from_uuid, from_name, post_id, text, tags, at, fetched_at, state) VALUES ('r2', 't:main', 'reply', 'reply', 't:fan', 'kindfan', '833217773830275072', 'Color theory with regards to contrasting lighting...', '[]', ?, ?, 'old')`, at, at);
+  fake.replyStore.set('833217773830275072', [
+    { id: 'x1', uuid: 't:sly', name: 'slyeantex', text: 'Hello are  you going to receive COMM? If yes  reach out to me', at, children: [] },
+    { id: 'x2', uuid: 't:fan', name: 'kindfan', text: 'Color theory with regards to contrasting lighting is so good here', at, children: [] },
+  ]);
+  api.scanFollowers();
+  await run();
+  assert.deepEqual(api.followerCases({ status: 'review' }).map(c => c.name), ['slyeantex']);
+  assert.match(svc.db.get(`SELECT text FROM interactions WHERE id = 'r1'`).text, /reach out to me$/);
+  // read once per text: checking again doesn't read the post again
+  const reads = fake.calls.filter(c => c.startsWith('replies:')).length;
+  api.scanFollowers(); await run();
+  assert.equal(fake.calls.filter(c => c.startsWith('replies:')).length, reads);
+});
+
+// The 2026-11-14 sample: three alike followers of the main blog (names and pictures not kept here)
+const photo = () => ({ id_string: String(Math.random()).slice(2, 12), content: [{ type: 'image', media: [{ url: 'x', width: 1109, height: 1972 }] }], trail: [], tags: [] });
+const photos = n => Array.from({ length: n }, photo);
+
+test('profiles: a made-up persona with photo-only posts is a candidate; look-alikes are not', () => {
+  const pe = (title, description, posts) => collectEvidence({ blog: { title, description } }, posts, 0);
+  for (const [title, bio] of [['Maya', 'maya, 25. scottsdale, az'], ['Rebecca', 'rebecca | 24 | Salt Lake City, UT'], ['Gabriella', "i'm gabriella. 27. Sacramento, CA"], ['Gabriella', '<p>i&#x27;m gabriella. 27. Sacramento, CA</p>']]) {
+    const a = assess(pe(title, bio, photos(10)));
+    assert.equal(a.assessment, 'spam_candidate', bio);
+    assert.deepEqual(a.reasons.sort(), ['persona_profile', 'photo_only_posts']);
+    assert.equal(assess(pe(title, bio, [])).assessment, 'review', 'the bio alone only asks for a look');
+  }
+  const innocent = {
+    photographer: pe('Maya', 'film photography, she/her', photos(10)),
+    pronouns: pe('Kai', 'kai, 19, they/them', photos(10)),
+    otherTitle: pe('maya draws', 'maya, 25. scottsdale, az', photos(10)),
+    noState: pe('Maya', 'maya, 25. scottsdale', photos(10)),
+    minorAge: pe('Maya', 'maya, 15. scottsdale, az', photos(10)),
+    taggedPhotos: pe('Maya', 'film photos', photos(10).map(p => ({ ...p, tags: ['film'] }))),
+  };
+  for (const [name, e] of Object.entries(innocent)) assert.equal(assess(e).assessment, 'no_spam_evidence', name);
+  // photo-only posts without a persona are not a signal at all, and reblogs or captions break the shape
+  assert.ok(!collectEvidence({ blog: {} }, [...photos(9), own('caption')], 0).some(e => e.source === 'posts'));
+  assert.ok(!collectEvidence({ blog: {} }, photos(4), 0).some(e => e.source === 'posts'), 'too few posts to say');
+});
+
+test('profiles: a persona follower goes to review, and followers judged clear by older signals are looked at again', async () => {
+  const { fake, svc, api, run, follow } = setup();
+  svc.pass(); await run();
+  api.setFollowerGuard({ mode: 'review' });
+  await run();
+  follow('emptystriderexample', 't:p1', { title: 'Maya', description: 'maya, 25. scottsdale, az', posts: photos(10) });
+  follow('realperson', 't:p2', { title: 'Sam', description: 'sam, 30, she/her. draws birds', posts: [own('new bird')] });
+  svc.pass(); await run();
+  const review = api.followerCases({ status: 'review' });
+  assert.deepEqual(review.map(c => c.name), ['emptystriderexample']);
+  assert.equal(review[0].assessment.assessment, 'spam_candidate');
+  assert.ok(!fake.calls.some(c => c.startsWith('block:')), 'still never blocks by itself');
+  // as an older version left it: clear
+  svc.db.run(`UPDATE follower_cases SET status = 'clear', assessment = '{"assessment":"no_spam_evidence"}' WHERE uuid = 't:p1'`);
+  svc.db.setMeta('followerPatterns', 1);
+  svc.pass(); await run();
+  assert.deepEqual(api.followerCases({ status: 'review' }).map(c => c.name), ['emptystriderexample']);
+  assert.equal(api.followerCases({ status: 'clear' }).map(c => c.name).join(), 'realperson');
+  // only once per version, and decisions stand
+  api.dismissFollower({ uuid: 't:p1' });
+  svc.db.setMeta('followerPatterns', 1);
+  svc.pass(); await run();
+  assert.equal(svc.db.get(`SELECT status FROM follower_cases WHERE uuid = 't:p1'`).status, 'dismissed');
+});
+
+test('existing followers: never inspected silently, checked on request (a new computer\'s baseline, 2026-11-14)', async () => {
+  const { fake, svc, api, run, follow } = setup();
+  svc.pass(); await run();
+  // already following when this computer first scanned: one fake profile among ordinary followers
+  follow('fakeprofile', 't:e1', { title: 'Rebecca', description: 'rebecca | 24 | Salt Lake City, UT', posts: photos(10) });
+  for (let i = 0; i < 3; i++) follow('fan' + i, 't:f' + i, { description: 'i draw', posts: [own('art')] });
+  api.setFollowerGuard({ mode: 'review' });
+  await run();
+  assert.equal(svc.db.get('SELECT COUNT(*) n FROM followers WHERE baseline = 1').n, 4);
+  assert.ok(!fake.calls.some(c => c.startsWith('info:')), 'baseline followers are not looked up by themselves');
+  assert.equal(api.followerGuard().digest.uncheckedExisting, 4);
+  assert.deepEqual(api.inspectExisting(), { queued: 4 });
+  assert.deepEqual(api.inspectExisting(), { queued: 0 }, 'not queued twice');
+  await run();
+  assert.deepEqual(api.followerCases({ status: 'review' }).map(c => c.name), ['fakeprofile']);
+  const g = api.followerGuard();
+  assert.equal(g.digest.uncheckedExisting, 0);
+  assert.equal(g.digest.newFollowers, 0, 'they still do not count as new');
+  assert.ok(!fake.calls.some(c => c.startsWith('block:')));
+  api.setFollowerGuard({ mode: 'off' });
+  assert.throws(() => api.inspectExisting(), /off/);
 });
