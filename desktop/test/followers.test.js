@@ -346,3 +346,22 @@ test('existing followers marked inspected by the old migration still count; undo
   assert.deepEqual(api.followerCases({ status: 'review' }).map(c => c.name), ['fakeprofile'], 'back under protection');
   assert.ok(!fake.calls.some(c => c.startsWith('block:')));
 });
+
+test('allowlist: removing a normal account re-checks it, also after "Later" (2026-11-15 misclick)', async () => {
+  const { fake, svc, api, run, clock } = setup();
+  fake.infos.set('maya', { uuid: 't:maya', title: 'Maya', description: 'maya, 25. scottsdale, az', posts: photos(10) });
+  svc.pass(); await run();
+  api.setFollowerGuard({ mode: 'review' });
+  // the case exists (the person clicked Normal account on it), then was also set aside with "Later"
+  svc.db.run(`INSERT INTO follower_cases (uuid, name, status, evidence, assessment, first_seen, updated_at) VALUES ('t:maya', 'maya', 'review', NULL, '{}', ?, ?)`, clock.t, clock.t);
+  api.allowFollower({ uuid: 't:maya', name: 'maya' });
+  api.dismissFollower({ uuid: 't:maya' });
+  assert.equal(svc.db.get(`SELECT status FROM follower_cases WHERE uuid = 't:maya'`).status, 'dismissed');
+  api.removeAllow({ uuid: 't:maya', name: 'maya' });
+  assert.equal(svc.db.get(`SELECT status FROM follower_cases WHERE uuid = 't:maya'`).status, 'clear', 'the leftover decision no longer hides it');
+  await run();
+  const c = svc.db.get(`SELECT status, assessment FROM follower_cases WHERE uuid = 't:maya'`);
+  assert.equal(c.status, 'review');
+  assert.match(c.assessment, /persona_profile/);
+  assert.ok(!fake.calls.some(c => c.startsWith('block:')), 'nothing is done automatically');
+});

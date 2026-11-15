@@ -59,6 +59,74 @@ test('normalize: reblog words and tags are kept apart from likes and plain reblo
   assert.equal(ask.from_uuid, null); assert.equal(ask.from_name, null);
 });
 
+test('normalize: the structured "generic" notification gives a reply its sender, post and text (2026-11-16)', () => {
+  // the exact shape found in this computer's studio.db: type generic, subtype reply, title mention, actions + body
+  const n = {
+    id: '833218340121149440', type: 'generic', subtype: 'reply', timestamp: 1794618930,
+    title: { text_content: { type: 'text', text: 'slyeantex', formatting: [{ type: 'bold', start: 0, end: 9 }, { type: 'mention', start: 0, end: 9, blog: { name: 'slyeantex', url: 'https://www.tumblr.com/slyeantex/', uuid: 't:_ZhQz_nBIjCK-_rJdqiuOA' } }] } },
+    actions: { tap: { href: 'https://www.tumblr.com/0961685962arcv/833217773830275072/replies/833218340099096576' }, long_tap: { meta: { post_id: '833217773830275072' } } },
+    body: { content: [{ type: 'text', text: 'Replied to your post' }, { type: 'text', subtype: 'indented', text: 'Hello are  you going to receive COMM? If yes ...' }] },
+  };
+  const r = normalize(n, 0);
+  assert.equal(r.kind, 'reply');
+  assert.equal(r.from_uuid, 't:_ZhQz_nBIjCK-_rJdqiuOA');
+  assert.equal(r.from_name, 'slyeantex');
+  assert.equal(r.post_id, '833217773830275072');
+  assert.equal(r.text, 'Hello are you going to receive COMM? If yes ...');
+  // the same shape carries asks and mentions
+  const ask = normalize({ ...n, id: '2', subtype: 'ask', body: { content: [{ type: 'text', text: 'How are you?' }] } }, 0);
+  assert.equal(ask.kind, 'ask');
+  assert.equal(ask.text, 'How are you?');
+});
+
+test('generic replies are screened: the cut text is read in full, the sender opens a case (2026-11-16)', async () => {
+  const { svc, api, run, notify, fake, clock } = setup();
+  api.setFansConfig({ collect: true });
+  api.setFollowerGuard({ mode: 'review' });
+  const id = '833218340121149440';
+  notify('t:main', {
+    id, type: 'generic', subtype: 'reply',
+    title: { text_content: { type: 'text', text: 'slyeantex', formatting: [{ type: 'mention', start: 0, end: 9, blog: { name: 'slyeantex', uuid: 't:sly' } }] } },
+    actions: { tap: { href: 'https://www.tumblr.com/mainblog/77/replies/123' }, long_tap: { meta: { post_id: '77' } } },
+    body: { content: [{ type: 'text', text: 'Replied to your post' }, { type: 'text', subtype: 'indented', text: 'Hello are  you going to receive COMM? If yes ...' }] },
+  });
+  fake.replyStore.set('77', [{ id: 'r1', uuid: 't:sly', name: 'slyeantex', text: 'Hello are  you going to receive COMM? If yes reach out to me', at: clock.t, children: [] }]);
+  svc.pass(); await run();
+  const row = svc.db.get('SELECT kind, text, from_uuid, from_name, post_id FROM interactions WHERE id = ?', id);
+  assert.equal(row.kind, 'reply');
+  assert.equal(row.from_uuid, 't:sly');
+  assert.equal(row.from_name, 'slyeantex');
+  assert.equal(row.post_id, '77');
+  assert.match(row.text, /reach out to me/, 'the cut notification was read in full before judging');
+  const c = svc.db.get('SELECT status, assessment FROM follower_cases WHERE uuid = ?', 't:sly');
+  assert.equal(c.status, 'review', 'a hit only opens the case for review');
+  assert.match(c.assessment, /commission_bait/);
+});
+
+test('repair: a notification stored as "other" before its shape was known is read again and screened (2026-11-16)', async () => {
+  const { svc, api, run, notify, fake, clock } = setup();
+  api.setFansConfig({ collect: true, notifications: false });
+  api.setFollowerGuard({ mode: 'review' });
+  const n = notify('t:main', {
+    id: 'old-generic', type: 'generic', subtype: 'reply',
+    title: { text_content: { type: 'text', text: 'slyeantex', formatting: [{ type: 'mention', start: 0, end: 9, blog: { name: 'slyeantex', uuid: 't:sly' } }] } },
+    actions: { long_tap: { meta: { post_id: '77' } } },
+    body: { content: [{ type: 'text', text: 'Replied to your post' }, { type: 'text', subtype: 'indented', text: 'Hello are  you going to receive COMM? If yes ...' }] },
+  });
+  // what the old build stored: the notification id, no sender, post or text
+  svc.db.run(`INSERT INTO interactions (id, blog, type, kind, from_uuid, from_name, post_id, text, at, fetched_at, state, state_at)
+    VALUES (?, 't:main', 'generic', 'other', NULL, NULL, NULL, NULL, ?, ?, 'digest', 0)`, n.id, clock.t, clock.t);
+  fake.replyStore.set('77', [{ id: 'r1', uuid: 't:sly', name: 'slyeantex', text: 'Hello are  you going to receive COMM? If yes reach out to me', at: clock.t, children: [] }]);
+  svc.jobs.add('audience.remap', { blog: 't:main', id: n.id, at: clock.t, before: Math.floor(clock.t / 1000) + 1 }, { priority: 9 });
+  await run();
+  const row = svc.db.get('SELECT kind, text, from_uuid, post_id FROM interactions WHERE id = ?', n.id);
+  assert.equal(row.kind, 'reply');
+  assert.equal(row.from_uuid, 't:sly');
+  assert.equal(row.post_id, '77');
+  assert.match(row.text, /reach out to me/);
+  assert.equal(svc.db.get('SELECT status FROM follower_cases WHERE uuid = ?', 't:sly').status, 'review');
+});
+
 test('collection: the first scan and the backfill are history; later ones reach the to-do list (FR04)', async () => {
   const { svc, api, run, follow, notify, clock } = setup();
   for (let i = 0; i < 30; i++) follow('t:main', 'old' + i);

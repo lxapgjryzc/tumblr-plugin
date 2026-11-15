@@ -33,6 +33,40 @@ const f = (o, snake) => {
 };
 const strip = s => String(s || '').replace(/<[^>]+>/g, ' ').replace(/&nbsp;/g, ' ').replace(/&amp;/g, '&').replace(/&lt;/g, '<').replace(/&gt;/g, '>').replace(/&quot;/g, '"').replace(/&#39;/g, "'").replace(/\s+/g, ' ').trim();
 
+// The newer activity feed sends some notifications as a structured "generic" item: the subtype says what
+// happened, the title's mention formatting holds the sender (name and uuid), actions.long_tap.meta holds the post
+// and body.content holds the text (often cut with "..."). Found 2026-11-16 on this computer: a reply
+// ("Hello are you going to receive COMM? If yes ...") was stored as an unexplained "other" item, so follower
+// protection never saw its sender or text. Reads camelCase too.
+function structured(n) {
+  const title = f(n, 'title') || {};
+  const tc = f(title, 'text_content') || {};
+  const formatting = f(tc, 'formatting') || [];
+  const mention = (Array.isArray(formatting) ? formatting : []).find(x => x?.type === 'mention' && x.blog)?.blog || {};
+  const images = f(f(n, 'avatar') || {}, 'images') || [];
+  const img = Array.isArray(images) ? images[0] || {} : {};
+  const imgMeta = f(f(f(img, 'actions') || {}, 'hover') || {}, 'meta') || {};
+  const actions = f(n, 'actions') || {};
+  const meta = f(f(actions, 'long_tap') || {}, 'meta') || {};
+  const href = String(f(f(actions, 'tap') || {}, 'href') || '');
+  const blocks = ((f(f(n, 'body') || {}, 'content') || []).filter(b => b?.type === 'text' && b.text));
+  const quote = blocks.filter(b => f(b, 'subtype') === 'indented');
+  const texts = quote.length ? quote : blocks.filter(b => !/^(replied to your post|asked|sent you an ask|mentioned you)\b/i.test(b.text));
+  const label = blocks.map(b => b.text).join(' ');
+  const subtype = String(f(n, 'subtype') || '').toLowerCase();
+  const kind = /reply/.test(subtype) || /replied to your/i.test(label) ? 'reply'
+    : /mention/.test(subtype) || /mentioned you/i.test(label) ? 'mention'
+      : /ask|question|submission/.test(subtype) || /asked|sent you an ask/i.test(label) ? 'ask' : null;
+  return {
+    kind,
+    from_uuid: f(mention, 'uuid') || f(imgMeta, 'tumblelog_id') || null,
+    from_name: f(mention, 'name') || String(f(tc, 'text') || '') || f(img, 'alt_text') || null,
+    // the notification links to /<blog>/<post>/replies/<reply>; the post id is also next to the mute action
+    post_id: String(f(meta, 'post_id') || /^\/[^/]+\/(\d{1,25})\/replies\//.exec(href)?.[1] || '') || null,
+    text: strip(texts.map(b => b.text).join('\n')).slice(0, 2000) || null,
+  };
+}
+
 // One notification → an interaction row, or null for what isn't about my blog (e.g. "what you missed")
 function normalize(n, now) {
   const type = String(f(n, 'type') || '');
@@ -42,6 +76,7 @@ function normalize(n, now) {
   const tags = Array.isArray(tagsRaw) ? tagsRaw.map(String) : [];
   const added = strip(f(n, 'added_text'));
   const reply = strip(f(n, 'reply_text'));
+  const s = structured(n);
   let kind;
   if (/^(reply|conversational_note|note_mention)$/.test(type)) kind = 'reply';
   else if (/mention/.test(type)) kind = 'mention';
@@ -49,16 +84,17 @@ function normalize(n, now) {
   else if (type === 'reblog' || type === 'reblog_naked' || type === 'reblog_with_content') kind = added || tags.length ? 'reblog' : 'reblog_plain';
   else if (type === 'like') kind = 'like';
   else if (type === 'follower' || type === 'follow') kind = 'follow';
+  else if (type === 'generic' && s.kind) kind = s.kind;
   else kind = 'other';
   const anon = !!f(n, 'is_anonymous');
   return {
     id, type, kind,
     blog: f(n, 'target_tumblelog_uuid') || null,
-    from_uuid: anon ? null : (f(n, 'from_tumblelog_uuid') || null),
-    from_name: anon ? null : (f(n, 'from_tumblelog_name') || null),
-    post_id: String(f(n, 'target_post_id') || '') || null,
+    from_uuid: anon ? null : (f(n, 'from_tumblelog_uuid') || s.from_uuid || null),
+    from_name: anon ? null : (f(n, 'from_tumblelog_name') || s.from_name || null),
+    post_id: String(f(n, 'target_post_id') || '') || s.post_id || null,
     reblog_id: String(f(n, 'post_id') || '') || null,
-    text: (reply || added || strip(f(n, 'answer_text')) || strip(f(n, 'question')) || '').slice(0, 2000) || null,
+    text: (reply || added || strip(f(n, 'answer_text')) || strip(f(n, 'question')) || s.text || '').slice(0, 2000) || null,
     tags,
     summary: strip(f(n, 'target_post_summary')).slice(0, 200) || null,
     at: (Number(f(n, 'timestamp')) || 0) * 1000,
@@ -80,13 +116,32 @@ function addAudience(svc, api) {
   function store(row, history, own) {
     const todo = TODO_KINDS.includes(row.kind) && !own;
     const state = !todo ? 'digest' : history ? 'old' : 'new';
-    const r = db.run(`INSERT INTO interactions (id, blog, type, kind, from_uuid, from_name, post_id, reblog_id, text, tags, summary, at, fetched_at, state, state_at)
-      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?) ON CONFLICT(id) DO NOTHING`,
-    row.id, row.blog, row.type, row.kind, row.from_uuid, row.from_name, row.post_id, row.reblog_id, row.text, J(row.tags), row.summary, row.at, row.fetched_at, state, now());
-    if (r.changes && row.from_uuid && row.from_name) noteName(row.from_uuid, row.from_name);
+    const ex = db.get('SELECT kind, text, from_uuid, from_name, post_id, summary, state FROM interactions WHERE id = ?', row.id);
+    let added = 0;
+    if (!ex) {
+      db.run(`INSERT INTO interactions (id, blog, type, kind, from_uuid, from_name, post_id, reblog_id, text, tags, summary, at, fetched_at, state, state_at)
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?) ON CONFLICT(id) DO NOTHING`,
+      row.id, row.blog, row.type, row.kind, row.from_uuid, row.from_name, row.post_id, row.reblog_id, row.text, J(row.tags), row.summary, row.at, row.fetched_at, state, now());
+      added = 1;
+    } else {
+      // A notification read again can carry more than its first read did (a reply that arrived as an unexplained
+      // "generic" item now has its sender, post and text). Fill only blanks; the person's state and tags stay.
+      const patch = {};
+      if (ex.kind === 'other' && row.kind !== 'other') patch.kind = row.kind;
+      for (const k of ['text', 'from_uuid', 'from_name', 'post_id', 'summary']) if (!ex[k] && row[k]) patch[k] = row[k];
+      // it was a to-do all along; history still never lands in the to-do list
+      if (patch.kind && TODO_KINDS.includes(patch.kind) && !own && ex.state === 'digest' && !TODO_KINDS.includes(ex.kind)) patch.state = history ? 'old' : 'new';
+      const cols = Object.keys(patch);
+      if (cols.length) {
+        db.run(`UPDATE interactions SET ${cols.map(c => c + ' = ?').join(', ')} WHERE id = ?`, ...cols.map(c => patch[c]), row.id);
+        row = { ...row, ...patch };
+        added = 1;
+      }
+    }
+    if (added && row.from_uuid && row.from_name) noteName(row.from_uuid, row.from_name);
     // ad / scam texts go to follower protection's review (followers.js); a screening error never stops collection
-    if (r.changes && !own) try { svc.screenInteraction?.(row); } catch (e) { db.log('warn', 'screen', String(e?.message || e)); }
-    return r.changes;
+    if (added && !own) try { svc.screenInteraction?.(row); } catch (e) { db.log('warn', 'screen', String(e?.message || e)); }
+    return added;
   }
   // a known person seen under a new name keeps the old one in their history
   function noteName(uuid, name) {
@@ -97,12 +152,15 @@ function addAudience(svc, api) {
   }
 
   // Which notification types Tumblr actually sends, with one local sample of each (diagnosis of the mapping in
-  // normalize; never sent anywhere): meta notifTypes = { type: { n, kind, sample } }
+  // normalize; never sent anywhere): meta notifTypes = { "type" or "type:subtype": { n, kind, sample } }.
+  // The subtype matters: "generic" is reply, ask or something else entirely.
   function noteTypes(list) {
     const seen = db.getMeta('notifTypes', {}) || {};
     for (const n of list) {
       const type = String(f(n, 'type') || '?');
-      const e = seen[type] || (seen[type] = { n: 0, kind: normalize(n, now())?.kind || null, sample: JSON.stringify(n).slice(0, 3000) });
+      const subtype = String(f(n, 'subtype') || '');
+      const key = subtype ? type + ':' + subtype : type;
+      const e = seen[key] || (seen[key] = { n: 0, kind: normalize(n, now())?.kind || null, sample: JSON.stringify(n).slice(0, 3000) });
       e.n++;
     }
     db.setMeta('notifTypes', seen);
@@ -115,6 +173,36 @@ function addAudience(svc, api) {
         db.setMeta(key, { ...(db.getMeta(key, {}) || {}), error: String(e?.message || e).slice(0, 200), errorAt: now() });
         throw e;
       }
+    },
+  };
+  // A notification stored before its shape was understood is read once more just around its own second (not a
+  // full backfill): the row then gains its sender and text, and store() lets protection screen it again.
+  const REMAP_VERSION = 2;
+  svc.handlers['audience.remap'] = {
+    async run(job, ctx) {
+      const { blog, id } = job.payload;
+      const target = Math.floor(Number(job.payload.at) / 1000);
+      let before = job.payload.before;
+      for (let page = 0; page < 3 && before != null; page++) {
+        const r = await ctx.tumblr.notifications(blog, { before });
+        const list = r?.notifications || [];
+        if (!list.length) break;
+        noteTypes(list);
+        const rows = list.map(n => normalize(n, now())).filter(Boolean);
+        const hit = rows.filter(row => row.id === String(id));
+        if (hit.length) {
+          const enabledAt = cfg().enabledAt || now();
+          const own = ownIds();
+          db.tx(() => { for (const row of hit) store({ ...row, blog: row.blog || blog }, row.at < enabledAt, own.has(row.from_uuid)); });
+          return { status: 'succeeded', result: { found: true } };
+        }
+        const links = r?._links || r?.links;
+        const next = links?.next ? f(links.next, 'query_params')?.before : null;
+        const oldest = Math.min(...list.map(n => Number(f(n, 'timestamp')) || 0));
+        if (!next || Number(next) >= Number(before) || oldest < target) break; // the page already reaches past it
+        before = next;
+      }
+      return { status: 'skipped', error: 'the notification is no longer in the feed' };
     },
   };
   async function readNotifications(job, ctx) {
@@ -197,6 +285,18 @@ function addAudience(svc, api) {
   }
   svc.afterFollowerScan = blog => planVerify(blog);
 
+  // One-time repair for rows stored before the generic notification shape was understood (2026-11-16): each is
+  // read again around its own second. Rows the feed no longer has stay as they are.
+  function planRemap() {
+    if ((db.getMeta('notifRemap', 1) || 1) >= REMAP_VERSION) return 0;
+    const rows = db.all(`SELECT id, blog, at FROM interactions WHERE type = 'generic' AND (kind = 'other' OR text IS NULL)`);
+    for (const r of rows) {
+      if (!open('audience.remap', 'remap:' + r.id)) jobs.add('audience.remap', { blog: r.blog, id: r.id, at: r.at, before: Math.floor(r.at / 1000) + 1 }, { priority: 9, scope: 'remap:' + r.id });
+    }
+    db.setMeta('notifRemap', REMAP_VERSION);
+    return rows.length;
+  }
+
   function plan() {
     const c = cfg();
     if (!c.collect) return 0;
@@ -205,6 +305,7 @@ function addAudience(svc, api) {
       if (c.notifications !== false && !open('audience.notifications', 'notif:' + blog)) { jobs.add('audience.notifications', { blog }, { priority: 7, scope: 'notif:' + blog }); n++; }
       planVerify(blog);
     }
+    planRemap();
     // follower count observations: one row when the count changes, otherwise one every 6 hours
     for (const b of db.all('SELECT uuid, followers FROM blogs WHERE followers IS NOT NULL')) {
       const last = db.get('SELECT at, followers FROM audience_counts WHERE blog = ? ORDER BY at DESC LIMIT 1', b.uuid);

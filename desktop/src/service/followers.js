@@ -518,15 +518,17 @@ function addFollowers(svc, api, { aiKey = () => null, fetchFn = fetch } = {}) {
       for (const j of db.all(`SELECT id, payload FROM jobs WHERE kind = 'follower.block' AND status IN ('pending', 'waiting')`)) if (P(j.payload)?.uuid === uuid && !P(j.payload)?.undo) jobs.cancel(j.id, 'allowlisted');
       return { appBlocks: db.all(`SELECT blog FROM blocks WHERE target = ? AND origin = 'app' AND status = 'blocked'`, uuid).map(r => r.blog) };
     },
-    // Undoing "normal account" must bring the account back under protection: its case leaves "allowed" and it is
-    // inspected again (before 0.6.15 the case stayed allowed for ever).
+    // Undoing "normal account" brings the account back under protection: a case left over from the allowlist or
+    // from "Later" becomes "clear" and the account is inspected again. On 2026-11-15 a fake profile was allowlisted
+    // by a misclick and then dismissed; deleting the entry alone would have left it hidden for ever.
     removeAllow({ uuid, name }) {
       db.run('DELETE FROM allowlist WHERE uuid = ?', uuid);
       const c = db.get('SELECT name, status FROM follower_cases WHERE uuid = ?', uuid);
-      if (c?.status === 'allowed') db.run(`UPDATE follower_cases SET status = 'clear', updated_at = ? WHERE uuid = ?`, now(), uuid);
+      if (c && ['allowed', 'dismissed'].includes(c.status)) db.run(`UPDATE follower_cases SET status = 'clear', updated_at = ? WHERE uuid = ?`, now(), uuid);
       const f = db.get('SELECT blog, name FROM followers WHERE uuid = ? AND gone = 0 ORDER BY first_seen DESC LIMIT 1', uuid);
       const who = f?.name || name || c?.name;
-      if (who && guardOn() && !protectedIds().has(uuid)) jobs.add('follower.inspect', { blog: f?.blog || monitored()[0], name: who }, { priority: 5, scope: `inspect:${who}:unallow:${now()}` });
+      const blog = f?.blog || monitored()[0];
+      if (who && blog && guardOn() && !protectedIds().has(uuid)) jobs.add('follower.inspect', { blog, name: who }, { priority: 5, scope: `inspect:${who}:unallow:${now()}` });
       return true;
     },
     dismissFollower({ uuid }) { db.run(`UPDATE follower_cases SET status = 'dismissed', updated_at = ? WHERE uuid = ?`, now(), uuid); return true; },
