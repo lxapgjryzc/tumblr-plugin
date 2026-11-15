@@ -220,7 +220,7 @@ function addFollowers(svc, api, { aiKey = () => null, fetchFn = fetch } = {}) {
       try { info = await ctx.tumblr.publicInfo(name); }
       catch (e) { if (e instanceof HttpError && e.status === 404) { db.run(`UPDATE followers SET uuid = COALESCE(uuid, ''), inspected = 1 WHERE blog = ? AND name = ?`, blog, name); return { status: 'skipped', error: 'blog not found' }; } throw e; }
       const uuid = info?.blog?.uuid;
-      if (!uuid) { db.run('UPDATE followers SET inspected = 1 WHERE blog = ? AND name = ?', blog, name); return { status: 'skipped', error: 'no stable id' }; }
+      if (!uuid) { db.run(`UPDATE followers SET uuid = COALESCE(uuid, ''), inspected = 1 WHERE blog = ? AND name = ?`, blog, name); return { status: 'skipped', error: 'no stable id' }; }
       db.run('UPDATE followers SET uuid = ?, inspected = 1 WHERE blog = ? AND name = ?', uuid, blog, name);
       if (protectedIds().has(uuid)) { upsertCase(uuid, name, 'allowed', null, { assessment: 'protected' }); return { status: 'succeeded', result: { protected: true } }; }
       const old = db.get('SELECT * FROM follower_cases WHERE uuid = ?', uuid);
@@ -462,13 +462,18 @@ function addFollowers(svc, api, { aiKey = () => null, fetchFn = fetch } = {}) {
     return fresh.length;
   }
 
-  // baseline followers of the protected blogs that were never inspected and have no inspection queued
+  // Followers of the protected blogs that were never really looked at: no case for their uuid (an inspection always
+  // leaves one) and no inspection running. The `inspected` flag is not enough: the schema 12 migration set it for
+  // every row that already had a uuid, which on the second computer hid its baseline followers (2026-11-15).
+  // My own blogs, the allowlist and (if chosen) blogs I follow are not counted.
   function uncheckedExisting(limit = 100000) {
-    const mine = new Set(monitored());
+    const mine = new Set(monitored()), prot = protectedIds();
     const seen = new Set();
-    return db.all(`SELECT blog, name FROM followers f WHERE baseline = 1 AND inspected = 0 AND gone = 0
-      AND NOT EXISTS (SELECT 1 FROM jobs j WHERE j.kind = 'follower.inspect' AND j.scope = 'inspect:' || f.name) ORDER BY first_seen DESC`)
-      .filter(f => mine.has(f.blog) && !seen.has(f.name) && seen.add(f.name)).slice(0, limit);
+    return db.all(`SELECT f.blog, f.name, f.uuid FROM followers f WHERE f.gone = 0 AND (f.uuid IS NULL OR (f.uuid != ''
+        AND NOT EXISTS (SELECT 1 FROM follower_cases c WHERE c.uuid = f.uuid)))
+      AND NOT EXISTS (SELECT 1 FROM jobs j WHERE j.kind = 'follower.inspect' AND j.status IN ('pending', 'running', 'waiting', 'verifying')
+        AND json_extract(j.payload, '$.name') = f.name) ORDER BY f.first_seen DESC`)
+      .filter(f => mine.has(f.blog) && !(f.uuid && prot.has(f.uuid)) && !seen.has(f.name) && seen.add(f.name)).slice(0, limit);
   }
 
   Object.assign(api, {
@@ -513,7 +518,17 @@ function addFollowers(svc, api, { aiKey = () => null, fetchFn = fetch } = {}) {
       for (const j of db.all(`SELECT id, payload FROM jobs WHERE kind = 'follower.block' AND status IN ('pending', 'waiting')`)) if (P(j.payload)?.uuid === uuid && !P(j.payload)?.undo) jobs.cancel(j.id, 'allowlisted');
       return { appBlocks: db.all(`SELECT blog FROM blocks WHERE target = ? AND origin = 'app' AND status = 'blocked'`, uuid).map(r => r.blog) };
     },
-    removeAllow({ uuid }) { db.run('DELETE FROM allowlist WHERE uuid = ?', uuid); return true; },
+    // Undoing "normal account" must bring the account back under protection: its case leaves "allowed" and it is
+    // inspected again (before 0.6.15 the case stayed allowed for ever).
+    removeAllow({ uuid, name }) {
+      db.run('DELETE FROM allowlist WHERE uuid = ?', uuid);
+      const c = db.get('SELECT name, status FROM follower_cases WHERE uuid = ?', uuid);
+      if (c?.status === 'allowed') db.run(`UPDATE follower_cases SET status = 'clear', updated_at = ? WHERE uuid = ?`, now(), uuid);
+      const f = db.get('SELECT blog, name FROM followers WHERE uuid = ? AND gone = 0 ORDER BY first_seen DESC LIMIT 1', uuid);
+      const who = f?.name || name || c?.name;
+      if (who && guardOn() && !protectedIds().has(uuid)) jobs.add('follower.inspect', { blog: f?.blog || monitored()[0], name: who }, { priority: 5, scope: `inspect:${who}:unallow:${now()}` });
+      return true;
+    },
     dismissFollower({ uuid }) { db.run(`UPDATE follower_cases SET status = 'dismissed', updated_at = ? WHERE uuid = ?`, now(), uuid); return true; },
     blockFollower({ uuid, name, blogs }) {
       if (db.get('SELECT 1 FROM allowlist WHERE uuid = ?', uuid)) throw new Error('this account is on your normal-account list');
@@ -543,7 +558,7 @@ function addFollowers(svc, api, { aiKey = () => null, fetchFn = fetch } = {}) {
     inspectExisting({ limit = 300 } = {}) {
       if (!guardOn()) throw new Error('protection is off');
       const rows = uncheckedExisting(limit);
-      for (const f of rows) jobs.add('follower.inspect', { blog: f.blog, name: f.name }, { priority: 8, scope: 'inspect:' + f.name });
+      for (const f of rows) jobs.add('follower.inspect', { blog: f.blog, name: f.name }, { priority: 8, scope: `inspect:${f.name}:existing:${now()}` });
       return { queued: rows.length };
     },
     // the blogs a block would cover by default: the protected blogs and wherever this sender wrote to me

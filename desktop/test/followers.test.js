@@ -325,3 +325,24 @@ test('existing followers: never inspected silently, checked on request (a new co
   api.setFollowerGuard({ mode: 'off' });
   assert.throws(() => api.inspectExisting(), /off/);
 });
+
+test('existing followers marked inspected by the old migration still count; undoing "normal account" checks again (2026-11-15)', async () => {
+  const { fake, svc, api, run, follow } = setup();
+  svc.pass(); await run();
+  follow('fakeprofile', 't:m1', { title: 'Gabriella', description: "i'm gabriella. 27. Sacramento, CA", posts: photos(10) });
+  api.setFollowerGuard({ mode: 'review' });
+  await run();
+  // what schema 12 did on the second computer: inspected = 1 for rows that had a uuid, nothing looked at
+  svc.db.run(`UPDATE followers SET inspected = 1, uuid = 't:m1' WHERE name = 'fakeprofile'`);
+  assert.equal(api.followerGuard().digest.uncheckedExisting, 1);
+  api.inspectExisting(); await run();
+  assert.deepEqual(api.followerCases({ status: 'review' }).map(c => c.name), ['fakeprofile']);
+  // a misclick on "normal account", then undone
+  api.allowFollower({ uuid: 't:m1', name: 'fakeprofile' });
+  svc.pass(); await run();
+  assert.equal(api.followerCases({ status: 'review' }).length, 0);
+  api.removeAllow({ uuid: 't:m1', name: 'fakeprofile' });
+  await run();
+  assert.deepEqual(api.followerCases({ status: 'review' }).map(c => c.name), ['fakeprofile'], 'back under protection');
+  assert.ok(!fake.calls.some(c => c.startsWith('block:')));
+});

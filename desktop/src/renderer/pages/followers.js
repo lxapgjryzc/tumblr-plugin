@@ -62,7 +62,13 @@ const FollowersPage = {
 
   actions(r) {
     const done = () => this.render(this.root);
-    const allow = h('button', { onclick: async () => {
+    // A durable decision (never flagged or blocked again): last in the row, quiet, and confirmed. It used to be the
+    // first button and one click; on 2026-11-15 a fake profile was allowlisted by a misclick (twice).
+    const allow = h('button', { class: 'ghost', title: t('fgAllowHint'), onclick: async () => {
+      const sig = (r.assessment?.reasons || []).map(x => t('sig_' + x)).join(' · ');
+      const sure = await modal(t('fgAllow'), [h('p', {}, t('fgAllowQ', r.name)), sig ? h('p', { class: 'warn-text small' }, t('fgSignals'), ': ', sig) : null],
+        [{ label: t('cancel'), value: false }, { label: t('fgAllowConfirm'), value: true, class: sig ? 'danger' : 'primary' }]);
+      if (!sure) return;
       const res = await call('allowFollower', { uuid: r.uuid, name: r.name });
       if (res.appBlocks.length) {
         const ok = await modal(t('fgAllow'), h('p', {}, t('fgUndoBlockQ', res.appBlocks.map(blogName).join(', '))), [{ label: t('cancel'), value: false }, { label: t('fgUnblock'), value: true, class: 'primary' }]);
@@ -71,11 +77,10 @@ const FollowersPage = {
       done();
     } }, t('fgAllow'));
     if (!r.uuid) return [h('span', { class: 'muted small' }, t('fgNoId'))];
-    if (this.tab === 'allowed') return [h('button', { class: 'ghost', onclick: async () => { await call('removeAllow', { uuid: r.uuid }); done(); } }, t('delete'))];
+    if (this.tab === 'allowed') return [h('button', { onclick: async () => { await call('removeAllow', { uuid: r.uuid, name: r.name }); toast(t('fgAllowRemoved', r.name)); done(); } }, t('fgAllowRemove'))];
     if (this.tab === 'blocked') return [r.origin === 'app' ? h('button', { onclick: async () => { await call('unblockFollower', { uuid: r.uuid, name: r.name, blogs: [r.blog] }); toast(t('queued', 1)); done(); } }, t('fgUnblock')) : null, allow];
     return [
-      allow,
-      h('button', { onclick: async () => {
+      h('button', { class: 'danger', onclick: async () => {
         const blogs = await call('followerBlockBlogs', { uuid: r.uuid });
         const ok = await modal(t('fgBlock'), h('p', {}, t('fgBlockQ', r.name, blogs.map(blogName).join(', '))), [{ label: t('cancel'), value: false }, { label: t('fgBlock'), value: true, class: 'danger' }]);
         if (ok) { await call('blockFollower', { uuid: r.uuid, name: r.name, blogs }); toast(t('queued', blogs.length)); done(); }
@@ -91,6 +96,7 @@ const FollowersPage = {
         done();
       } }, t('fgReport')),
       h('button', { class: 'ghost', onclick: async () => { await call('dismissFollower', { uuid: r.uuid }); done(); } }, t('fgLater')),
+      allow,
     ];
   },
   postUrl(e) { return `https://www.tumblr.com/${blogName(e.blog)}/${e.post}`; },
