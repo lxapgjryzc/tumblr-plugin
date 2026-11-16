@@ -102,6 +102,26 @@ test('sync: paging to the end, private posts, resumable full pass, gone only aft
   assert.equal(db.get('SELECT state FROM posts WHERE id = ?', victim.id_string).state, 'gone');
 });
 
+test('pass: syncs parked for the browser park the maintenance step too; reconnecting wakes both (issue #1)', async () => {
+  const { fake, clock, svc, db } = setup();
+  const { WaitError } = require('../src/service/errors');
+  const orig = fake.postsPage;
+  fake.postsPage = async () => { throw new WaitError('waiting for the browser (saving official API quota)'); };
+  const id = svc.pass();
+  // an hour of the job loop with the browser away: the step must not spin every 5 s
+  for (let i = 0; i < 720; i++) { await svc.jobs.drain(svc.ctx); clock.t += 5000; }
+  const step = svc.jobs.get(id);
+  assert.equal(step.status, 'waiting');
+  assert.match(step.error, /^browser:/);
+  assert.ok(step.attempts <= 20, `attempts ${step.attempts}`);
+  // the browser connects (boot.js onConnect): syncs and the step run right away
+  fake.postsPage = orig;
+  svc.jobs.wake('browser:');
+  for (let i = 0; i < 5; i++) { await svc.jobs.drain(svc.ctx); clock.t += 1000; }
+  assert.equal(svc.jobs.get(id).status, 'succeeded');
+  assert.equal(db.get(`SELECT COUNT(*) n FROM jobs WHERE kind = 'sync.blog' AND status = 'waiting'`).n, 0);
+});
+
 test('management: main original reblogged by one sharing side blog is managed there (A04, A06, A07, A33)', async () => {
   const { fake, svc, run, db, roles } = setup();
   svc.pass(); await run(); roles();

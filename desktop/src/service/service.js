@@ -56,8 +56,15 @@ function createService({ dataDir, db: givenDb, tumblr, creds = null, now = Date.
     // After the syncs of a pass: regroup, then plan expiry and routes from the fresh picture
     'maintain.after': {
       async run(job) {
-        const open = db.get(`SELECT COUNT(*) n FROM jobs WHERE kind IN ('sync.blogs', 'sync.blog') AND status IN ('pending', 'running', 'waiting')`).n;
-        if (open) return { status: 'pending', nextAt: now() + 5000 };
+        const SYNCS = `kind IN ('sync.blogs', 'sync.blog')`;
+        if (db.get(`SELECT COUNT(*) n FROM jobs WHERE ${SYNCS} AND status IN ('pending', 'running')`).n) return { status: 'pending', nextAt: now() + 5000 };
+        // Only parked syncs left (browser, rate limit, auth, network): wait with them instead of re-checking every
+        // 5 s. Their reason prefix is kept so the same wake() (e.g. the browser reconnecting) wakes this step too.
+        const parked = db.get(`SELECT error, next_at FROM jobs WHERE ${SYNCS} AND status = 'waiting' ORDER BY next_at LIMIT 1`);
+        if (parked) {
+          const why = String(parked.error || '').match(/^\w+:/)?.[0] || 'sync:';
+          return { status: 'waiting', error: why + ' waiting for the blog syncs of this pass', nextAt: Math.max(now() + 5000, (parked.next_at || 0) + 1000) };
+        }
         const g = groups.rebuild(db, now());
         const auto = db.getMeta('automation', {});
         const hidden = auto.expiry ? display.queueExpiry(db, jobs, { now: now(), limit: auto.expiryLimit || 40 }) : 0;
