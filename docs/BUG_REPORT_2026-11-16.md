@@ -10,7 +10,7 @@ Status: **Fixed in 0.6.17.** Investigated from the live data folder on this comp
 - `interactions` therefore had no `reply`/`ask` rows at all: 772 likes, 207 reblogs, 10 follows, one text-less mention. Follower protection's screen only looks at `reply`/`mention`/`ask` with text, so there was nothing to screen.
 - The missed text is exactly the `commission_bait` pattern added in 0.6.9 ("are you going to receive COMM… reach out to me").
 - Suspicious account: `allowlist` holds `emptystrideramulet` (`t:7F36…`, added 2026-11-15 02:07, i.e. the fake "Maya / maya, 25. scottsdale, az" persona). Its case is `dismissed`. `removeAllow` only deleted the allowlist row and left the case, and `follower.inspect` treats a dismissed case as final, so the fake could not be flagged again. The 0.6.16 fix for `removeAllow` resets only `allowed`, not `dismissed`.
-- 0.6.16 also changed unchecked baseline followers from the `inspected` flag (schema 12 set it for every row that already had a uuid) to "no case for this uuid"; that part was not in the repo and is now carried over.
+- 0.6.16 changed unchecked baseline followers from the `inspected` flag (schema 12 set it for every row that already had a uuid) to "no case for this uuid", and made "Normal account" the quiet, confirmed last button; 0.6.17 builds on that base (rebased onto 0.6.15/0.6.16).
 
 ### Cause
 
@@ -22,14 +22,14 @@ Status: **Fixed in 0.6.17.** Investigated from the live data folder on this comp
 - `audience.js` `structured()` reads the generic shape (title mention, avatar fallback, `actions`, `body.content`, `subtype` and body label → reply/ask/mention). `noteTypes` samples `type:subtype` (e.g. `generic:reply`) so the mapping is visible next time.
 - `store()` upgrades an existing row when a re-read carries more (only blanks; state and tags stay) and screens it again, so protection can still act.
 - One-time `audience.remap` (meta `notifRemap`): each row stored as `generic`/`other` without text is read once more around its own second (`before = timestamp + 1`, up to three pages), then upgraded and screened. The bounded reread avoids a 30-day backfill.
-- `followers.js`: `removeAllow` resets an `allowed` **or** `dismissed` case to `clear` and queues a fresh inspection; `uncheckedExisting` counts "no case" (not the `inspected` flag) and ignores protected accounts; `inspectExisting` scopes its jobs; a no-uuid inspection marks the row.
-- `pages/followers.js`: "Normal account" moved to the end of the row, quiet and behind a confirmation; the Normal accounts tab removes the entry and says it will be checked again.
+- `followers.js`: `removeAllow` resets an `allowed` **or** `dismissed` case to `clear` and queues a fresh inspection. (`uncheckedExisting` counting "no case", the quiet confirmed "Normal account" button and the scoped inspections came with 0.6.16.)
+- `pages/followers.js`: the Normal accounts tab removes the entry and says it will be checked again.
 
 ### Tests
 
 - `test/audience.test.js`: the exact generic sample normalizes to a reply with sender/post/text; a cut generic reply is read in full and opens a `commission_bait` review case; an old `other` row is repaired and screened.
-- `test/followers.test.js`: removing a normal account re-checks it even after "Later" and finds `persona_profile` again; existing baseline tests still pass.
-- Full desktop suite: 142/142.
+- `test/followers.test.js`: removing a normal account re-checks it even after "Later" and finds `persona_profile` again; the 0.6.16 test (inspected flag + undo) and the existing baseline tests still pass.
+- Full desktop suite on the rebased tree: 144/144.
 
 ### Not verified
 
