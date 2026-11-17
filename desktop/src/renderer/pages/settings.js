@@ -42,12 +42,17 @@ const SettingsPage = {
         s.settings.browserRelay !== false && !(s.relay.enabled && s.relay.connected && !s.relay.coolWhy) ? pairEntry() : null) : null,
     );
 
+    const ss = await call('settingsSyncStatus').catch(() => null);
     const roles = card(t('rolesTitle'), h('p', { class: 'muted' }, t('rolesHint')),
       h('table', { class: 'table' }, h('tbody', {}, s.blogs.map(b => h('tr', {},
         h('td', {}, h('div', { class: 'blogcell' }, b.avatar ? h('img', { src: b.avatar, class: 'avatar' }) : null, h('b', {}, b.name), b.is_primary ? h('span', { class: 'badge' }, 'main') : null)),
         h('td', {}, b.title || ''),
-        h('td', { class: 'right' }, b.is_primary ? t('role_share')
+        h('td', { class: 'right' }, b.is_primary ? t('role_share') : b.uuid === ss?.blog ? t('ssRoleLabel')
           : select(['share', 'material', ''].map(r => ({ value: r, label: t('role_' + (r || 'null')) })), b.role || '', async v => { await call('setRole', { blog: b.uuid, role: v || null }); toast('✓'); })))))));
+    this.syncEl = card(t('ssTitle'), h('p', { class: 'muted' }, t('ssHint')));
+    this.syncBody = h('div', {});
+    this.syncEl.append(this.syncBody);
+    this.fillSync(ss);
 
     const auto = card(t('automationTitle'),
       toggle(!!s.paused, async v => { await call('setPaused', v); window.studio.trayRefresh(); this.render(root); }, t('pauseAll')),
@@ -76,7 +81,39 @@ const SettingsPage = {
           if (ok) await call('stopServer');
         } }, t('svcStop'))));
     }
-    root.replaceChildren(h('header', { class: 'page-head' }, h('h1', {}, t('settingsTitle'))), h('div', { class: 'grid2' }, conn, roles, auto, backend, data, lang));
+    root.replaceChildren(h('header', { class: 'page-head' }, h('h1', {}, t('settingsTitle'))), h('div', { class: 'grid2' }, conn, roles, this.syncEl, auto, backend, data, lang));
+  },
+  // the settings blog card is refreshed on its own, so typing elsewhere on the page is never lost
+  refresh(ev) { if (ev.type === 'job' && this.syncBody?.isConnected) call('settingsSyncStatus').then(st => this.fillSync(st)).catch(() => {}); },
+  fillSync(st) {
+    if (!st) return this.syncBody.replaceChildren();
+    const label = v => v === 'rule_hidden' ? t('ssRuleHidden') : t('pol_' + v);
+    const resolve = async (keys, pick) => {
+      try { this.fillSync(await call('settingsSyncResolve', { keys, pick })); toast('✓', 'ok'); } catch (e) { toast(cleanErr(e), 'error'); }
+    };
+    const keys = st.conflicts.map(c => c.key);
+    this.syncBody.replaceChildren(
+      h('label', { class: 'field' }, h('span', {}, t('ssPick')),
+        select([{ value: '', label: t('ssOff') }, ...st.candidates.map(b => ({ value: b.uuid, label: b.name + (b.role ? ' · ' + t('role_' + b.role) : '') }))], st.blog || '', async v => {
+          try { this.fillSync(await call('setSettingsBlog', { blog: v || null })); toast('✓', 'ok'); } catch (e) { toast(cleanErr(e), 'error'); this.fillSync(await call('settingsSyncStatus')); }
+        })),
+      st.blog ? h('p', { class: 'muted small' }, st.lastSync ? t('ssLast', fmtTime(st.lastSync)) : t('ssNever'),
+        st.entries != null ? ' · ' + t('ssEntries', st.entries, st.computers.join(', ') || '—') : '',
+        st.url ? [' · ', h('a', { href: st.url, target: '_blank' }, t('ssOpen') + ' ↗')] : null) : null,
+      st.error ? h('p', { class: 'banner warn small' }, st.error) : null,
+      st.blog ? h('div', { class: 'actions' }, h('button', { onclick: async () => { await call('settingsSyncNow'); toast(t('ssNow') + ' ✓'); } }, t('ssNow'))) : null,
+      st.conflicts.length ? [
+        h('p', { class: 'banner warn small' }, t('ssConflicts', st.conflicts.length)),
+        h('div', { class: 'actions' },
+          h('button', { onclick: () => resolve(keys, 'here') }, t('ssAllHere')),
+          h('button', { onclick: () => resolve(keys, 'there') }, t('ssAllThere'))),
+        h('table', { class: 'table' }, h('tbody', {}, st.conflicts.map(c => h('tr', {},
+          h('td', {}, c.thumb ? h('img', { src: c.thumb, class: 'vthumb small' }) : h('span', { class: 'muted small' }, (c.summary || c.id).slice(0, 40))),
+          h('td', { class: 'small' }, h('a', { href: `https://www.tumblr.com/${c.name}/${c.id}`, target: '_blank' }, c.name + ' ↗'), c.state ? [' ', stateBadge(c.state)] : null),
+          h('td', { class: 'small' }, t('ssHere') + ': ', h('b', {}, label(c.here)), h('br'), t('ssThere') + ': ', h('b', {}, label(c.there))),
+          h('td', { class: 'nowrap' },
+            h('button', { class: 'ghost', onclick: () => resolve([c.key], 'here') }, t('ssUseHere')),
+            h('button', { class: 'ghost', onclick: () => resolve([c.key], 'there') }, t('ssUseThere')))))))] : null);
   },
 };
 

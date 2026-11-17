@@ -16,13 +16,16 @@ const policyOf = (db, blog, id) => {
   return r ? { ...r, auto_hide: P(r.auto_hide), conflict: P(r.conflict) } : { blog, id: String(id), display: 'follow_rule', auto_hide: null, conflict: null };
 };
 function savePolicy(db, p, now = Date.now()) {
-  db.run(`INSERT INTO policies (blog, id, display, auto_hide, conflict, updated_at) VALUES (?, ?, ?, ?, ?, ?)
-    ON CONFLICT(blog, id) DO UPDATE SET display = excluded.display, auto_hide = excluded.auto_hide, conflict = excluded.conflict, updated_at = excluded.updated_at`,
-  p.blog, String(p.id), p.display, J(p.auto_hide), J(p.conflict), now);
+  db.run(`INSERT INTO policies (blog, id, display, auto_hide, conflict, display_at, display_src, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+    ON CONFLICT(blog, id) DO UPDATE SET display = excluded.display, auto_hide = excluded.auto_hide, conflict = excluded.conflict,
+      display_at = excluded.display_at, display_src = excluded.display_src, updated_at = excluded.updated_at`,
+  p.blog, String(p.id), p.display, J(p.auto_hide), J(p.conflict), p.display_at ?? null, p.display_src ?? null, now);
 }
-function setDisplay(db, blog, id, display, now) {
+// src: where the choice comes from (user | observed | sync | import); `at` its time (a synced choice keeps its own)
+function setDisplay(db, blog, id, display, now, { src = 'user', at = now } = {}) {
   const p = policyOf(db, blog, id);
   p.display = display;
+  p.display_at = at; p.display_src = src;
   if (display !== 'follow_rule') p.auto_hide = null; // the user took over; this app no longer owns that hide
   p.conflict = null;
   savePolicy(db, p, now);
@@ -147,10 +150,13 @@ function observe(db, before, after, now = Date.now()) {
   if (after.state === 'published' && before.state === 'private') {
     if (p.auto_hide) { p.auto_hide = null; p.display = 'keep_visible'; what = 'external_republish'; }
     else if (p.display === 'keep_hidden') { p.conflict = { seen: 'published', at: now }; what = 'conflict'; }
+    // a keep-visible post hidden elsewhere and public again: nothing is left to decide
+    else if (p.display === 'keep_visible' && p.conflict?.seen === 'private') { p.conflict = null; savePolicy(db, p, now); return 'conflict_cleared'; }
   } else if (after.state === 'private' && before.state === 'published') {
     if (p.display === 'keep_visible') { p.conflict = { seen: 'private', at: now }; what = 'conflict'; }
     else if (p.display === 'follow_rule') { p.display = 'keep_hidden'; what = 'external_hide'; }
   }
+  if (what && what !== 'conflict') { p.display_at = now; p.display_src = 'observed'; }
   if (what) savePolicy(db, p, now);
   return what;
 }

@@ -81,7 +81,8 @@ test('migration 11 removes ads stored as posts, with their items and revisions',
     ALTER TABLE followers DROP COLUMN inspected; ALTER TABLE followers DROP COLUMN gone_at; ALTER TABLE followers DROP COLUMN checked_at; ALTER TABLE followers DROP COLUMN check_note;
     DROP TABLE reply_ops; DROP TABLE reply_drafts;
     ALTER TABLE drafts DROP COLUMN kind; ALTER TABLE drafts DROP COLUMN target_blog; ALTER TABLE drafts DROP COLUMN target_id;
-    ALTER TABLE drafts DROP COLUMN base; ALTER TABLE drafts DROP COLUMN conflict; ALTER TABLE drafts DROP COLUMN stash;`);
+    ALTER TABLE drafts DROP COLUMN base; ALTER TABLE drafts DROP COLUMN conflict; ALTER TABLE drafts DROP COLUMN stash;
+    ALTER TABLE policies DROP COLUMN display_at; ALTER TABLE policies DROP COLUMN display_src;`);
   const add = (id, payload) => {
     const item = raw.prepare("INSERT INTO items (origin_blog, origin_id) VALUES ('t:b', ?)").run(id).lastInsertRowid;
     raw.prepare("INSERT INTO posts (blog, id, kind, state, payload, item_id) VALUES ('t:b', ?, 'original', 'published', ?, ?)").run(id, JSON.stringify(payload), item);

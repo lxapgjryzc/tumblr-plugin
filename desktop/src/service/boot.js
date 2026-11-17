@@ -25,6 +25,7 @@ const { addTakeover } = require('./takeover');
 const { makeBridge, PORTS } = require('./bridge');
 const { makeRelay } = require('./relay');
 const { makeDiag, exportBundle } = require('./diag');
+const { addSettingsSync } = require('./settingsync');
 
 function bootStudio({
   dataDir, vault, media, version = '0', fake = false,
@@ -101,6 +102,7 @@ function bootStudio({
   addVersions(svc, extra);
   addVisitor(svc, extra);
   addTakeover(svc, extra, { dataDir });
+  addSettingsSync(svc, extra);
   const api = makeApi(svc, { creds, openUrl, importStage0: readStage0, extra });
   const bridge = makeBridge(svc, api, { version, relay, approve: approvePairing, checkGrant, onOpen });
   return { svc, api, db, creds, relay, bridge, fake, diag };

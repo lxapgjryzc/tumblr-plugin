@@ -279,6 +279,14 @@ const MIGRATIONS = [
   CREATE TABLE reply_drafts (event TEXT PRIMARY KEY, text TEXT, reply_as TEXT, op TEXT, updated_at INTEGER);
   ALTER TABLE interactions ADD COLUMN handoff_at INTEGER;
   `,
+  // 14: optional settings blog (settingsync.js). Each display choice remembers when it was made and where it came
+  // from (user: chosen in this app; observed: a change seen on Tumblr; sync: from the settings blog; import: a
+  // settings file; NULL: made before this), so choices can be merged by time between computers.
+  `
+  ALTER TABLE policies ADD COLUMN display_at INTEGER;
+  ALTER TABLE policies ADD COLUMN display_src TEXT;
+  UPDATE policies SET display_at = updated_at;
+  `,
 ];
 
 function openDb(file) {

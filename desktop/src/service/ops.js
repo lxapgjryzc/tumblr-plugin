@@ -66,7 +66,7 @@ function finish(ctx, job, row, status = 'succeeded') {
     savePolicy(db, pol, ctx.now());
   }
   if (reason === 'restore' && row.state === 'published') {
-    pol.auto_hide = null; pol.display = job.payload.display || 'keep_visible';
+    pol.auto_hide = null; pol.display = job.payload.display || 'keep_visible'; pol.display_at = ctx.now(); pol.display_src = 'user';
     savePolicy(db, pol, ctx.now());
   }
   // the owner state is verified; what a visitor sees is checked separately later (visitor.js)

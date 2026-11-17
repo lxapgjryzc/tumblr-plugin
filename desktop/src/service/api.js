@@ -29,7 +29,7 @@ function makeApi(svc, { creds, openUrl = () => {}, importStage0 = null, extra = 
         auth: creds ? creds.status() : 'no_app',
         account: db.getMeta('account'),
         blogs: blogs(),
-        coverage: sync.coverage(db),
+        coverage: sync.coverage(db).filter(c => c.uuid !== svc.settingsSync?.blog()),
         jobs: jobs.counts(),
         lastPass: db.getMeta('lastPass'),
         paused: db.getMeta('paused', false),
@@ -65,6 +65,7 @@ function makeApi(svc, { creds, openUrl = () => {}, importStage0 = null, extra = 
     setSettings(patch) { db.setMeta('settings', { ...db.getMeta('settings', {}), ...patch }); return api.status(); },
     setRole({ blog, role }) {
       if (!['share', 'material', null].includes(role)) throw new Error('bad role');
+      if (role && blog === svc.settingsSync?.blog()) throw new Error('this is the settings blog; turn that off in Settings first');
       const b = db.get('SELECT is_primary FROM blogs WHERE uuid = ?', blog);
       if (b?.is_primary && role !== 'share') throw new Error('the main blog is always a sharing blog');
       db.run('UPDATE blogs SET role = ? WHERE uuid = ?', role, blog);
@@ -154,7 +155,7 @@ function makeApi(svc, { creds, openUrl = () => {}, importStage0 = null, extra = 
     },
     resolveConflict({ blog, id, display: disp }) {
       const p = display.policyOf(db, blog, id);
-      p.conflict = null; p.display = disp;
+      p.conflict = null; p.display = disp; p.display_at = now(); p.display_src = 'user';
       display.savePolicy(db, p, now());
       return p;
     },

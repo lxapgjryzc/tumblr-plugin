@@ -166,8 +166,8 @@ function applySettings(db, exp, { dataDir, now = Date.now() } = {}) {
     // per-post "always visible / always hidden", so a rule switched on later leaves the same posts alone
     for (const p of exp.display || []) {
       if (!['keep_visible', 'keep_hidden'].includes(p.display)) continue;
-      db.run(`INSERT INTO policies (blog, id, display, updated_at) VALUES (?, ?, ?, ?)
-        ON CONFLICT(blog, id) DO UPDATE SET display = excluded.display, updated_at = excluded.updated_at`, p.blog, String(p.id), p.display, now);
+      db.run(`INSERT INTO policies (blog, id, display, display_at, display_src, updated_at) VALUES (?, ?, ?, ?, 'import', ?)
+        ON CONFLICT(blog, id) DO UPDATE SET display = excluded.display, display_at = excluded.display_at, display_src = excluded.display_src, updated_at = excluded.updated_at`, p.blog, String(p.id), p.display, now, now);
     }
     for (const a of exp.allowlist || []) db.run('INSERT OR IGNORE INTO allowlist (uuid, name, reason, at) VALUES (?, ?, ?, ?)', a.uuid, a.name, a.reason, a.at);
     db.setMeta('lastSettingsImport', { at: now, file: path.basename(keep), from: exp.exported });

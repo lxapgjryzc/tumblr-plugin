@@ -39,10 +39,15 @@ function createService({ dataDir, db: givenDb, tumblr, creds = null, now = Date.
         // An incremental read only sees recent posts. Edits to older originals are new versions a route must
         // see (REBLOG_POLICY.md §3.2), so source blogs of enabled routes are read whole every SOURCE_FULL_MS.
         const sources = new Set(routes.routesOf(db).filter(x => x.enabled).flatMap(x => x.sources));
+        // the settings blog (settingsync.js) holds the app's own settings post, not posts to manage
+        const settingsBlog = svc.settingsSync?.blog() || null;
         for (const b of r.blogs) {
+          if (b.uuid === settingsBlog) continue;
           const full = mode === 'full' || (sources.has(b.uuid) && (sync.syncState(db, b.uuid, 'posts').full_done || 0) < now() - SOURCE_FULL_MS);
           for (const box of ['', 'draft', 'queue']) jobs.add('sync.blog', { blog: b.uuid, box, mode: full ? 'full' : 'inc' }, { priority, scope: `sync:${b.uuid}:${box}`, supersede: true });
         }
+        // shared display choices are read before this pass plans anything
+        svc.settingsSync?.schedule(priority);
         return { status: 'succeeded', result: { blogs: r.blogs.length } };
       },
     },
@@ -56,7 +61,7 @@ function createService({ dataDir, db: givenDb, tumblr, creds = null, now = Date.
     // After the syncs of a pass: regroup, then plan expiry and routes from the fresh picture
     'maintain.after': {
       async run(job) {
-        const SYNCS = `kind IN ('sync.blogs', 'sync.blog')`;
+        const SYNCS = `kind IN ('sync.blogs', 'sync.blog', 'settings.sync')`;
         if (db.get(`SELECT COUNT(*) n FROM jobs WHERE ${SYNCS} AND status IN ('pending', 'running')`).n) return { status: 'pending', nextAt: now() + 5000 };
         // Only parked syncs left (browser, rate limit, auth, network): wait with them instead of re-checking every
         // 5 s. Their reason prefix is kept so the same wake() (e.g. the browser reconnecting) wakes this step too.
@@ -104,7 +109,9 @@ function createService({ dataDir, db: givenDb, tumblr, creds = null, now = Date.
     return jobs.add('maintain.after', {}, { priority: priority + 1 });
   }
 
-  let passTimer = null;
+  let passTimer = null, tickTimer = null;
+  // small periodic checks of the modules (e.g. sending a new display choice to the settings blog within a minute)
+  const tickers = [];
   function start({ intervalMs = PASS_MS } = {}) {
     jobs.start(1000, ctx);
     const loop = () => {
@@ -112,8 +119,9 @@ function createService({ dataDir, db: givenDb, tumblr, creds = null, now = Date.
       passTimer = setTimeout(loop, intervalMs);
     };
     passTimer = setTimeout(loop, 3000);
+    tickTimer = setInterval(() => { for (const f of tickers) { try { f(); } catch (e) { db.log('warn', 'tick', String(e.message || e)); } } }, 30e3);
   }
-  function stop() { jobs.stop(); clearTimeout(passTimer); clearTimeout(soonTimer); }
+  function stop() { jobs.stop(); clearTimeout(passTimer); clearTimeout(soonTimer); clearInterval(tickTimer); }
   // a pass a few seconds after a rule or automation change, instead of at the next 10-minute tick
   let soonTimer = null;
   function passSoon(ms = 5000) {
@@ -121,7 +129,7 @@ function createService({ dataDir, db: givenDb, tumblr, creds = null, now = Date.
     soonTimer = setTimeout(() => { if (!db.getMeta('paused', false) && creds?.status?.() === 'connected') pass(); }, ms);
   }
 
-  const svc = { db, jobs, ctx, handlers, pass, passSoon, start, stop, emit, hooks, diag };
+  const svc = { db, jobs, ctx, handlers, pass, passSoon, start, stop, emit, hooks, diag, tickers };
   ctx.service = svc;
   require('./copytags').addCopyTags(svc);
   return svc;

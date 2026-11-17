@@ -13,6 +13,7 @@ function demoFake() {
     { uuid: 't:demo-art', name: 'demo-art', title: 'Art side blog' },
     { uuid: 't:demo-sketch', name: 'demo-sketch', title: 'Sketchbook' },
     { uuid: 't:demo-ref', name: 'demo-ref', title: 'References' },
+    { uuid: 't:demo-cfg', name: 'demo-studiosettings', title: 'Studio settings' },
   ] });
   const now = Date.now();
   const ts = d => Math.floor((now - d * DAY) / 1000);
