@@ -11,7 +11,7 @@
 const { J, P } = require('./db');
 const C = require('./core');
 const { upsertPost } = require('./posts');
-const { StaleError, HttpError } = require('./errors');
+const { StaleError, HttpError, RateError } = require('./errors');
 
 const DEFAULTS = { blog: '', auto: false, tags: [], imagesOnly: true, autoPalette: true, ai: false, since: 0, daily: 4 };
 const settingsOf = db => ({ ...DEFAULTS, ...db.getMeta('collect', {}) });
@@ -43,6 +43,8 @@ function addMaterial(svc, api, { media = null, aiKey = () => '' } = {}) {
   const { db, jobs } = svc;
   const now = svc.ctx.now;
   const myNames = () => new Set(db.all('SELECT name FROM blogs').map(b => b.name.toLowerCase()));
+  let scan = null;           // the running collectScan's control
+  let scanned = new Map();   // root -> slim liked post from the last collectScan, for collect({ roots })
 
   // Tags fixed at creation: mine, the palette (pixels), and the AI's when switched on. Failures of the optional
   // parts never block collecting; they are simply not added (and said so in the result).
@@ -67,23 +69,27 @@ function addMaterial(svc, api, { media = null, aiKey = () => '' } = {}) {
     return { tags, note, notes };
   }
 
-  // Why a like isn't collected ('' = collect it): the extension's rules, plus the AI-art verdict from the
-  // original poster's own tags
+  // Why a like isn't collected without asking Tumblr ('' = collect it). Held roots are uuid keys (rootOf), which
+  // core's name-based rootKey never matches, so 'have' is decided here and core only applies its other rules.
+  const NONE = new Set();
+  const skipOf = (p, have, s) => have.has(rootOf(p)) ? 'have' : C.collectSkip(p, NONE, myNames(), s);
+  // ...plus the AI-art verdict from the original poster's own tags
   async function decide(p, have, s, a) {
-    const why = C.collectSkip(p, have, myNames(), s);
+    const why = skipOf(p, have, s);
     if (why) return why;
     if (C.aiArtVerdict({ owner: await C.ownerTagsOf(a, p) }).verdict) return 'aiArt';
     return '';
   }
 
-  function queueCollect(p, s, { manual = false, reason = null } = {}) {
+  // state: 'published' (default) or 'queue' (into the material blog's Tumblr queue); explicit collects only
+  function queueCollect(p, s, { manual = false, reason = null, state = 'published' } = {}) {
     const root = rootOf(p);
     const row = db.get('SELECT status FROM collected WHERE root = ?', root);
     if (row && ['queued', 'created', 'unknown'].includes(row.status)) return null;
     db.run(`INSERT INTO collected (root, src_blog, src_id, src_name, reblog_key, liked_at, dest, status, reason, at) VALUES (?, ?, ?, ?, ?, ?, ?, 'queued', ?, ?)
       ON CONFLICT(root) DO UPDATE SET status = 'queued', dest = excluded.dest, reason = excluded.reason, dest_id = NULL, at = excluded.at`,
     root, p.blog?.uuid || null, C.postId(p), p.blog_name || p.blog?.name || '', p.reblog_key || p.reblogKey || '', p.liked_timestamp || p.likedTimestamp || null, s.blog, reason, now());
-    return jobs.add('material.collect', { root, dest: s.blog, post: slim(p), manual }, { priority: manual ? 1 : 6, scope: `collect:${root}` });
+    return jobs.add('material.collect', { root, dest: s.blog, post: slim(p), manual, ...(state === 'queue' ? { state } : {}) }, { priority: manual ? 1 : 6, scope: `collect:${root}` });
   }
   // What the job needs of the liked post (kept small: no full trail bodies)
   const slim = p => ({ id: C.postId(p), blog: { uuid: p.blog?.uuid, name: p.blog?.name || p.blog_name }, blog_name: p.blog_name || p.blog?.name,
@@ -138,9 +144,11 @@ function addMaterial(svc, api, { media = null, aiKey = () => '' } = {}) {
       const frozen = { ...job.payload, tags, note, notes, sentAt: ctx.now() };
       let id;
       try {
-        id = await ctx.tumblr.reblog(dest, { parentBlog: p.blog?.uuid || p.blog_name, parentId: p.id, reblogKey: p.reblog_key, state: 'published', tags,
+        id = await ctx.tumblr.reblog(dest, { parentBlog: p.blog?.uuid || p.blog_name, parentId: p.id, reblogKey: p.reblog_key, state: job.payload.state || 'published', tags,
           content: note ? [{ type: 'text', text: C.AI_NOTE_MARK + note }] : [] });
       } catch (e) {
+        // Tumblr's daily post limit is a definite refusal (often not a 429): nothing was made, try again later
+        if (e instanceof HttpError && C.isPostLimit(e)) throw Object.assign(new RateError('daily post limit: ' + e.message, { retryAt: ctx.now() + 3600e3 }), { payload: frozen });
         if (e instanceof HttpError) { db.run(`UPDATE collected SET status = 'failed', reason = ? WHERE root = ?`, e.message, root); }
         else if (e.uncertain) db.run(`UPDATE collected SET status = 'unknown', tags = ? WHERE root = ?`, J(tags), root);
         throw Object.assign(e, { payload: frozen });
@@ -150,21 +158,24 @@ function addMaterial(svc, api, { media = null, aiKey = () => '' } = {}) {
       try { upsertPost(db, await ctx.tumblr.getPost(dest, id), dest, ctx.now()); } catch {}
       return { status: 'succeeded', payload: frozen, result: { dest_id: id, tags, notes } };
     },
-    // Look on the material blog for a reblog of this original made after the attempt; never resend from here
+    // Look on the material blog for a reblog of this original made after the attempt; never resend from here.
+    // One sent to the queue may have been published from it since, so both are read then.
     async reconcile(job, ctx) {
       const { root, dest } = job.payload;
       const since = (job.payload.sentAt || job.created_at) - 120e3;
       const found = [];
-      let next = null;
-      for (let i = 0; i < 5; i++) {
-        const page = await ctx.tumblr.postsPage(dest, { next });
-        for (const q of page.posts) {
-          const r = upsertPost(db, q, dest, ctx.now())?.after;
-          if (!r || (r.published_at && r.published_at < since)) continue;
-          if ((r.root_blog && r.root_blog + '/' + r.root_id === root) || (r.parent_blog && r.parent_blog + '/' + r.parent_id === root)) found.push(r.id);
+      for (const box of job.payload.state === 'queue' ? ['queue', ''] : ['']) {
+        let next = null;
+        for (let i = 0; i < 5; i++) {
+          const page = await ctx.tumblr.postsPage(dest, { box, next });
+          for (const q of page.posts) {
+            const r = upsertPost(db, q, dest, ctx.now())?.after;
+            if (!r || (box === '' && r.published_at && r.published_at < since)) continue;
+            if ((r.root_blog && r.root_blog + '/' + r.root_id === root) || (r.parent_blog && r.parent_blog + '/' + r.parent_id === root)) found.push(r.id);
+          }
+          next = page.next;
+          if (!next) break;
         }
-        next = page.next;
-        if (!next) break;
       }
       const tries = (job.result?.reconciles || 0) + 1;
       if (found.length === 1) { db.run(`UPDATE collected SET status = 'created', dest_id = ? WHERE root = ?`, found[0], root); return { status: 'succeeded', result: { dest_id: found[0], reconciled: true } }; }
@@ -204,32 +215,56 @@ function addMaterial(svc, api, { media = null, aiKey = () => '' } = {}) {
         if (b.role !== 'material') db.run(`UPDATE blogs SET role = 'material' WHERE uuid = ?`, next.blog);
       }
       if (patch.tags) next.tags = C.uniqTags(patch.tags.map(t => C.norm(String(t)).trim()).filter(Boolean));
-      // switching on starts from now: older likes are a separate, previewed choice (collectPreview)
+      // switching on starts from now: older likes are a separate, explicit choice (collectScan)
       if (next.auto && !cur.auto) next.since = Math.floor(now() / 1000);
       db.setMeta('collect', next);
       return next;
     },
-    // Likes not collected yet, with the reason for each skip; nothing is sent
-    async collectPreview({ limit = 60 } = {}) {
+    // Every like the material blog doesn't hold yet (newest first), with counts for the rest. Reads only: the
+    // likes, and for reblogged likes the original's tags (AI-art check). collectStop ends it early with what it has.
+    async collectScan() {
       const s = settingsOf(db);
       if (!s.blog) throw new Error('choose a collection blog first');
-      const a = coreApi(svc.ctx.tumblr);
-      const ctl = { aborted: false };
-      const likes = (await C.likedPosts(a, { after: 0, ctl, onProgress: n => { if (n >= limit) ctl.aborted = true; } })).slice(0, limit);
-      const have = holding(db, s.blog);
-      const out = [];
-      for (const p of likes) {
-        const why = C.collectSkip(p, have, myNames(), s);
-        const img = C.postImages(p)[0];
-        out.push({ root: rootOf(p), blog: p.blog_name || p.blog?.name, id: C.postId(p), thumb: img?.small || null, skip: why || null, post: why ? null : slim(p) });
-      }
-      return out;
+      if (scan) throw Object.assign(new Error('a check of the likes is already running'), { status: 409 });
+      const ctl = scan = { aborted: false };
+      try {
+        const a = coreApi(svc.ctx.tumblr);
+        const likes = await C.likedPosts(a, { ctl, onProgress: (n, total) => svc.emit('collectScan', { phase: 'likes', n, total: total || null }) });
+        const partial = ctl.aborted;
+        ctl.aborted = false;
+        const have = holding(db, s.blog);
+        const items = [], skipped = {};
+        let held = 0;
+        scanned = new Map();
+        for (const [i, p] of likes.entries()) {
+          if (ctl.aborted) break;
+          let why = skipOf(p, have, s);
+          if (!why) {
+            svc.emit('collectScan', { phase: 'check', n: i + 1, total: likes.length });
+            if (C.aiArtVerdict({ owner: await C.ownerTagsOf(a, p) }).verdict) why = 'aiArt';
+          }
+          if (why === 'have') { held++; continue; }
+          if (why) { skipped[why] = (skipped[why] || 0) + 1; continue; }
+          const root = rootOf(p);
+          have.add(root); // the same original liked twice is listed once
+          scanned.set(root, slim(p));
+          const img = C.postImages(p)[0];
+          items.push({ root, blog: p.blog_name || p.blog?.name, id: C.postId(p), url: p.post_url || p.postUrl || null, thumb: img?.small || null });
+        }
+        return { items, held, skipped, likes: likes.length, stopped: partial || ctl.aborted };
+      } finally { scan = null; }
     },
-    // Explicit collect of chosen likes (from the preview or a browser entry point)
-    collect({ posts }) {
+    collectStop() { if (scan) scan.aborted = true; return true; },
+    // Explicit collect of chosen likes: posts (a browser entry point) or roots from the last collectScan.
+    // Queued oldest like first, as the automatic pass does.
+    collect({ posts = [], roots = [], state = 'published' }) {
       const s = settingsOf(db);
       if (!s.blog) throw new Error('choose a collection blog first');
-      const ids = posts.map(p => queueCollect(p, s, { manual: true })).filter(Boolean);
+      if (!['published', 'queue'].includes(state)) throw new Error('unknown state ' + state);
+      const chosen = roots.map(r => scanned.get(r));
+      if (chosen.some(p => !p)) throw new Error('the list of likes is out of date; check the likes again');
+      const list = [...posts, ...chosen].sort((x, y) => (x.liked_timestamp || x.likedTimestamp || 0) - (y.liked_timestamp || y.likedTimestamp || 0));
+      const ids = list.map(p => queueCollect(p, s, { manual: true, state })).filter(Boolean);
       return { queued: ids.length, jobs: ids };
     },
     collectLog({ limit = 100 } = {}) {

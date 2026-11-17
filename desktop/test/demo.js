@@ -56,6 +56,12 @@ function demoFake() {
     n(6, 'like', 3), n(7, 'like', 4), n(30, 'reblog', 0, { added_text: 'saving this for later practice', post_id: '778' }),
     n(50, 'follower', 5, { target_post_id: '' }),
   ]);
+  // likes from made-up artists (Materials: collecting likes), newest first
+  for (let i = 0; i < 72; i++) {
+    const p = fake.addPost('t:like' + i, { blog: { uuid: 't:like' + i, name: 'demo-artist-' + i }, timestamp: ts(10 + i), tags: ['painting'],
+      content: i % 9 === 4 ? [{ type: 'text', text: 'A thought about colour' }] : [img((i * 23) % 360, 'like ' + i)] });
+    fake.likes.push({ ...JSON.parse(JSON.stringify(p)), liked_timestamp: ts(i / 4) });
+  }
   return fake;
 }
 

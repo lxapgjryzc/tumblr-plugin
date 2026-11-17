@@ -45,6 +45,7 @@ const MaterialPage = {
   },
   refresh(ev) {
     if (ev.type === 'aiart') { const p = document.getElementById('artProg'); if (p) p.firstChild.textContent = t('artChecking', ev.data.i, ev.data.n); return; }
+    if (ev.type === 'collectScan') { const p = document.getElementById('colProg'); if (p) p.textContent = t(ev.data.phase === 'check' ? 'colChecking' : 'colScanning', ev.data.n, ev.data.total ?? '?'); return; }
     if (ev.type === 'job' || ev.type === 'pass') this.render(this.root);
   },
 
@@ -85,20 +86,49 @@ const MaterialPage = {
     this.render(this.root);
   },
 
-  // Older likes are never collected by switching on; here they can be chosen, with the reason for each skip
+  // Every like not collected yet (the extension's "Check my likes"): all listed and ticked, Shift+click ticks a
+  // range; sent now or into the material blog's Tumblr queue. Switching automatic collecting on never does this.
   async preview() {
-    const box = h('div', {}, h('p', { class: 'muted' }, t('loading')));
-    const pick = new Map();
+    const box = h('div', {}, h('p', { class: 'muted', id: 'colProg' }, t('loading')), h('button', { class: 'ghost', onclick: () => call('collectStop') }, t('stop')));
+    const pick = new Set();
+    let state = 'published', closed = false, scanning = true;
     const shown = modal(t('colPreview'), box, [{ label: t('cancel'), value: false }, { label: t('colCollect'), value: true, class: 'primary' }], { wide: true });
-    try {
-      const rows = await call('collectPreview', { limit: 60 });
-      box.replaceChildren(rows.length ? h('div', { class: 'cards' }, rows.map(r => h('label', { class: 'pcard' + (r.skip ? ' dim' : '') },
-        r.thumb ? h('div', { class: 'thumb' }, h('img', { src: r.thumb, loading: 'lazy' })) : h('div', { class: 'thumb text' }, r.blog + '/' + r.id),
-        h('div', { class: 'meta' }, r.skip ? h('span', { class: 'badge' }, t('csr_' + r.skip)) : h('span', {}, h('input', { type: 'checkbox', onchange: e => { e.target.checked ? pick.set(r.root, r.post) : pick.delete(r.root); } }), ' ', r.blog))))) : h('p', { class: 'muted' }, t('colNoLikes')));
-    } catch (e) { box.replaceChildren(h('p', { class: 'warn-text' }, cleanErr(e))); }
+    shown.then(() => { closed = true; if (scanning) call('collectStop').catch(() => {}); });
+    let r;
+    try { r = await call('collectScan'); } catch (e) { box.replaceChildren(h('p', { class: 'warn-text' }, cleanErr(e))); return; } finally { scanning = false; }
+    if (closed) return;
+    const left = Object.values(r.skipped).reduce((a, b) => a + b, 0);
+    const why = Object.entries(r.skipped).map(([k, n]) => t('csr_' + k) + ' ' + n).join(' · ');
+    const info = h('span', { class: 'muted small' });
+    const count = () => { info.textContent = t('colPicked', pick.size, r.items.length); };
+    const set = (i, v) => { boxes[i].checked = v; v ? pick.add(r.items[i].root) : pick.delete(r.items[i].root); };
+    let anchor = null;
+    const boxes = r.items.map((x, i) => h('input', { type: 'checkbox', checked: true, onclick: e => {
+      const v = e.target.checked;
+      if (e.shiftKey && anchor !== null) { const [a, b] = anchor < i ? [anchor, i] : [i, anchor]; for (let j = a; j <= b; j++) set(j, v); } else set(i, v);
+      anchor = i; count();
+    } }));
+    r.items.forEach(x => pick.add(x.root));
+    count();
+    box.replaceChildren(
+      r.stopped ? h('p', { class: 'banner warn small' }, t('colStopped')) : null,
+      h('p', { class: 'muted' }, r.likes ? t('colFound', r.items.length, r.held, left) + (why ? ' (' + why + ')' : '') : t('colNoLikes')),
+      r.items.length ? [
+        h('div', { class: 'form-row wrap' },
+          h('button', { class: 'ghost', onclick: () => { r.items.forEach((_, i) => set(i, true)); count(); } }, t('colAll')),
+          h('button', { class: 'ghost', onclick: () => { r.items.forEach((_, i) => set(i, false)); count(); } }, t('colNoneBtn')),
+          info, h('span', { class: 'muted small' }, t('colShiftHint')),
+          h('label', { class: 'field' }, h('span', {}, t('colWhen')),
+            select([{ value: 'published', label: t('colNow') }, { value: 'queue', label: t('colToQueue') }], state, v => { state = v; }))),
+        h('div', { class: 'cards' }, r.items.map((x, i) => h('label', { class: 'pcard' },
+          x.thumb ? h('div', { class: 'thumb' }, h('img', { src: x.thumb, loading: 'lazy' })) : h('div', { class: 'thumb text' }, x.blog + '/' + x.id),
+          h('div', { class: 'meta' }, boxes[i], ' ', x.blog, ' ', x.url ? h('a', { href: x.url, target: '_blank' }, '↗') : null))))]
+        : r.likes ? h('p', { class: 'muted' }, t('colAllIn')) : null);
     if (!(await shown) || !pick.size) return;
-    const r = await call('collect', { posts: [...pick.values()] });
-    toast(t('queued', r.queued), 'ok');
+    try {
+      const q = await call('collect', { roots: r.items.filter(x => pick.has(x.root)).map(x => x.root), state });
+      toast(t('queued', q.queued), 'ok');
+    } catch (e) { toast(cleanErr(e), 'err'); }
     this.render(this.root);
   },
 };

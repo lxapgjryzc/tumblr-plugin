@@ -148,6 +148,43 @@ test('material: a lost collect response is found on the material blog, not sent 
   assert.equal(s.api.collect({ posts: [JSON.parse(JSON.stringify(p))] }).queued, 0);
 });
 
+test('material: checking my likes lists every like not collected (past the newest 60); chosen ones can go to the queue', async () => {
+  const s = setup();
+  s.svc.pass(); await s.run();
+  s.api.saveCollect({ blog: 't:ref', tags: ['reference'] });
+  const like = (fields, at) => { const p = s.fake.addPost(fields.blog.uuid, fields); s.fake.likes.push({ ...JSON.parse(JSON.stringify(p)), liked_timestamp: at }); return p; };
+  const pics = Array.from({ length: 70 }, (_, i) => like({ blog: { uuid: 't:o' + i, name: 'artist' + i }, content: [IMG(`https://64.media.tumblr.com/${i}/x/s1280x1920/p.jpg`)] }, 1000 + i));
+  like({ blog: { uuid: 't:w', name: 'writer' }, content: [{ type: 'text', text: 'words' }] }, 2000);
+  // one is already on the material blog: reblogged there on Tumblr, then synced
+  await s.fake.reblog('t:ref', { parentBlog: 't:o0', parentId: pics[0].id_string, reblogKey: pics[0].reblog_key });
+  s.svc.pass(); await s.run();
+  const before = s.fake.calls.length;
+  const r = await s.api.collectScan();
+  assert.equal(r.likes, 71);
+  assert.equal(r.held, 1, 'the one already on the material blog is recognised');
+  assert.deepEqual(r.skipped, { noImages: 1 });
+  assert.equal(r.items.length, 69);
+  assert.equal(r.items.at(-1).id, pics[1].id_string, 'the oldest likes are listed too');
+  assert.ok(!s.fake.calls.slice(before).some(c => /^reblog|POST/.test(c)), 'checking sends nothing');
+  const onRef = id => [...s.fake.posts.values()].filter(p => p.blog.uuid === 't:ref' && p.parent_post_id === id);
+  s.api.collect({ roots: [r.items.at(-1).root], state: 'queue' });
+  await s.run();
+  assert.equal(onRef(pics[1].id_string).length, 1);
+  assert.equal(onRef(pics[1].id_string)[0].state, 'queue');
+  // a lost response for a queued collect is found in the queue, not sent again
+  const orig = s.fake.reblog;
+  let sent = 0;
+  s.fake.reblog = async (...a) => { sent++; await orig(...a); throw netFail(true); };
+  s.api.collect({ roots: [r.items.at(-2).root], state: 'queue' });
+  await s.run();
+  s.fake.reblog = orig;
+  await s.run();
+  assert.equal(sent, 1);
+  assert.equal(onRef(pics[2].id_string).length, 1);
+  assert.equal(s.db.get('SELECT status FROM collected WHERE src_id = ?', pics[2].id_string).status, 'created');
+  assert.equal((await s.api.collectScan()).items.length, 67);
+});
+
 test('migration: the extension export brings collecting over switched off (A55)', async () => {
   const s = setup();
   s.svc.pass(); await s.run();

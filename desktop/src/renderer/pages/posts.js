@@ -845,7 +845,7 @@ const PostsPage = {
     if (!v || !v.dests.length) return v && v.revisions?.length > 1 ? h('div', { class: 'versions' }, h('h3', {}, t('versions')), manage) : null;
     return h('div', { class: 'versions' }, h('div', { class: 'form-row' }, h('h3', { class: 'grow' }, t('versions')), manage), h('p', { class: 'muted small' }, t('versionsHint', v.latest || '?')),
       v.dests.map(d => h('div', { class: 'form-row wrap' }, h('b', {}, blogName(d.dest)), ' ',
-        d.copies.map(c => h('span', { class: 'badge' + (c.status === 'tombstone' ? '' : c.status === 'conflict' ? ' warn' : ' keep'), title: (c.tags ? '#' + c.tags.join(' #') : '') + (c.reason ? ' - ' + c.reason : '') },
+        d.copies.map(c => h('span', { class: 'badge' + (c.status === 'tombstone' ? '' : ['conflict', 'extra'].includes(c.status) ? ' warn' : ' keep'), title: (c.tags ? '#' + c.tags.join(' #') : '') + (c.reason ? ' - ' + c.reason : '') },
           t('versionN', c.rev) + (c.version_unknown ? ' ?' : '') + ' · ' + t('dst_' + c.status))),
         d.newer && orig?.state === 'published' ? h('button', { onclick: async () => {
           const ok = await modal(t('reblogNew'), h('p', {}, t('reblogNewQ', blogName(d.dest))), [{ label: t('cancel'), value: false }, { label: t('apply'), value: true, class: 'primary' }]);

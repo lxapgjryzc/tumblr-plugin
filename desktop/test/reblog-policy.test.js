@@ -213,6 +213,29 @@ test('R10: existing copies from before tracking are claimed, not re-sent; a copy
   assert.equal(onMain().length, 2);
 });
 
+test('an edit on Tumblr reblogged there before the app saw it: that copy is the new version\'s, nothing is sent again; a further copy is listed', async () => {
+  const s = await withRoute();
+  const A = s.fake.addPost('t:art', { content: body('first'), tags: ['art'], timestamp: ts(s.clock.t) });
+  await s.pass();
+  assert.equal(s.copies(A.id_string).length, 1);
+  // edited on Tumblr and reblogged to main there at once; the app only notices the edit minutes later
+  s.fake.posts.get(A.id_string).content = body('second');
+  await s.fake.reblog('t:main', { parentBlog: 't:art', parentId: A.id_string, tags: ['art'] });
+  s.clock.t += 5 * 60e3;
+  await s.pass();
+  const copies = s.copies(A.id_string);
+  assert.equal(copies.length, 2, 'the new version is not reblogged a second time');
+  assert.deepEqual(s.db.all('SELECT rev, status, dest_id FROM deliveries WHERE src_id = ? ORDER BY rev', A.id_string).map(d => [d.rev, d.status, d.dest_id]),
+    [[1, 'created', copies[0].id_string], [2, 'existing', copies[1].id_string]]);
+  // one more copy of the same version made by hand: shown in the work's versions, not hidden behind the first
+  await s.fake.reblog('t:main', { parentBlog: 't:art', parentId: A.id_string, tags: ['art'] });
+  await s.pass();
+  const extra = s.copies(A.id_string)[2];
+  const it = s.api.item({ id: s.db.get('SELECT item_id FROM posts WHERE id = ?', A.id_string).item_id });
+  assert.deepEqual(it.versions.dests[0].copies.map(c => [c.rev, c.status, c.dest_id]),
+    [[1, 'created', copies[0].id_string], [2, 'existing', copies[1].id_string], [2, 'extra', extra.id_string]]);
+});
+
 test('version discovery: an edit to an older delivered original is seen without a manual full sync', async () => {
   const s = await withRoute();
   const A = s.fake.addPost('t:art', { content: body('v1'), tags: ['art'], timestamp: ts(s.clock.t) });

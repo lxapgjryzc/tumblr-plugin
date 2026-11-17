@@ -60,15 +60,25 @@ const deliveriesOf = (db, blog, id, dest) => db.all('SELECT * FROM deliveries WH
 const copiesOn = (db, blog, id, dest) => db.all(`SELECT id, published_at, payload FROM posts WHERE blog = ? AND kind = 'reblog' AND state != 'gone'
   AND ((parent_blog = ? AND parent_id = ?) OR (root_blog = ? AND root_id = ?)) ORDER BY published_at`, dest, blog, String(id), blog, String(id));
 
-// Which revision a copy holds: the trail's own body when it matches a known revision (latest such one not newer
-// than the copy), else the revision current when the copy was made (marked as an unknown version).
+// Which revision a copy holds: the trail's own body when it matches a revision that may already have existed when
+// the copy was made, else the revision current when the copy was made (marked as an unknown version). A revision's
+// `since` is when the app first *observed* it; it may be older (edited on Tumblr and reblogged there before the next
+// pass). It can only have begun after the previous revision was observed, so that is the bound used for bodies.
 function revisionOfCopy(revs, copy, srcId) {
   const fp = trailFingerprint(P(copy.payload, {}), srcId);
-  const before = revs.filter(r => !copy.published_at || r.since <= copy.published_at + 120e3);
-  const byBody = (before.length ? before : revs).filter(r => r.fingerprint === fp);
+  const t = copy.published_at ? copy.published_at + 120e3 : Infinity;
+  const byBody = revs.filter((r, i) => (i === 0 || revs[i - 1].since <= t) && r.fingerprint === fp);
   if (byBody.length) return { rev: byBody[byBody.length - 1].rev, unknown: false, fp };
+  const before = revs.filter(r => r.since <= t);
   const r = before.length ? before[before.length - 1] : revs[0];
   return r ? { rev: r.rev, unknown: true, fp } : null;
+}
+
+// The earliest time a copy of this revision can have been made (see revisionOfCopy): the previous revision's
+// observation, less the usual 2 minutes of clock slack; 0 for the first revision
+function revisionStart(db, blog, id, rev) {
+  const prev = db.get('SELECT since FROM source_revisions WHERE blog = ? AND id = ? AND rev < ? ORDER BY rev DESC LIMIT 1', blog, String(id), rev);
+  return prev?.since ? prev.since - 120e3 : 0;
 }
 
 // Copies on dest that no delivery row claims yet, attributed to revisions
@@ -250,8 +260,9 @@ const reblog = {
       const ex = excludedBy(row.tags, route.exclude);
       if (ex) { mapSet(db, p, 'skipped', { reason: 'excluded: ' + ex }); return { status: 'skipped', error: 'excluded tag: ' + ex }; }
     }
-    const rev = db.get('SELECT since FROM source_revisions WHERE blog = ? AND id = ? AND rev = ?', p.blog, String(p.id), p.rev);
-    const existing = await findCopies(ctx, p, 1, { since: (rev?.since || 0) - 120e3 });
+    // a copy of this body made since the previous version was observed is this version's, even if it predates
+    // the app noticing the edit (an edit on Tumblr reblogged there before the next pass)
+    const existing = await findCopies(ctx, p, 1, { since: revisionStart(db, p.blog, p.id, p.rev) });
     if (existing.length) { mapSet(db, p, 'existing', { destId: existing[0], reason: 'already on the destination' }); return { status: 'unchanged', result: { dest_id: existing[0], note: 'this version is already on the destination' } }; }
     const tags = row.tags.slice();
     let id;
@@ -309,6 +320,11 @@ function versionsOf(db, blog, id) {
     const st = standing(db, blog, id, dest);
     const list = [...st.delivered.values()].sort((a, b) => a.rev - b.rev)
       .map(d => ({ rev: d.rev, status: d.status, dest_id: d.dest_id || null, version_unknown: !!d.version_unknown, tags: d.tags || null, reason: d.reason || null }));
+    // further reblogs of the source on this blog that no delivery claims (a second copy of a version, made by
+    // hand on Tumblr or elsewhere): listed so they can be seen, hidden or deleted like any other instance
+    const shown = new Set(list.map(d => d.dest_id).filter(Boolean));
+    for (const c of st.copies) if (!shown.has(c.id)) list.push({ rev: c.rev, status: 'extra', dest_id: c.id, version_unknown: !!c.unknown, tags: null, reason: null });
+    list.sort((a, b) => a.rev - b.rev);
     const has = latest && st.delivered.get(latest.rev);
     return { dest, copies: list, newer: !!latest && !has && list.some(d => ['created', 'existing', 'tombstone', 'conflict'].includes(d.status)) };
   });

@@ -17,7 +17,7 @@ const VersionsDialog = {
     const v = this.v = await call('versions', this.key);
     if (!v) { this.box.replaceChildren(h('p', { class: 'muted' }, t('versionsNone'))); return; }
     const k = c => c.dest + '/' + c.dest_id;
-    const stateOk = c => !this.filter.state || (this.filter.state === 'problem' ? ['pending', 'unknown', 'failed'].includes(c.status) || !!c.job : c.state === this.filter.state);
+    const stateOk = c => !this.filter.state || (this.filter.state === 'problem' ? ['pending', 'unknown', 'failed', 'extra'].includes(c.status) || !!c.job : c.state === this.filter.state);
     const dests = v.dests.filter(d => !this.filter.dest || d.dest === this.filter.dest);
     const shownCopies = dests.flatMap(d => d.copies.filter(c => c.dest_id && stateOk(c)).map(c => ({ ...c, dest: d.dest })));
     for (const s of [...this.sel]) if (!shownCopies.some(c => k(c) === s)) this.sel.delete(s);
@@ -59,7 +59,7 @@ const VersionsDialog = {
           h('td', { class: 'nowrap' }, h('b', {}, verBadge(c))),
           h('td', {}, c.thumb ? h('img', { src: c.thumb, class: 'vthumb small' }) : h('span', { class: 'muted small' }, (c.summary || '').slice(0, 60))),
           h('td', { class: 'nowrap' }, c.state ? stateBadge(c.state) : null, c.keepPublic ? h('span', { class: 'badge keep' }, t('keepPublicBadge')) : null),
-          h('td', { class: 'nowrap small' }, h('span', { class: 'badge' + (['failed', 'unknown', 'conflict'].includes(c.status) ? ' warn' : '') }, t('dst_' + c.status)), c.job ? h('span', { class: 'badge warn' }, t('jobOpen', c.job.status)) : null),
+          h('td', { class: 'nowrap small' }, h('span', { class: 'badge' + (['failed', 'unknown', 'conflict', 'extra'].includes(c.status) ? ' warn' : '') }, t('dst_' + c.status)), c.job ? h('span', { class: 'badge warn' }, t('jobOpen', c.job.status)) : null),
           h('td', { class: 'nowrap muted small' }, t('rebloggedAt') + ' ' + fmtTime(c.reblogged_at)),
           h('td', { class: 'muted small' }, c.tags ? '#' + c.tags.join(' #') : ''),
           h('td', {}, c.url && c.state !== 'gone' ? h('a', { href: c.url, target: '_blank' }, '↗') : null))))))),
