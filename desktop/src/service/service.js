@@ -53,6 +53,8 @@ function createService({ dataDir, db: givenDb, tumblr, creds = null, now = Date.
     },
     'sync.blog': {
       async run(job) {
+        // queued before this blog was picked as the settings blog: its post is the settings, not a work
+        if (job.payload.blog === svc.settingsSync?.blog()) return { status: 'skipped', error: 'settings blog' };
         const r = await sync.syncChunk({ db, tumblr, hooks, now }, job.payload, job.result?.next || null);
         const total = { pages: (job.result?.pages || 0) + r.pages, changed: (job.result?.changed || 0) + r.changed, ...(r.next ? { next: r.next } : {}) };
         return r.done ? { status: 'succeeded', result: total } : { status: 'pending', result: total };

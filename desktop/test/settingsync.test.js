@@ -123,3 +123,28 @@ test('settings blog: a hide made by the other computer\'s rule is not kept as a 
   assert.match(one.api.settingsSyncStatus().error, /can't be read/);
   assert.equal(fake.calls.filter(c => c === 'put:' + post.id_string).length, puts, 'nothing written over it');
 });
+
+test('settings blog: a sync job queued before the blog was picked stores nothing from it', async () => {
+  const clock = { t: Date.UTC(2026, 10, 17) };
+  const fake = makeFake({ blogs: BLOGS, now: () => clock.t });
+  fake.addPost('t:art', { content: [{ type: 'text', text: 'a' }], tags: ['art'] });
+  const one = computer(fake, clock);
+  await one.pass();
+  // that pass queued t:cfg's syncs while it was still an ordinary blog; the user picks it before they run
+  one.svc.jobs.add('sync.blog', { blog: 't:cfg', box: '', mode: 'inc' }, { priority: 6 });
+  one.api.setSettingsBlog({ blog: 't:cfg' });
+  await one.run();
+  assert.equal(one.db.get(`SELECT COUNT(*) n FROM posts WHERE blog = 't:cfg'`).n, 0, 'the settings post is not a work');
+  // a copy stored anyway (before this fix) and its content item go at the next settings sync
+  one.db.run(`INSERT INTO posts (blog, id, kind, state, tags) VALUES ('t:cfg', '1', 'original', 'private', ?)`, JSON.stringify([TAG]));
+  one.db.run(`INSERT INTO items (origin_blog, origin_id, manager) VALUES ('t:cfg', '1', 't:cfg')`);
+  one.api.settingsSyncNow();
+  await one.run();
+  assert.equal(one.db.get(`SELECT COUNT(*) n FROM posts WHERE blog = 't:cfg'`).n, 0);
+  assert.equal(one.db.get(`SELECT COUNT(*) n FROM items WHERE origin_blog = 't:cfg'`).n, 0);
+  // only the item is left (a version that deleted the post before items were pruned): it goes too
+  one.db.run(`INSERT INTO items (origin_blog, origin_id, manager) VALUES ('t:cfg', '1', 't:cfg')`);
+  one.api.settingsSyncNow();
+  await one.run();
+  assert.equal(one.db.get(`SELECT COUNT(*) n FROM items WHERE origin_blog = 't:cfg'`).n, 0);
+});

@@ -87,6 +87,17 @@ function addSettingsSync(svc, api) {
   }
   svc.tickers?.push(() => { if (dirty()) schedule(3); });
 
+  // The blog is not a blog of works: a stored copy of its settings post and the content item left without posts go.
+  function dropStored(blog, t) {
+    const orphan = `items.origin_blog = ? AND NOT EXISTS (SELECT 1 FROM posts p WHERE p.item_id = items.id)`;
+    const n = db.get(`SELECT (SELECT COUNT(*) FROM posts WHERE blog = ?) + (SELECT COUNT(*) FROM items WHERE ${orphan}) n`, blog, blog).n;
+    if (!n) return false;
+    db.run('DELETE FROM posts WHERE blog = ?', blog);
+    db.run(`DELETE FROM items WHERE ${orphan}`, blog);
+    require('./groups').rebuild(db, t);
+    return true;
+  }
+
   async function findPosts(ctx, blog) {
     const found = [];
     let next = null;
@@ -169,6 +180,8 @@ function addSettingsSync(svc, api) {
       const st = state();
       if (!st.blog) return { status: 'skipped', error: 'no settings blog' };
       const t = ctx.now();
+      // a copy stored before the blog was picked (or by a sync job queued then) is not a work
+      dropStored(st.blog, t);
       let posts = [];
       if (st.post) {
         try { posts = [await ctx.tumblr.getPost(st.blog, st.post)]; } catch (e) { if (!(e instanceof HttpError && e.status === 404)) throw e; }
@@ -240,8 +253,7 @@ function addSettingsSync(svc, api) {
       // a new choice of blog joins afresh (its post may hold another computer's choices)
       db.setMeta('settingsSync', { blog });
       // its settings post, if an earlier version read it as a post, is not one of the works
-      db.run(`DELETE FROM posts WHERE blog = ?`, blog);
-      require('./groups').rebuild(db, now());
+      dropStored(blog, now());
       schedule(2);
       return api.settingsSyncStatus();
     },
